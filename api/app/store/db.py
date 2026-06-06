@@ -1,0 +1,40 @@
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+
+from app.config import db_path
+
+MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
+
+
+def _connect() -> sqlite3.Connection:
+    p = db_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(p)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@contextmanager
+def get_conn():
+    """Short-lived connection. Commits on clean exit, always closes."""
+    conn = _connect()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def run_migrations() -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS schema_migrations "
+            "(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        applied = {r["name"] for r in conn.execute("SELECT name FROM schema_migrations")}
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            if path.name in applied:
+                continue
+            conn.executescript(path.read_text())
+            conn.execute("INSERT INTO schema_migrations(name) VALUES (?)", (path.name,))
