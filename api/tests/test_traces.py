@@ -1,0 +1,36 @@
+from app.store import traces
+from app.store.db import get_conn
+
+
+def _record(stage="chat", pinned=False):
+    return traces.record(
+        turn=1, stage=stage, model="m", params={"t": 0.7},
+        prompt="big prompt", output="big output",
+        prompt_tokens=10, completion_tokens=20, duration_ms=5, pinned=pinned,
+    )
+
+
+def test_record_persists_full_fields(migrated_db):
+    tid = _record()
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM traces WHERE id = ?", (tid,)).fetchone()
+    assert row["prompt"] == "big prompt" and row["output"] == "big output"
+    assert row["completion_tokens"] == 20
+
+
+def test_prune_nulls_heavy_fields_keeps_row_and_metadata(migrated_db):
+    tid = _record()
+    traces.prune(keep_last=0)            # prune everything eligible
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM traces WHERE id = ?", (tid,)).fetchone()
+    assert row is not None               # row survives
+    assert row["prompt"] is None and row["output"] is None   # heavy fields cleared
+    assert row["prompt_tokens"] == 10    # metadata kept
+
+
+def test_prune_spares_pinned(migrated_db):
+    tid = _record(pinned=True)
+    traces.prune(keep_last=0)
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM traces WHERE id = ?", (tid,)).fetchone()
+    assert row["prompt"] == "big prompt"  # pinned heavy fields untouched
