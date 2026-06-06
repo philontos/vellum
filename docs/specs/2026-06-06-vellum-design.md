@@ -1,6 +1,6 @@
 # Vellum — 设计 spec
 
-> 状态：设计稿 v4（加入评测 + 观测/traces），待 review。
+> 状态：设计稿 v5（召回改为混合：框架常驻 + 模型工具），待 review。
 > 日期：2026-06-06 · 前身：engram（保留作参考矿，位于 `/Users/wangyuhao/Develop/personal/engram`）。
 
 ---
@@ -194,9 +194,14 @@ traces
 4. 存 assistant 消息（messages，不 embed）
 ```
 
-**召回 = 每轮都搜、只注入越过相关性阈值的**（搜便宜，注入噪声才贵；新话题没片段越线 → 零注入零噪声）。
+**召回 = 混合：A 框架常驻（可靠地板）+ B 模型工具（聪明深挖），两条路命中后走同一套还原。**
 
-**向量命中怎么翻回原文（label → messages）：**
+- **A · 框架常驻召回（每轮 · 阈值门控 · 预注入）**：每个 user 轮，框架拿你这句话搜②，越过相关性阈值的片段**预先**进 context。保证"明显相关的旧事"自动浮出，永不"忘了去看"。搜便宜，新话题没片段越线 → 零注入零噪声。
+- **B · 模型 `recall_memory(query)` 工具（按需 · 模型自主 · 可多跳）**：模型另有一个召回工具，要精确查 / 迭代深挖时**自己组织查询词**调用（如把"还是算了"翻成"上周那个 offer 决策"）。tool 往返只在模型主动用时发生；走 `chat_with_tools_stream`。
+
+A 保证不漏（连模型想不到要查的也浮出），B 保证查得准（模型用更好的 query 深挖）。两条路的命中都按下面**同一套** label → messages 还原。
+
+**向量命中怎么翻回原文（label → messages，A/B 共用）：**
 
 ```
 knn_query 返回 label →（vector_refs）→ ref_type, ref_id
@@ -245,7 +250,7 @@ knn_query 返回 label →（vector_refs）→ ref_type, ref_id
 
 | 处理 | 模块 | 说明 |
 |---|---|---|
-| 几乎原样搬 | `shared/llm/client.py` | 可插拔 chat 接入层本体（含 `capture_llm_calls`） |
+| 几乎原样搬 | `shared/llm/client.py` | 可插拔 chat 接入层本体（含 `capture_llm_calls`、`chat_with_tools_stream` 供 B 召回工具） |
 | 几乎原样搬 | `api/app/lib/embed.py` | embedding 接入层 + fallback |
 | 搬，轻改 | `api/app/lib/vector_store.py` | 60 行 HNSW 封装；改进：勿每次 `add` 都存盘，批量化 |
 | 搬核心逻辑 | `api/app/lib/profile_merge.py` | 贝叶斯共轭递推 = trait 累积。依赖 `graph_rules.PROFILE_MERGE` + dimension loader，一并搬。改为**按 trait 批**调用、γ 重调 |
@@ -308,6 +313,7 @@ trace（§6.4）是 B/D 层的原料（回放"当时到底喂了什么"）。
 - facts 在你刚说完的几轮内就被钉上（eager 生效）。
 - trait 按批更新：攒够 K 轮跑一次，`trait_current` 变、`trait_history` 多一格。
 - 早期已滑出窗口的内容（含当时 assistant 建议），之后能被召回（"永不消逝"成立）。
+- 召回两条路都生效：明显相关旧事自动浮出（A）；模型能主动 `recall_memory` 深挖（B）。
 - pinned facts 多轮后仍逐字常驻，未被 dossier compaction 抹掉。
 - traces 滚动 prune 后元数据仍在、pinned 行不被清。
 
@@ -317,7 +323,7 @@ trace（§6.4）是 B/D 层的原料（回放"当时到底喂了什么"）。
 
 - embedding 默认模型（按用户主语言）。
 - 人设默认基调文案。
-- 节律参数：trait 批 K、dossier 批 M、空闲超时、尾巴 token 预算、召回相关性阈值、γ（按 K 重调）。
+- 节律参数：trait 批 K、dossier 批 M、空闲超时、尾巴 token 预算、召回相关性阈值（A）、recall 工具多跳上限/调用预算（B）、γ（按 K 重调）。
 - traces 保留期 N 轮 / D 天；评测跑的频率（本地手动 / CI）。
 - dossier 是否需要版本史（一期不做）。
 - 检查面板做到什么程度（一期可最小或后置）。
