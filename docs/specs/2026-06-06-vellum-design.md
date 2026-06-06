@@ -1,6 +1,6 @@
 # Vellum — 设计 spec
 
-> 状态：设计稿 v3（建模节律拆成多游标），待 review。
+> 状态：设计稿 v4（加入评测 + 观测/traces），待 review。
 > 日期：2026-06-06 · 前身：engram（保留作参考矿，位于 `/Users/wangyuhao/Develop/personal/engram`）。
 
 ---
@@ -62,7 +62,7 @@ engram 是一个原型：用大量工程脚手架（backbone 知识图谱、rout
   facts 每轮 eager 提取            trait 攒 K 轮批量 / summary 按段 / dossier 攒 M 轮
 ```
 
-三支柱：**接入层**（可插拔 chat + embedding）；**两类处理**（消费快·同步 / 建模慢·异步）；**两层存储**（记忆层 + 个人模型层）。
+三支柱：**接入层**（可插拔 chat + embedding）；**两类处理**（消费快·同步 / 建模慢·异步）；**三层存储**（记忆层 + 个人模型层 + 观测层）。
 
 设计原则：单一职责、接口清晰、可独立理解与测试；文件变大是职责过载信号。
 
@@ -151,7 +151,30 @@ facts          id · text · status('active'|'superseded') · source_turn · cre
 
 > **summaries vs dossier**：summary = 情节（多条、带 turn 区间、可搜的检索入口）；dossier = 画像（一份、当前、每轮常驻、不进搜索）。
 
-> **谁增谁不增**：增（都便宜）= messages · summaries · trait_history · 向量索引；有界 = dossier（覆盖）· trait_current（每维一行）· facts（生命周期）。即"原始 + 情节索引一直长（廉价），'你是谁'的提炼保持有界"。
+> **谁增谁不增**：增（都便宜）= messages · summaries · trait_history · 向量索引；有界 = dossier（覆盖）· trait_current（每维一行）· facts（生命周期）。
+
+### 6.4 观测层（traces · 诊断 exhaust，与记忆/模型分开）
+
+每次 LLM 调用的诊断记录，**不进检索、不进建模、不是记忆**，纯调试/分析/评测用。
+
+```
+traces
+  id           PK
+  turn         关联 turn（建模调用可空）
+  stage        'chat' | 'facts' | 'trait' | 'summary' | 'dossier'
+  model · params              model 名、temperature 等
+  prompt · output            拼好的完整输入 + 原始输出（重字段）
+  prompt_tokens · completion_tokens · duration_ms   轻量元数据
+  pinned       bool          手动保留，豁免 prune
+  created_at
+```
+
+**保留策略（默认"滚动窗口 + 元数据长留 + 手动 pin"）：**
+
+- 完整 `prompt`/`output`：默认只留**最近 N 轮 / D 天**；prune 时**清空这两个重字段、保留整行**（元数据长留，很小，供长期成本/延迟分析）。
+- `pinned=1`（神回答 / 翻车现场）豁免 prune。
+- **不选"默认不存、手动勾选才存"**：出问题往往事先不知道要勾，正好丢现场。
+- 复用 engram `capture_llm_calls` / `trace_recorder`。它是 §11 评测 B/D 层的原料（回放"当时到底喂了什么"）。
 
 ---
 
@@ -179,8 +202,9 @@ facts          id · text · status('active'|'superseded') · source_turn · cre
 knn_query 返回 label →（vector_refs）→ ref_type, ref_id
   · message 命中：ref_id = messages.id → 取其 turn
        SELECT * FROM messages WHERE turn BETWEEN turn-W AND turn+W   ← 含中间的 assistant 轮 ★
-  · summary 命中：ref_id = summaries.id → 取 [start,end]
-       直接用 summary 文本；要逐字细节再 WHERE turn BETWEEN start AND end
+  · summary 命中：ref_id = summaries.id
+       两者都取回：① summary.content 总结文字（直接用）
+                   ② [start_turn, end_turn] → 需要逐字就 WHERE turn BETWEEN start AND end 捞原始 messages
 合并去重 → 按 token 预算裁剪 → 作为「背景参考」进 context
 ```
 
@@ -211,7 +235,7 @@ knn_query 返回 label →（vector_refs）→ ref_type, ref_id
 
 **turn 的一生**：逐字在尾巴 →（按各游标节奏）被各建模分别消化 → 此后只活在 messages（可召回）+ 蒸馏进 facts / trait / summary / dossier。
 
-> 具体的 K / M / 空闲阈值 / γ / 召回阈值是**可调参数**（§12）；游标维护、触发循环、事务/幂等的**代码机制落在实现计划**，不在本 spec。
+> 具体的 K / M / 空闲阈值 / γ / 召回阈值是**可调参数**（§13）；游标维护、触发循环、事务/幂等的**代码机制落在实现计划**，不在本 spec。
 
 ---
 
@@ -221,12 +245,13 @@ knn_query 返回 label →（vector_refs）→ ref_type, ref_id
 
 | 处理 | 模块 | 说明 |
 |---|---|---|
-| 几乎原样搬 | `shared/llm/client.py` | 可插拔 chat 接入层本体 |
+| 几乎原样搬 | `shared/llm/client.py` | 可插拔 chat 接入层本体（含 `capture_llm_calls`） |
 | 几乎原样搬 | `api/app/lib/embed.py` | embedding 接入层 + fallback |
 | 搬，轻改 | `api/app/lib/vector_store.py` | 60 行 HNSW 封装；改进：勿每次 `add` 都存盘，批量化 |
-| 搬核心逻辑 | `api/app/lib/profile_merge.py` | 贝叶斯共轭递推 = trait 累积。依赖 `graph_rules.PROFILE_MERGE`（gamma/tau_prior/tau_ref/min_conf）+ dimension loader，一并搬。改为**按 trait 批**调用、γ 重调 |
-| 搬资产 | `config/dimensions/{ocean,mbti,schwartz,regulatory_focus}` | config + extract.spt + rubric；提取 prompt 写得好（null 纪律 / 不许往中位数缩 / 要 evidence），"single entry"→"this span" |
+| 搬核心逻辑 | `api/app/lib/profile_merge.py` | 贝叶斯共轭递推 = trait 累积。依赖 `graph_rules.PROFILE_MERGE` + dimension loader，一并搬。改为**按 trait 批**调用、γ 重调 |
+| 搬资产 | `config/dimensions/{ocean,mbti,schwartz,regulatory_focus}` | config + extract.spt + rubric；"single entry"→"this span" |
 | 升级搬 | `dimensions/facts` | 旧系统挂 dimension 走"覆盖"；新系统提升为独立 `facts` pin board + eager 每轮 |
+| 参考 | `api/app/lib/trace_recorder.py` | traces 观测层 |
 | 丢弃 | `backbone_pipeline`(1420) `agent_tools`(1284) `agent_runtime`(627) `router` `slice_pipeline` `retrieval` `entry_signals` `capture_intent` | 图谱 / router / agent / 投射机器 |
 
 ---
@@ -240,12 +265,13 @@ vellum/
   api/app/
     main.py
     llm/         client.py · embed.py                    # 接入层（搬）
-    store/       db.py · vectors.py · memory.py · model.py # 记忆层 + 个人模型层 DAO + cursors
+    store/       db.py · vectors.py · memory.py · model.py · traces.py  # 三层存储 DAO + cursors
     chat/        assemble.py · respond.py                 # 消费回路
     model_loop/  runner.py · facts.py · traits.py · summary.py · dossier.py  # 后台建模（多游标）
     config/      dimensions/{ocean,mbti,schwartz,regulatory_focus} · persona/{neutral,...}
     routes/      chat.py · inspect.py · admin.py
   api/migrations/                                         # forward-only、幂等
+  api/evals/                                              # golden 召回集 · 合成人格 harness · 高度 rubric
   api/requirements.txt · api/.env.example
   web/                                                    # 单一永恒对话流 UI；检查面板后置
   docs/specs/ · AGENTS.md · README.md
@@ -255,7 +281,26 @@ env 沿用（`LLM_*` / `EMBED_*` fallback）；全新库不迁老数据；迁移
 
 ---
 
-## 11. 一期验收标准
+## 11. 评测
+
+没有"全部后置"——分层，机械层先行、保真/质量层持续。
+
+| 层 | 测什么 | 怎么测 | 时机 |
+|---|---|---|---|
+| **A 管道正确性** | 落库/召回/游标幂等/贝叶斯算对/facts 穿过 compaction | 自动化单测（≈ §12 验收项） | **先行（TDD）** |
+| **B 召回质量** | query → 召回是否相关 | **golden memory 集**：标注「query→应召回」，量 recall@k | 早搭、持续 |
+| **C 建模保真** | trait/dossier 是否反映其人 | **合成人格 round-trip**（见下） | 早搭、持续 |
+| **D 主观质量** | 像不像懂我 / 有没有乱剖析 | LLM-judge rubric + with/without-memory A/B + dogfood | 连续信号，**不设硬 gate** |
+
+**合成人格 round-trip（C 层关键）**：造一个**已知**人格（"高开放、INTJ、重自主"）→ 用它生成一批对话喂入 → 验 `trait` 收敛到该人格 / `facts` 抓到 / `dossier` 吻合（dossier 用 LLM-judge 对照人格打分）。**Ground truth 由构造保证**，是唯一能客观给"建模 work 不 work"打分的手段。
+
+**高度守卫（D 层可回归的一条）**：一批无关问题（"怎么居中 div"）→ LLM-judge 检查回答有没有乱剖析用户 → 作为回归测试，守住 §3 铁律。
+
+trace（§6.4）是 B/D 层的原料（回放"当时到底喂了什么"）。
+
+---
+
+## 12. 一期验收标准
 
 - 能聊：web 单一对话流，流式回答。
 - **高度对**：问"怎么居中 div"不剖析你；问人生决策才拉满画像。
@@ -264,14 +309,16 @@ env 沿用（`LLM_*` / `EMBED_*` fallback）；全新库不迁老数据；迁移
 - trait 按批更新：攒够 K 轮跑一次，`trait_current` 变、`trait_history` 多一格。
 - 早期已滑出窗口的内容（含当时 assistant 建议），之后能被召回（"永不消逝"成立）。
 - pinned facts 多轮后仍逐字常驻，未被 dossier compaction 抹掉。
+- traces 滚动 prune 后元数据仍在、pinned 行不被清。
 
 ---
 
-## 12. 待定（可调参数 / open）
+## 13. 待定（可调参数 / open）
 
 - embedding 默认模型（按用户主语言）。
 - 人设默认基调文案。
 - 节律参数：trait 批 K、dossier 批 M、空闲超时、尾巴 token 预算、召回相关性阈值、γ（按 K 重调）。
+- traces 保留期 N 轮 / D 天；评测跑的频率（本地手动 / CI）。
 - dossier 是否需要版本史（一期不做）。
 - 检查面板做到什么程度（一期可最小或后置）。
 
