@@ -34,3 +34,14 @@ def test_prune_spares_pinned(migrated_db):
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM traces WHERE id = ?", (tid,)).fetchone()
     assert row["prompt"] == "big prompt"  # pinned heavy fields untouched
+
+
+def test_prune_keeps_last_n(migrated_db):
+    ids = [_record(stage=f"s{i}") for i in range(5)]
+    traces.prune(keep_last=2)
+    with get_conn() as conn:
+        rows = {r["id"]: r for r in conn.execute("SELECT * FROM traces").fetchall()}
+    for i in range(3):
+        assert rows[ids[i]]["prompt"] is None
+    for i in range(3, 5):
+        assert rows[ids[i]]["prompt"] == "big prompt"

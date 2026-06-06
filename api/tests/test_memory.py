@@ -1,3 +1,5 @@
+import pytest
+
 from app.store import memory
 
 
@@ -39,3 +41,8 @@ def test_cursor_get_and_advance(migrated_db):
     assert memory.get_cursor("trait") == -1
     memory.advance_cursor("trait", 9)
     assert memory.get_cursor("trait") == 9
+
+
+def test_advance_unknown_cursor_raises(migrated_db):
+    with pytest.raises(ValueError):
+        memory.advance_cursor("nope", 5)

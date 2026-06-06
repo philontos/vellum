@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS messages (
   content     TEXT    NOT NULL,
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
-CREATE INDEX IF NOT EXISTS idx_messages_turn ON messages(turn);
 
 CREATE TABLE IF NOT EXISTS summaries (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

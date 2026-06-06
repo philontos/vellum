@@ -1,3 +1,5 @@
+import pytest
+
 from app.store.vectors import VectorStore
 
 
@@ -19,3 +21,17 @@ def test_persists_across_instances(migrated_db):
 
 def test_empty_search_returns_empty(migrated_db):
     assert VectorStore().search([0.1, 0.2, 0.3], k=5) == []
+
+
+def test_add_wrong_dim_raises(migrated_db):
+    store = VectorStore()
+    store.add(1, [1.0, 0.0, 0.0])
+    with pytest.raises(RuntimeError):
+        store.add(2, [1.0, 0.0])
+
+
+def test_search_wrong_dim_raises(migrated_db):
+    store = VectorStore()
+    store.add(1, [1.0, 0.0, 0.0])
+    with pytest.raises(ValueError):
+        store.search([1.0, 0.0], k=1)

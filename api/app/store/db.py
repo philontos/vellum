@@ -36,5 +36,11 @@ def run_migrations() -> None:
         for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
             if path.name in applied:
                 continue
+            # executescript issues an implicit COMMIT, so applying the migration and
+            # recording it below are NOT one atomic transaction. That is safe here:
+            # every migration is idempotent (CREATE ... IF NOT EXISTS / INSERT OR
+            # IGNORE), so a crash before the INSERT just re-applies harmlessly next
+            # boot. We keep executescript (not a fragile ';' split) so multi-statement
+            # SQL / triggers stay correct.
             conn.executescript(path.read_text())
             conn.execute("INSERT INTO schema_migrations(name) VALUES (?)", (path.name,))

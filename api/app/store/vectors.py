@@ -49,6 +49,8 @@ class VectorStore:
     def search(self, embedding: list[float], k: int = 5) -> list[int]:
         if self.index is None or self.index.get_current_count() == 0:
             return []
+        if self.dim is not None and len(embedding) != self.dim:
+            raise ValueError(f"Query dim {len(embedding)} != index dim {self.dim}")
         labels, _ = self.index.knn_query(
             np.array([embedding], dtype=np.float32),
             k=min(k, self.index.get_current_count()),

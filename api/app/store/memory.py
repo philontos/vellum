@@ -84,8 +84,10 @@ def get_cursor(concern: str) -> int:
 
 def advance_cursor(concern: str, through_turn: int) -> None:
     with get_conn() as conn:
-        conn.execute(
+        cur = conn.execute(
             "UPDATE cursors SET through_turn = ?, updated_at = datetime('now') "
             "WHERE concern = ?",
             (through_turn, concern),
         )
+        if cur.rowcount == 0:
+            raise ValueError(f"Unknown cursor concern: {concern!r}")
