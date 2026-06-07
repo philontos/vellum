@@ -8,25 +8,26 @@ from app.store.db import get_conn
 
 
 def record(*, turn, stage, model, params, prompt, output,
-           prompt_tokens, completion_tokens, duration_ms, pinned=False) -> int:
+           prompt_tokens, completion_tokens, duration_ms, reasoning=None,
+           pinned=False) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO traces(turn, stage, model, params, prompt, output, "
-            "prompt_tokens, completion_tokens, duration_ms, pinned) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "reasoning, prompt_tokens, completion_tokens, duration_ms, pinned) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (turn, stage, model, json.dumps(params, ensure_ascii=False),
-             prompt, output, prompt_tokens, completion_tokens, duration_ms,
-             1 if pinned else 0),
+             prompt, output, reasoning, prompt_tokens, completion_tokens,
+             duration_ms, 1 if pinned else 0),
         )
         return cur.lastrowid
 
 
 def prune(keep_last: int) -> None:
-    """Null out prompt/output on all but the most recent `keep_last` unpinned
-    rows. Rows (and their lightweight metadata) are always kept."""
+    """Null out prompt/output/reasoning on all but the most recent `keep_last`
+    unpinned rows. Rows (and their lightweight metadata) are always kept."""
     with get_conn() as conn:
         conn.execute(
-            "UPDATE traces SET prompt = NULL, output = NULL "
+            "UPDATE traces SET prompt = NULL, output = NULL, reasoning = NULL "
             "WHERE pinned = 0 AND prompt IS NOT NULL AND id NOT IN ("
             "  SELECT id FROM traces WHERE pinned = 0 ORDER BY id DESC LIMIT ?"
             ")",

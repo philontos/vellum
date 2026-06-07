@@ -30,6 +30,38 @@ async def test_chat_json_parses_object(monkeypatch):
     assert out == {"ok": True}
 
 
+def test_extract_reasoning_field_variants():
+    # DeepSeek-reasoner field
+    assert llm._extract_reasoning({"reasoning_content": "step 1"}) == "step 1"
+    # OpenRouter / proxy field
+    assert llm._extract_reasoning({"reasoning": "thinking"}) == "thinking"
+    # reasoning_content wins when both present
+    assert llm._extract_reasoning({"reasoning_content": "a", "reasoning": "b"}) == "a"
+    # no reasoning → empty (non-reasoning models / hidden o-series)
+    assert llm._extract_reasoning({"content": "just an answer"}) == ""
+    assert llm._extract_reasoning(None) == ""
+
+
+@pytest.mark.asyncio
+async def test_chat_json_captures_reasoning(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-reasoner")
+
+    async def fake_post(self, url, headers=None, json=None):
+        return _Resp(200, {"choices": [{"message": {
+            "content": '{"ok": true}', "reasoning_content": "let me think... ok"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 4}})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    calls: list[dict] = []
+    with llm.capture_llm_calls(calls):
+        out = await llm.chat_json(system_prompt="x", user_prompt="y", stage="trait")
+    assert out == {"ok": True}
+    assert len(calls) == 1
+    assert calls[0]["reasoning"] == "let me think... ok"
+
+
 @pytest.mark.asyncio
 async def test_embed_returns_vector(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "k")

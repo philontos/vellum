@@ -43,6 +43,7 @@ export function TracesPanel() {
               <span className="text-xs text-gray-400">
                 {t.prompt_tokens ?? "?"}→{t.completion_tokens ?? "?"} tok · {t.duration_ms ?? "?"}ms
               </span>
+              {t.reasoning && <span title="包含推理过程">🧠</span>}
               <span className="ml-auto text-xs text-gray-400">{t.created_at}</span>
               <button className="text-blue-600" onClick={() => setOpen(open === t.id ? null : t.id)}>
                 {open === t.id ? "收起" : "展开"}
@@ -57,6 +58,7 @@ export function TracesPanel() {
                   onBlur={(e) => note(t, e.target.value)}
                 />
                 <Field label="PROMPT" body={t.prompt} />
+                {t.reasoning && <Field label="REASONING" body={t.reasoning} />}
                 <Field label="OUTPUT" body={t.output} />
               </div>
             )}

@@ -19,7 +19,8 @@ def _setup(monkeypatch):
         yield {"type": "content_delta", "delta": "there"}
         yield {"type": "done", "finish_reason": "stop",
                "message": {"role": "assistant", "content": "hi there"},
-               "usage": {}, "duration_ms": 1}
+               "usage": {"prompt_tokens": 7, "completion_tokens": 5}, "duration_ms": 42,
+               "reasoning": "greet the user"}
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", fake_stream)
 
 
@@ -40,5 +41,13 @@ def test_chat_streams_and_persists_both_turns(migrated_db, monkeypatch):
     assert tail[1]["role"] == "assistant" and tail[1]["content"] == "hi there"
 
     with get_conn() as conn:
-        n = conn.execute("SELECT COUNT(*) c FROM traces WHERE stage='chat'").fetchone()["c"]
-    assert n == 1                                  # one chat trace recorded
+        row = conn.execute(
+            "SELECT prompt_tokens, completion_tokens, duration_ms, reasoning "
+            "FROM traces WHERE stage='chat'"
+        ).fetchall()
+    assert len(row) == 1                           # one chat trace recorded
+    # token counts + latency are recorded, not None (the `?→? tok · ?ms` bug)
+    assert row[0]["prompt_tokens"] == 7
+    assert row[0]["completion_tokens"] == 5
+    assert row[0]["duration_ms"] == 42
+    assert row[0]["reasoning"] == "greet the user"  # reasoning captured

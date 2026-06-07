@@ -262,6 +262,22 @@ def _strip_unsupported_params_if_rejected(payload: dict, status_code: int, body:
     return changed
 
 
+def _extract_reasoning(d: Any) -> str:
+    """Pull reasoning / chain-of-thought text out of an OpenAI-compatible delta
+    or message object, across the field names different providers use:
+      - DeepSeek-reasoner: `reasoning_content`
+      - OpenRouter / some proxies: `reasoning`
+    Returns "" when the model didn't reason or the provider hides it (e.g. OpenAI
+    o-series, which never exposes its reasoning)."""
+    if not isinstance(d, dict):
+        return ""
+    for key in ("reasoning_content", "reasoning"):
+        v = d.get(key)
+        if isinstance(v, str) and v:
+            return v
+    return ""
+
+
 async def chat_json(
     *, system_prompt: str, user_prompt: str,
     stage: str = "", context: dict | None = None,
@@ -354,7 +370,8 @@ async def chat_json(
 
         # Extract response content for both record AND return value
         try:
-            response_content = data["choices"][0]["message"]["content"]
+            message = data["choices"][0]["message"]
+            response_content = message["content"]
         except (KeyError, IndexError, TypeError) as exc:
             _record_llm_call({
                 "stage": stage or "unknown", "model": config["model"],
@@ -383,6 +400,7 @@ async def chat_json(
             "system_prompt": system_prompt or "",
             "user_prompt":   user_prompt or "",
             "response":      response_content,
+            "reasoning":     _extract_reasoning(message),
         })
 
         return _extract_json_object(response_content)
@@ -461,6 +479,7 @@ async def chat_with_tools(
 
         data = resp.json()
         usage = data.get("usage") or {}
+        choice = data["choices"][0]
         _record_llm_call({
             "stage": stage or "unknown", "model": config["model"],
             "prompt_chars": prompt_chars,
@@ -469,9 +488,9 @@ async def chat_with_tools(
             "total_tokens": int(usage.get("total_tokens", 0)),
             "duration_ms": duration_ms, "context": context or {},
             "status": "ok",
+            "reasoning": _extract_reasoning(choice.get("message")),
         })
 
-        choice = data["choices"][0]
         return {
             "finish_reason": choice.get("finish_reason", "stop"),
             "message": choice["message"],
@@ -528,6 +547,7 @@ async def chat_with_tools_stream(
     start = time.monotonic()
 
     content_buf = ""
+    reasoning_buf = ""
     tc_acc: dict[int, dict] = {}
     finish_reason = "stop"
     usage: dict = {}
@@ -586,6 +606,11 @@ async def chat_with_tools_stream(
                         if text_delta:
                             content_buf += text_delta
                             yield {"type": "content_delta", "delta": text_delta}
+                        # Reasoning is captured for the trace only — not streamed
+                        # to the user (it's diagnostic, not the answer).
+                        reasoning_delta = _extract_reasoning(delta)
+                        if reasoning_delta:
+                            reasoning_buf += reasoning_delta
                         for tc_delta in delta.get("tool_calls") or []:
                             idx = tc_delta.get("index", 0)
                             slot = tc_acc.setdefault(idx, {
@@ -638,6 +663,7 @@ async def chat_with_tools_stream(
         "context": context or {},
         "status": "ok",
         "streamed": True,
+        "reasoning": reasoning_buf,
     })
 
     yield {
@@ -646,6 +672,7 @@ async def chat_with_tools_stream(
         "message": message,
         "usage": usage,
         "duration_ms": duration_ms,
+        "reasoning": reasoning_buf or None,
     }
 
 
@@ -675,6 +702,7 @@ async def chat_text_stream(
         payload["temperature"] = temperature
     prompt_chars = len(system_prompt or "") + len(user_prompt or "")
     completion_chars = 0
+    reasoning_buf = ""
     usage: dict = {}
     start = time.monotonic()
 
@@ -722,10 +750,11 @@ async def chat_text_stream(
                     choices = obj.get("choices") or []
                     if not choices:
                         continue
-                    try:
-                        delta = choices[0]["delta"].get("content") or ""
-                    except (KeyError, IndexError, TypeError):
-                        continue
+                    delta_obj = choices[0].get("delta") or {}
+                    reasoning_piece = _extract_reasoning(delta_obj)
+                    if reasoning_piece:
+                        reasoning_buf += reasoning_piece
+                    delta = delta_obj.get("content") or ""
                     if delta:
                         completion_chars += len(delta)
                         yield delta
@@ -743,6 +772,7 @@ async def chat_text_stream(
         "context": context or {},
         "status": "ok",
         "streamed": True,
+        "reasoning": reasoning_buf,
     })
 
 

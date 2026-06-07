@@ -7,7 +7,7 @@ from app.store import traces
 def test_flush_writes_one_trace_per_captured_call(migrated_db):
     calls = [
         {"stage": "trait", "model": "m", "status": "ok", "system_prompt": "SYS",
-         "user_prompt": "U", "response": "RESP", "prompt_tokens": 5,
+         "user_prompt": "U", "response": "RESP", "reasoning": "WHY", "prompt_tokens": 5,
          "completion_tokens": 6, "duration_ms": 7},
         {"stage": "facts", "model": "m", "status": "http_error", "error": "boom",
          "system_prompt": "S2", "user_prompt": "", "response": "errbody",
@@ -18,7 +18,10 @@ def test_flush_writes_one_trace_per_captured_call(migrated_db):
     assert {r["stage"] for r in rows} == {"trait", "facts"}
     trait_row = next(r for r in rows if r["stage"] == "trait")
     assert "SYS" in trait_row["prompt"] and trait_row["output"] == "RESP"
+    assert trait_row["reasoning"] == "WHY"        # reasoning captured
     assert trait_row["completion_tokens"] == 6
+    facts_row = next(r for r in rows if r["stage"] == "facts")
+    assert facts_row["reasoning"] is None          # no reasoning → NULL
 
 
 @pytest.mark.asyncio

@@ -42,17 +42,25 @@ async def chat(body: ChatIn):
 
     async def gen():
         final = ""
+        reasoning = None
+        prompt_tokens = completion_tokens = duration_ms = None
         async for ev in respond.stream(messages):
             if ev["type"] == "delta":
                 yield f"data: {json.dumps({'delta': ev['text']}, ensure_ascii=False)}\n\n"
             elif ev["type"] == "final":
                 final = ev["content"]
+                reasoning = ev.get("reasoning")
+                prompt_tokens = ev.get("prompt_tokens")
+                completion_tokens = ev.get("completion_tokens")
+                duration_ms = ev.get("duration_ms")
         ingest.persist_assistant(final)
         traces.record(
             turn=None, stage="chat", model=cfg.get("model"),
             params={"provider": cfg.get("provider")},
             prompt=json.dumps(messages, ensure_ascii=False), output=final,
-            prompt_tokens=None, completion_tokens=None, duration_ms=None,
+            reasoning=reasoning,
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+            duration_ms=duration_ms,
         )
         _track(asyncio.create_task(runner.run_pending()))  # background, non-blocking
         yield "data: [DONE]\n\n"

@@ -9,7 +9,16 @@ async def _fake_stream_no_tool(messages, tools, **kw):
     yield {"type": "content_delta", "delta": "world"}
     yield {"type": "done", "finish_reason": "stop",
            "message": {"role": "assistant", "content": "Hello world"},
-           "usage": {}, "duration_ms": 1}
+           "usage": {"prompt_tokens": 12, "completion_tokens": 3}, "duration_ms": 50,
+           "reasoning": "I should greet."}
+
+
+async def _fake_stream_no_usage(messages, tools, **kw):
+    # Provider that doesn't report usage at all (empty usage dict).
+    yield {"type": "content_delta", "delta": "Hi"}
+    yield {"type": "done", "finish_reason": "stop",
+           "message": {"role": "assistant", "content": "Hi"},
+           "usage": {}, "duration_ms": 7}
 
 
 async def _fake_stream_with_tool(messages, tools, **kw):
@@ -20,13 +29,15 @@ async def _fake_stream_with_tool(messages, tools, **kw):
                                "function": {"name": "recall_memory",
                                             "arguments": json.dumps({"query": "offer"})}}]}
         yield {"type": "done", "finish_reason": "tool_calls", "message": msg,
-               "usage": {}, "duration_ms": 1}
+               "usage": {"prompt_tokens": 10, "completion_tokens": 5}, "duration_ms": 40,
+               "reasoning": "need to recall"}
     else:
         yield {"type": "content_delta", "delta": "Per your past: "}
         yield {"type": "content_delta", "delta": "go for it"}
         yield {"type": "done", "finish_reason": "stop",
                "message": {"role": "assistant", "content": "Per your past: go for it"},
-               "usage": {}, "duration_ms": 1}
+               "usage": {"prompt_tokens": 20, "completion_tokens": 8}, "duration_ms": 60,
+               "reasoning": "now I can answer"}
 
 
 @pytest.mark.asyncio
@@ -40,6 +51,24 @@ async def test_stream_plain(monkeypatch):
             final = ev
     assert "".join(deltas) == "Hello world"
     assert final["content"] == "Hello world"
+    # usage + latency surface on the final event (single hop)
+    assert final["prompt_tokens"] == 12
+    assert final["completion_tokens"] == 3
+    assert final["duration_ms"] == 50
+    assert final["reasoning"] == "I should greet."
+
+
+@pytest.mark.asyncio
+async def test_final_usage_none_when_provider_omits(monkeypatch):
+    # Empty usage → None (renders as `?`), but measured duration still surfaces.
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_no_usage)
+    final = {}
+    async for ev in respond.stream([{"role": "system", "content": "s"}]):
+        if ev["type"] == "final":
+            final = ev
+    assert final["prompt_tokens"] is None
+    assert final["completion_tokens"] is None
+    assert final["duration_ms"] == 7
 
 
 @pytest.mark.asyncio
@@ -47,11 +76,19 @@ async def test_tool_loop_runs_handler_and_continues(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_with_tool)
     monkeypatch.setattr(respond, "_build_registry",
                         lambda: _stub_registry(monkeypatch))
-    out = []
+    out, final = [], {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "delta":
             out.append(ev["text"])
+        elif ev["type"] == "final":
+            final = ev
     assert "go for it" in "".join(out)
+    # usage + latency are SUMMED across both tool-loop hops
+    assert final["prompt_tokens"] == 30        # 10 + 20
+    assert final["completion_tokens"] == 13    # 5 + 8
+    assert final["duration_ms"] == 100         # 40 + 60
+    # reasoning from every hop is concatenated
+    assert final["reasoning"] == "need to recall\n\nnow I can answer"
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,7 @@ def _flush_traces(calls: list[dict], turn: int) -> None:
             params={"status": c.get("status"), "error": c.get("error")},
             prompt=prompt,
             output=c.get("response") or "",
+            reasoning=c.get("reasoning") or None,
             prompt_tokens=c.get("prompt_tokens"),
             completion_tokens=c.get("completion_tokens"),
             duration_ms=c.get("duration_ms"),

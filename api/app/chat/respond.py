@@ -21,6 +21,10 @@ async def stream(messages: list[dict]):
     tools = reg.schemas()
     convo = list(messages)
     content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    # Accumulate usage/latency across tool-loop hops so the chat trace reflects
+    # the whole turn (every round-trip), not just the last one.
+    prompt_tokens = completion_tokens = duration_ms = 0
 
     for _hop in range(config.recall_max_hops() + 1):
         assistant_msg = None
@@ -32,6 +36,12 @@ async def stream(messages: list[dict]):
             elif ev["type"] == "done":
                 assistant_msg = ev["message"]
                 finish = ev["finish_reason"]
+                usage = ev.get("usage") or {}
+                prompt_tokens += int(usage.get("prompt_tokens") or 0)
+                completion_tokens += int(usage.get("completion_tokens") or 0)
+                duration_ms += int(ev.get("duration_ms") or 0)
+                if ev.get("reasoning"):
+                    reasoning_parts.append(ev["reasoning"])
 
         if assistant_msg is not None:
             convo.append(assistant_msg)
@@ -48,4 +58,13 @@ async def stream(messages: list[dict]):
             result = await reg.adispatch(fn["name"], args)
             convo.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
-    yield {"type": "final", "content": "".join(content_parts)}
+    # `or None` keeps "unknown" semantics for providers that don't report usage
+    # (the trace card renders None as `?`); duration is always measured.
+    yield {
+        "type": "final",
+        "content": "".join(content_parts),
+        "reasoning": "\n\n".join(reasoning_parts) or None,
+        "prompt_tokens": prompt_tokens or None,
+        "completion_tokens": completion_tokens or None,
+        "duration_ms": duration_ms or None,
+    }

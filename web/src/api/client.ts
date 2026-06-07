@@ -23,7 +23,8 @@ export type Fact = { id: number; text: string; status: string; source_turn: numb
 export type ModelView = { dossier: string; facts: Fact[]; traits: TraitDim[] };
 export type Trace = {
   id: number; turn: number | null; stage: string; model: string | null;
-  prompt: string | null; output: string | null; prompt_tokens: number | null;
+  prompt: string | null; output: string | null; reasoning: string | null;
+  prompt_tokens: number | null;
   completion_tokens: number | null; duration_ms: number | null; pinned: number;
   note: string | null; created_at: string;
 };
