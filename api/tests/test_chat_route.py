@@ -8,8 +8,12 @@ def _setup(monkeypatch):
     import app.chat.ingest as ingest
     import app.chat.retrieval as retrieval
     import app.chat.respond as respond
-    monkeypatch.setattr(ingest, "_embed_sync", lambda t: [1.0, 0.0, 0.0])
-    monkeypatch.setattr(retrieval, "_embed_sync", lambda t: [1.0, 0.0, 0.0])
+
+    async def _fake_embed(text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr(ingest, "embed", _fake_embed)
+    monkeypatch.setattr(retrieval, "embed", _fake_embed)
     monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: True)
 
     async def fake_stream(messages, tools, **kw):
@@ -34,7 +38,7 @@ def test_chat_streams_and_persists_both_turns(migrated_db, monkeypatch):
     assert "hi " in body and "there" in body       # streamed content reached client
 
     tail = memory.recent_tail(2)
-    assert tail[0] == tail[0] and tail[0]["role"] == "user" and tail[0]["content"] == "hello"
+    assert tail[0]["role"] == "user" and tail[0]["content"] == "hello"
     assert tail[1]["role"] == "assistant" and tail[1]["content"] == "hi there"
 
     with get_conn() as conn:

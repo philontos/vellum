@@ -24,6 +24,7 @@ async def stream(messages: list[dict]):
 
     for _hop in range(config.recall_max_hops() + 1):
         assistant_msg = None
+        finish = "stop"
         async for ev in llm.chat_with_tools_stream(messages=convo, tools=tools, stage="chat"):
             if ev["type"] == "content_delta":
                 content_parts.append(ev["delta"])
@@ -32,7 +33,8 @@ async def stream(messages: list[dict]):
                 assistant_msg = ev["message"]
                 finish = ev["finish_reason"]
 
-        convo.append(assistant_msg)
+        if assistant_msg is not None:
+            convo.append(assistant_msg)
         if finish != "tool_calls" or not reg:
             break
 
@@ -43,7 +45,7 @@ async def stream(messages: list[dict]):
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {}
-            result = reg.dispatch(fn["name"], args)
+            result = await reg.adispatch(fn["name"], args)
             convo.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
     yield {"type": "final", "content": "".join(content_parts)}

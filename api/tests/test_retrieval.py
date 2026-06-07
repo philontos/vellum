@@ -1,3 +1,5 @@
+import pytest
+
 from app.chat import retrieval
 from app.store import memory
 from app.store.vectors import VectorStore
@@ -5,33 +7,59 @@ from app.store.vectors import VectorStore
 
 def _seed(monkeypatch):
     # Deterministic 3-dim embeddings keyed by content substring.
-    def fake_embed_sync(text):
+    async def fake_embed(text):
         if "offer" in text:
             return [1.0, 0.0, 0.0]
         if "weather" in text:
             return [0.0, 1.0, 0.0]
         return [0.0, 0.0, 1.0]
-    monkeypatch.setattr(retrieval, "_embed_sync", fake_embed_sync)
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
 
 
-def test_retrieve_hydrates_neighborhood_including_assistant(migrated_db, monkeypatch):
+@pytest.mark.asyncio
+async def test_retrieve_hydrates_neighborhood_including_assistant(migrated_db, monkeypatch):
     _seed(monkeypatch)
     # turn 0 user (offer), turn 1 assistant (advice) — only the user turn is embedded
     u = memory.append_message("user", "should I take the offer")
     a = memory.append_message("assistant", "build a financial floor first")
     label = memory.add_vector_ref("message", u["id"])
-    VectorStore().add(label, retrieval._embed_sync("should I take the offer"))
+    VectorStore().add(label, [1.0, 0.0, 0.0])
 
-    snippets = retrieval.retrieve("thinking about that offer again", k=5)
+    snippets = await retrieval.retrieve("thinking about that offer again", k=5)
     text = "\n".join(s["text"] for s in snippets)
     assert "offer" in text and "financial floor" in text   # assistant pulled via linkage
 
 
-def test_threshold_gates_irrelevant(migrated_db, monkeypatch):
+@pytest.mark.asyncio
+async def test_threshold_gates_irrelevant(migrated_db, monkeypatch):
     _seed(monkeypatch)
     u = memory.append_message("user", "what is the weather")
     label = memory.add_vector_ref("message", u["id"])
-    VectorStore().add(label, retrieval._embed_sync("what is the weather"))
+    VectorStore().add(label, [0.0, 1.0, 0.0])
     # Query orthogonal to the only stored vector → similarity ~0 → gated out
-    snippets = retrieval.retrieve("unrelated topic xyz", k=5, min_sim=0.35)
+    snippets = await retrieval.retrieve("unrelated topic xyz", k=5, min_sim=0.35)
     assert snippets == []
+
+
+@pytest.mark.asyncio
+async def test_window_merge_spans_overlapping_turns(migrated_db, monkeypatch):
+    """Two user messages in adjacent turns embedded to the same vector;
+    querying that vector should produce a single merged snippet covering both."""
+    async def fake_embed(text):
+        return [1.0, 0.0, 0.0]
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
+
+    # seed two user messages at turn 0 and turn 1
+    u0 = memory.append_message("user", "first message alpha")
+    u1 = memory.append_message("user", "second message beta")
+    lbl0 = memory.add_vector_ref("message", u0["id"])
+    lbl1 = memory.add_vector_ref("message", u1["id"])
+    VectorStore().add(lbl0, [1.0, 0.0, 0.0])
+    VectorStore().add(lbl1, [1.0, 0.0, 0.0])
+
+    # w=0 means window = [turn, turn]; turns 0 and 1 are adjacent so they merge
+    snippets = await retrieval.retrieve("query", k=5, min_sim=0.0, w=0)
+    # Should produce a single merged snippet spanning both turns
+    assert len(snippets) == 1
+    assert "first message alpha" in snippets[0]["text"]
+    assert "second message beta" in snippets[0]["text"]

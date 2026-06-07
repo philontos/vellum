@@ -1,11 +1,16 @@
+import pytest
+
 import app.chat.ingest as ingest
 from app.store import memory
 from app.store.vectors import VectorStore
 
 
-def test_persist_user_stores_and_embeds(migrated_db, monkeypatch):
-    monkeypatch.setattr(ingest, "_embed_sync", lambda t: [1.0, 0.0, 0.0])
-    res = ingest.persist_user("hello")
+@pytest.mark.asyncio
+async def test_persist_user_stores_and_embeds(migrated_db, monkeypatch):
+    async def _fake_embed(text):
+        return [1.0, 0.0, 0.0]
+    monkeypatch.setattr(ingest, "embed", _fake_embed)
+    res = await ingest.persist_user("hello")
     assert res["turn"] == 0
     # message stored
     assert memory.recent_tail(1)[0]["content"] == "hello"
@@ -15,9 +20,12 @@ def test_persist_user_stores_and_embeds(migrated_db, monkeypatch):
     assert ref["ref_type"] == "message" and ref["ref_id"] == res["id"]
 
 
-def test_persist_assistant_stores_no_vector(migrated_db, monkeypatch):
-    monkeypatch.setattr(ingest, "_embed_sync", lambda t: [1.0, 0.0, 0.0])
-    ingest.persist_user("hi")                 # creates the index (dim=3)
+@pytest.mark.asyncio
+async def test_persist_assistant_stores_no_vector(migrated_db, monkeypatch):
+    async def _fake_embed(text):
+        return [1.0, 0.0, 0.0]
+    monkeypatch.setattr(ingest, "embed", _fake_embed)
+    await ingest.persist_user("hi")                 # creates the index (dim=3)
     ingest.persist_assistant("hello back")
     assert memory.recent_tail(1)[0]["role"] == "assistant"
     # only the user vector exists

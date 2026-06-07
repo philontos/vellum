@@ -23,8 +23,8 @@ _SCHEMA = {
 }
 
 
-def _handler(args: dict) -> str:
-    snips = retrieval.retrieve(args.get("query", ""))
+async def _handler(args: dict) -> str:
+    snips = await retrieval.retrieve(args.get("query", ""))
     if not snips:
         return "No relevant past conversations found."
     return "\n---\n".join(s["text"] for s in snips)

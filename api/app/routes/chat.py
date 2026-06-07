@@ -20,8 +20,8 @@ class ChatIn(BaseModel):
 
 @router.post("/chat")
 async def chat(body: ChatIn):
-    ingest.persist_user(body.message)
-    messages = assemble.build_messages(query=body.message)
+    await ingest.persist_user(body.message)
+    messages = await assemble.build_messages(query=body.message)
     cfg = resolve_structured_llm_config()
 
     async def gen():

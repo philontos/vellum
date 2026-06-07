@@ -27,11 +27,12 @@ def _trait_summary() -> str:
                   if isinstance(v, dict) and "score" in v}
         if scores:
             parts.append(f"{r['dimension']}: " +
-                         " ".join(f"{k}={round(v)}" for k, v in scores.items()))
+                         " ".join(f"{k}={round(v)}" for k, v in scores.items()
+                                  if v is not None))
     return "\n".join(parts)
 
 
-def build_messages(query: str | None = None) -> list[dict]:
+async def build_messages(query: str | None = None) -> list[dict]:
     """Assemble system + recent tail. `query` for retrieval defaults to the last
     user message in the tail."""
     tail = memory.recent_tail(config.tail_size())
@@ -54,7 +55,7 @@ def build_messages(query: str | None = None) -> list[dict]:
         sections.append("## Personality signal (reference only)\n" + traits)
 
     if query:
-        snips = retrieval.retrieve(query)
+        snips = await retrieval.retrieve(query)
         if snips:
             sections.append("## Possibly relevant past\n" +
                             "\n---\n".join(s["text"] for s in snips))

@@ -1,3 +1,5 @@
+import pytest
+
 from app.chat.tools import registry, recall
 
 
@@ -14,12 +16,14 @@ def test_registry_dispatch():
     assert reg.dispatch("echo", {"x": "hi"}) == "got hi"
 
 
-def test_recall_tool_registered_and_calls_retrieval(monkeypatch):
-    monkeypatch.setattr(recall.retrieval, "retrieve",
-                        lambda q, **kw: [{"start": 0, "end": 0, "text": "user: past thing"}])
+@pytest.mark.asyncio
+async def test_recall_tool_registered_and_calls_retrieval(monkeypatch):
+    async def fake_retrieve(q, **kw):
+        return [{"start": 0, "end": 0, "text": "user: past thing"}]
+    monkeypatch.setattr(recall.retrieval, "retrieve", fake_retrieve)
     reg = registry.ToolRegistry()
     recall.register_into(reg)
     names = [t["function"]["name"] for t in reg.schemas()]
     assert "recall_memory" in names
-    out = reg.dispatch("recall_memory", {"query": "past"})
+    out = await reg.adispatch("recall_memory", {"query": "past"})
     assert "past thing" in out

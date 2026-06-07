@@ -56,6 +56,14 @@ async def test_tool_loop_runs_handler_and_continues(monkeypatch):
     assert "go for it" in "".join(out)
 
 
+@pytest.mark.asyncio
+async def test_stream_degrades_to_a_only_without_tools(monkeypatch):
+    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: False)
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_no_tool)
+    evs = [ev async for ev in respond.stream([{"role": "system", "content": "s"}])]
+    assert evs[-1]["type"] == "final" and evs[-1]["content"] == "Hello world"
+
+
 def _stub_registry(monkeypatch):
     from app.chat.tools import registry
     reg = registry.ToolRegistry()
