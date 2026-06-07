@@ -1,4 +1,4 @@
-"""CLI: python -m evals.run <recall|traits|facts|altitude|all>
+"""CLI: python -m evals.run <recall|traits|facts|altitude|consultant|all>
 
 Real eval runner. Requires LLM_* (system under test) and EVAL_GEN_* (external
 evaluator, distinct model). Each case runs against a fresh temp data dir so cases
@@ -55,7 +55,21 @@ async def _altitude():
     return out
 
 
-_EVALS = {"recall": _recall, "traits": _traits, "facts": _facts, "altitude": _altitude}
+async def _consultant():
+    from evals import consultant
+    ec.enforce_distinct_model()
+    out = []
+    for probe in consultant.load_probes():
+        out.append(await consultant.run_probe(probe))
+    if out:
+        avg = {k: round(sum((r[k] or 0) for r in out) / len(out), 2)
+               for k in ("honesty", "depth", "growth")}
+        print(f"AVG over {len(out)} probes: {avg}")
+    return out
+
+
+_EVALS = {"recall": _recall, "traits": _traits, "facts": _facts,
+          "altitude": _altitude, "consultant": _consultant}
 
 
 async def _main(which: str):
