@@ -1,0 +1,23 @@
+export type SSEEvent = { type: "delta"; text: string } | { type: "done" };
+
+/** Split a buffer into complete `\n\n`-terminated SSE frames + leftover. */
+export function splitFrames(buffer: string): { frames: string[]; rest: string } {
+  const parts = buffer.split("\n\n");
+  const rest = parts.pop() ?? "";
+  return { frames: parts, rest };
+}
+
+/** Parse one SSE frame's `data:` line. Returns null for comments / malformed. */
+export function parseData(frame: string): SSEEvent | null {
+  const line = frame.split("\n").find((l) => l.startsWith("data:"));
+  if (!line) return null;
+  const payload = line.slice(5).trim();
+  if (payload === "[DONE]") return { type: "done" };
+  try {
+    const obj = JSON.parse(payload);
+    if (typeof obj.delta === "string") return { type: "delta", text: obj.delta };
+    return null;
+  } catch {
+    return null;
+  }
+}
