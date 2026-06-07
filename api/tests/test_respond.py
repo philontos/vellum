@@ -32,7 +32,6 @@ async def _fake_stream_with_tool(messages, tools, **kw):
 @pytest.mark.asyncio
 async def test_stream_plain(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_no_tool)
-    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: True)
     deltas, final = [], {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "delta":
@@ -46,7 +45,6 @@ async def test_stream_plain(monkeypatch):
 @pytest.mark.asyncio
 async def test_tool_loop_runs_handler_and_continues(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_with_tool)
-    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: True)
     monkeypatch.setattr(respond, "_build_registry",
                         lambda: _stub_registry(monkeypatch))
     out = []
@@ -58,7 +56,8 @@ async def test_tool_loop_runs_handler_and_continues(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_degrades_to_a_only_without_tools(monkeypatch):
-    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: False)
+    # When the model returns no tool_calls (finish_reason="stop"), the loop
+    # exits after the first hop — realistic A-only path, no provider flag needed.
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_no_tool)
     evs = [ev async for ev in respond.stream([{"role": "system", "content": "s"}])]
     assert evs[-1]["type"] == "final" and evs[-1]["content"] == "Hello world"

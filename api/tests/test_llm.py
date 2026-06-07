@@ -17,7 +17,7 @@ class _Resp:
 
 @pytest.mark.asyncio
 async def test_chat_json_parses_object(monkeypatch):
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.openai.com/v1")
     monkeypatch.setenv("LLM_API_KEY", "k")
     monkeypatch.setenv("LLM_MODEL", "gpt-4.1-mini")
 

@@ -103,73 +103,21 @@ class StructuredLLMError(RuntimeError):
 # Provider config — universal OpenAI-compatible interface.
 #
 # Engram talks to any LLM that exposes an OpenAI-style /chat/completions
-# endpoint. To configure, set three variables:
+# endpoint. Configure via three env vars:
 #
 #     LLM_BASE_URL   e.g. https://api.openai.com/v1
 #     LLM_API_KEY    your provider key
-#     LLM_MODEL      e.g. gpt-4.1, claude-sonnet-4-5, gemini-2.5-pro, ...
+#     LLM_MODEL      e.g. gpt-4.1, deepseek-chat, gemini-2.5-pro, ...
 #
-# Or pick a built-in preset via LLM_PROVIDER (no need to remember base_url):
-#
-#     openai | anthropic | gemini | grok | openrouter |
-#     deepseek | moonshot | qwen | glm | minimax | ark | ollama
-#
-# Anthropic and Gemini are reached via their OpenAI-compatible endpoints —
-# the client itself stays a single OpenAI-shape implementation, no per-vendor
-# adapters.
+# Tool calling is on by default. Set LLM_SUPPORTS_TOOLS=0 for models that
+# can't tool-call (recall then degrades to framework-only / A).
 # --------------------------------------------------------------------------
 
-# (base_url, default_model_or_None)
-_PRESETS: dict[str, tuple[str, str | None]] = {
-    "openai":     ("https://api.openai.com/v1",                    "gpt-4.1-mini"),
-    "anthropic":  ("https://api.anthropic.com/v1",                 "claude-sonnet-4-5"),
-    "gemini":     ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash"),
-    "grok":       ("https://api.x.ai/v1",                          "grok-4"),
-    "openrouter": ("https://openrouter.ai/api/v1",                 None),
-    "deepseek":   ("https://api.deepseek.com",                     "deepseek-chat"),
-    "moonshot":   ("https://api.moonshot.cn/v1",                   "kimi-k2.5"),
-    "qwen":       ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
-    "glm":        ("https://open.bigmodel.cn/api/paas/v4",         "glm-4.6"),
-    "minimax":    ("https://api.minimax.io/v1",                    "MiniMax-M2.5"),
-    "ark":        ("https://ark.cn-beijing.volces.com/api/v3",     None),
-    "ollama":     ("http://localhost:11434/v1",                    "llama3.1"),
-}
 
-# Provider capability + verification table.
-#   json_object — supports response_format={"type":"json_object"}.
-#                 Providers not listed default to True (auto-fallback on 400).
-#   tested      — has been verified end-to-end by the maintainer.
-#                 False does NOT mean broken — it means "compatible by spec
-#                 but not yet exercised in production". Surface this honestly
-#                 in the README compatibility matrix.
-_PROVIDER_CAPS: dict[str, dict[str, bool]] = {
-    "openai":     {"json_object": True,  "tested": False, "tool_calling": True},
-    "anthropic":  {"json_object": False, "tested": False, "tool_calling": True},
-    "gemini":     {"json_object": True,  "tested": False, "tool_calling": True},
-    "grok":       {"json_object": True,  "tested": False, "tool_calling": True},
-    "openrouter": {"json_object": True,  "tested": False, "tool_calling": True},
-    "deepseek":   {"json_object": True,  "tested": True,  "tool_calling": True},
-    "moonshot":   {"json_object": True,  "tested": False, "tool_calling": True},
-    "qwen":       {"json_object": True,  "tested": False, "tool_calling": True},
-    "glm":        {"json_object": True,  "tested": False, "tool_calling": True},
-    "minimax":    {"json_object": True,  "tested": False, "tool_calling": True},
-    "ark":        {"json_object": True,  "tested": True,  "tool_calling": True},
-    "ollama":     {"json_object": True,  "tested": False, "tool_calling": True},
-}
-
-
-def _provider_supports_json_object(provider: str) -> bool:
-    """Best-effort capability check; unknown providers assumed to support it
-    (we'll detect 400 and retry without)."""
-    return _PROVIDER_CAPS.get(provider, {}).get("json_object", True)
-
-
-def provider_supports_tools() -> bool:
-    """Whether the configured provider is expected to support OpenAI-style tool
-    calling. Unknown providers default True; respond.py degrades to A-only if a
-    tool round actually errors at runtime."""
-    provider = (os.getenv("LLM_PROVIDER") or "").strip().lower()
-    return _PROVIDER_CAPS.get(provider, {}).get("tool_calling", True)
+def tools_enabled() -> bool:
+    """Whether to offer tool calling. Default on; set LLM_SUPPORTS_TOOLS=0 for a
+    model that can't tool-call (recall then degrades to framework-only / A)."""
+    return (os.getenv("LLM_SUPPORTS_TOOLS") or "1").strip().lower() not in ("0", "false", "no")
 
 
 # Model-level capability: which models reject the `temperature` parameter
@@ -221,25 +169,11 @@ _JSON_ONLY_HINT = (
 
 
 def resolve_structured_llm_config() -> dict[str, str]:
-    """Resolve LLM config from LLM_BASE_URL / LLM_API_KEY / LLM_MODEL,
-    optionally seeded by an LLM_PROVIDER preset."""
-    base_url = (os.getenv("LLM_BASE_URL") or "").strip().rstrip("/")
-    api_key = (os.getenv("LLM_API_KEY") or "").strip()
-    model = (os.getenv("LLM_MODEL") or "").strip()
-
-    provider = (os.getenv("LLM_PROVIDER") or "").strip().lower()
-    if provider and provider in _PRESETS:
-        preset_url, preset_model = _PRESETS[provider]
-        if not base_url:
-            base_url = preset_url
-        if not model and preset_model:
-            model = preset_model
-
+    """Resolve LLM config from LLM_BASE_URL / LLM_API_KEY / LLM_MODEL."""
     return {
-        "provider": provider or "custom",
-        "api_key": api_key,
-        "base_url": base_url,
-        "model": model,
+        "base_url": (os.getenv("LLM_BASE_URL") or "").strip().rstrip("/"),
+        "api_key": (os.getenv("LLM_API_KEY") or "").strip(),
+        "model": (os.getenv("LLM_MODEL") or "").strip(),
     }
 
 
@@ -296,11 +230,21 @@ def _looks_like_temperature_rejection(status_code: int, body: str) -> bool:
     return any(n in low for n in ("deprecat", "unsupported", "not supported", "not allowed"))
 
 
+def _looks_like_tools_rejection(status_code: int, body: str) -> bool:
+    """Detect provider 400s where the cause is tool/function calling not being supported."""
+    if status_code != 400:
+        return False
+    low = (body or "").lower()
+    mentions_tools = ("tool" in low) or ("function" in low)
+    rejected = any(n in low for n in ("not support", "unsupported", "not allowed", "invalid", "no support", "does not support"))
+    return mentions_tools and rejected
+
+
 def _strip_unsupported_params_if_rejected(payload: dict, status_code: int, body: str) -> bool:
     """Remove provider-rejected params from `payload` in-place.
 
     Returns True if the payload was modified — caller should retry once with
-    the stripped payload. Currently handles `response_format` and `temperature`.
+    the stripped payload. Handles `response_format`, `temperature`, and tools.
     """
     if status_code != 400:
         return False
@@ -310,6 +254,10 @@ def _strip_unsupported_params_if_rejected(payload: dict, status_code: int, body:
         changed = True
     if "temperature" in payload and _looks_like_temperature_rejection(status_code, body):
         payload.pop("temperature", None)
+        changed = True
+    if ("tools" in payload or "tool_choice" in payload) and _looks_like_tools_rejection(status_code, body):
+        payload.pop("tools", None)
+        payload.pop("tool_choice", None)
         changed = True
     return changed
 
@@ -332,11 +280,10 @@ async def chat_json(
     config = resolve_structured_llm_config()
     if not is_structured_llm_configured():
         raise StructuredLLMError(
-            "LLM is not configured. Set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL "
-            "(or LLM_PROVIDER=<preset> + LLM_API_KEY [+ LLM_MODEL])."
+            "LLM is not configured. Set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL."
         )
 
-    use_json_format = _provider_supports_json_object(config["provider"])
+    use_json_format = True
 
     # Anthropic rejects empty user-message content with 400 ("messages: at
     # least one message is required"); OpenAI/Qwen accept it. Normalize at
