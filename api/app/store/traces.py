@@ -40,3 +40,22 @@ def pin(trace_id: int, pinned: bool = True) -> None:
             "UPDATE traces SET pinned = ? WHERE id = ?",
             (1 if pinned else 0, trace_id),
         )
+
+
+def list_recent(limit: int = 100, stage: str | None = None) -> list[dict]:
+    with get_conn() as conn:
+        if stage:
+            rows = conn.execute(
+                "SELECT * FROM traces WHERE stage = ? ORDER BY id DESC LIMIT ?",
+                (stage, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM traces ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def set_note(trace_id: int, note: str) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE traces SET note = ? WHERE id = ?", (note, trace_id))
