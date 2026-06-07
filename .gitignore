@@ -6,3 +6,6 @@ api/data/
 node_modules/
 dist/
 .DS_Store
+.pytest_cache/
+.claude/
+docs/
