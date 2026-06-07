@@ -13,8 +13,6 @@ def test_chat_triggers_background_modeling(migrated_db, monkeypatch):
     async def fake_embed(t): return [1.0, 0.0, 0.0]
     monkeypatch.setattr(ingest, "embed", fake_embed)
     monkeypatch.setattr(retrieval, "embed", fake_embed)
-    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: True)
-
     async def fake_stream(messages, tools, **kw):
         yield {"type": "content_delta", "delta": "ok"}
         yield {"type": "done", "finish_reason": "stop",

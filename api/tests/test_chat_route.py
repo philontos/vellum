@@ -14,8 +14,6 @@ def _setup(monkeypatch):
 
     monkeypatch.setattr(ingest, "embed", _fake_embed)
     monkeypatch.setattr(retrieval, "embed", _fake_embed)
-    monkeypatch.setattr(respond.llm, "provider_supports_tools", lambda: True)
-
     async def fake_stream(messages, tools, **kw):
         yield {"type": "content_delta", "delta": "hi "}
         yield {"type": "content_delta", "delta": "there"}

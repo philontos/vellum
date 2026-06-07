@@ -1,7 +1,7 @@
 """Stream one assistant reply. Hybrid recall: A retrieval is already baked into
 the assembled `messages` (system reference). B = the recall_memory tool offered
-here when the provider supports tools; if not, tools=[] and it streams plain
-text (A-only degradation). Yields {"type":"delta","text":...} events during the
+here; if the provider does not support tools it will 400 and auto-degrade to
+plain text (A-only). Yields {"type":"delta","text":...} events during the
 stream and one {"type":"final","content":...} at the end."""
 import json
 
@@ -17,8 +17,8 @@ def _build_registry() -> registry.ToolRegistry:
 
 
 async def stream(messages: list[dict]):
-    reg = _build_registry() if llm.provider_supports_tools() else None
-    tools = reg.schemas() if reg else []
+    reg = _build_registry()
+    tools = reg.schemas()
     convo = list(messages)
     content_parts: list[str] = []
 
