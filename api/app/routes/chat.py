@@ -1,6 +1,7 @@
 """POST /chat — SSE stream. Persists the user turn, assembles context (A recall
 baked in), streams the reply (B tool available), persists the assistant turn,
 records one diagnostic trace."""
+import asyncio
 import json
 
 from fastapi import APIRouter
@@ -9,9 +10,24 @@ from pydantic import BaseModel
 
 from app.chat import assemble, ingest, respond
 from app.llm.client import resolve_structured_llm_config
+from app.model_loop import runner
 from app.store import traces
 
 router = APIRouter()
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _track(task: asyncio.Task) -> None:
+    _background_tasks.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            import traceback
+            traceback.print_exception(t.exception())
+
+    task.add_done_callback(_done)
 
 
 class ChatIn(BaseModel):
@@ -38,6 +54,7 @@ async def chat(body: ChatIn):
             prompt=json.dumps(messages, ensure_ascii=False), output=final,
             prompt_tokens=None, completion_tokens=None, duration_ms=None,
         )
+        _track(asyncio.create_task(runner.run_pending()))  # background, non-blocking
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")

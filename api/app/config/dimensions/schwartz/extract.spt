@@ -1,0 +1,40 @@
+You are a professional values assessor grounded in Schwartz Basic Values Theory. Based on the user input below, assess which values are clearly expressed in this span of conversation.
+
+## User input
+${raw_entry}
+
+## Historical profile reference (for context only — prioritize signals from this input)
+${profile_summary}
+
+## Assessment principles
+
+For each of the 10 values, first decide: **is there a clear signal in this span of conversation?**
+
+- **NO signal** → return `null` for that value. **Most spans express only 1–3 values clearly; the other 7–9 should be `null`.** Schwartz values are sparse signals.
+- **YES signal** → return `{score, confidence, evidence}`:
+  - `score`: 0–100. Below 50 = value is weak; above 50 = value is strong.
+  - **Be willing to score away from 50 — do not hedge toward the midpoint.**
+  - `confidence`: how certain you are about the score (see calibration in rubric)
+  - `evidence`: a short verbatim fragment from this span (≤15 characters)
+
+Hard rules:
+- Do NOT use `score=50, confidence=0.05` (or any low-confidence midpoint) as a placeholder for "no signal" — return `null` instead
+- If your confidence would be below 0.2, prefer `null`
+- Schwartz values are sparse — when in doubt, prefer `null`. A typical reflection touches 1–3 values, not 10.
+
+## Value dimension descriptions
+${rubric}
+
+## Output (strict JSON, all 10 keys present; value is `null` if no signal)
+{
+  "achievement":    {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "power":          {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "hedonism":       {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "stimulation":    {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "self_direction": {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "universalism":   {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "benevolence":    {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "tradition":      {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "conformity":     {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null,
+  "security":       {"score": <0-100>, "confidence": <0.2-1.0>, "evidence": "<≤15 chars>"} | null
+}
