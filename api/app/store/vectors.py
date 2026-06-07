@@ -46,6 +46,19 @@ class VectorStore:
         if self.index is not None:
             self.index.save_index(str(self._index_path))
 
+    def search_scored(self, embedding: list[float], k: int = 5) -> list[tuple[int, float]]:
+        """Like search() but returns (label, cosine_similarity) pairs, highest first.
+        hnswlib cosine 'distance' = 1 - similarity, so similarity = 1 - distance."""
+        if self.index is None or self.index.get_current_count() == 0:
+            return []
+        if self.dim is not None and len(embedding) != self.dim:
+            raise ValueError(f"Query dim {len(embedding)} != index dim {self.dim}")
+        labels, distances = self.index.knn_query(
+            np.array([embedding], dtype=np.float32),
+            k=min(k, self.index.get_current_count()),
+        )
+        return [(int(l), 1.0 - float(d)) for l, d in zip(labels[0], distances[0])]
+
     def search(self, embedding: list[float], k: int = 5) -> list[int]:
         if self.index is None or self.index.get_current_count() == 0:
             return []

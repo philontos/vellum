@@ -143,18 +143,18 @@ _PRESETS: dict[str, tuple[str, str | None]] = {
 #                 but not yet exercised in production". Surface this honestly
 #                 in the README compatibility matrix.
 _PROVIDER_CAPS: dict[str, dict[str, bool]] = {
-    "openai":     {"json_object": True,  "tested": False},
-    "anthropic":  {"json_object": False, "tested": False},
-    "gemini":     {"json_object": True,  "tested": False},
-    "grok":       {"json_object": True,  "tested": False},
-    "openrouter": {"json_object": True,  "tested": False},
-    "deepseek":   {"json_object": True,  "tested": True},
-    "moonshot":   {"json_object": True,  "tested": False},
-    "qwen":       {"json_object": True,  "tested": False},
-    "glm":        {"json_object": True,  "tested": False},
-    "minimax":    {"json_object": True,  "tested": False},
-    "ark":        {"json_object": True,  "tested": True},
-    "ollama":     {"json_object": True,  "tested": False},
+    "openai":     {"json_object": True,  "tested": False, "tool_calling": True},
+    "anthropic":  {"json_object": False, "tested": False, "tool_calling": True},
+    "gemini":     {"json_object": True,  "tested": False, "tool_calling": True},
+    "grok":       {"json_object": True,  "tested": False, "tool_calling": True},
+    "openrouter": {"json_object": True,  "tested": False, "tool_calling": True},
+    "deepseek":   {"json_object": True,  "tested": True,  "tool_calling": True},
+    "moonshot":   {"json_object": True,  "tested": False, "tool_calling": True},
+    "qwen":       {"json_object": True,  "tested": False, "tool_calling": True},
+    "glm":        {"json_object": True,  "tested": False, "tool_calling": True},
+    "minimax":    {"json_object": True,  "tested": False, "tool_calling": True},
+    "ark":        {"json_object": True,  "tested": True,  "tool_calling": True},
+    "ollama":     {"json_object": True,  "tested": False, "tool_calling": True},
 }
 
 
@@ -162,6 +162,14 @@ def _provider_supports_json_object(provider: str) -> bool:
     """Best-effort capability check; unknown providers assumed to support it
     (we'll detect 400 and retry without)."""
     return _PROVIDER_CAPS.get(provider, {}).get("json_object", True)
+
+
+def provider_supports_tools() -> bool:
+    """Whether the configured provider is expected to support OpenAI-style tool
+    calling. Unknown providers default True; respond.py degrades to A-only if a
+    tool round actually errors at runtime."""
+    provider = (os.getenv("LLM_PROVIDER") or "").strip().lower()
+    return _PROVIDER_CAPS.get(provider, {}).get("tool_calling", True)
 
 
 # Model-level capability: which models reject the `temperature` parameter
@@ -563,9 +571,10 @@ async def chat_with_tools_stream(
         "stream": True,
         "stream_options": {"include_usage": True},
         "messages": messages,
-        "tools": tools,
-        "tool_choice": "auto",
     }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
     if _supports_temperature(config["model"]):
         payload["temperature"] = temperature
     prompt_chars = sum(len(m.get("content") or "") for m in messages)
