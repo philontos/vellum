@@ -1,0 +1,10 @@
+{
+  "dimension": "ocean",
+  "target": {"sub": "O", "direction": "high"},
+  "crosstalk_tolerance": 25,
+  "conversation": [
+    "I rearranged my whole weekend to try that experimental fermentation workshop — totally unfamiliar, no idea if I'd be any good, but the not-knowing is the fun part",
+    "lately I keep pulling threads from totally unrelated fields, music theory into my data work, just to see what cross-pollinates",
+    "a friend offered the safe familiar plan and I felt my energy drain; I'd rather chase the strange option and figure it out as I go"
+  ]
+}
