@@ -1,8 +1,9 @@
-"""External-evaluator model config. Generation + judging use EVAL_GEN_*, which
-MUST differ from the system-under-test model (LLM_*) — otherwise a model would
-grade its own work. Mirrors the LLM_* preset fallback shape loosely; for evals we
-require explicit EVAL_GEN_BASE_URL / EVAL_GEN_API_KEY / EVAL_GEN_MODEL."""
+"""External-evaluator model config. Generation + judging use EVAL_GEN_*. Using a
+DIFFERENT model from the system under test (LLM_*) is recommended — a model
+grading its own work is weaker, especially on the honesty/sycophancy axis — but
+NOT required; same-model setups (one provider) are allowed with a warning."""
 import os
+import sys
 
 from app.llm.client import resolve_structured_llm_config
 
@@ -20,16 +21,19 @@ def is_configured() -> bool:
     return bool(c["base_url"] and c["api_key"] and c["model"])
 
 
-def enforce_distinct_model() -> None:
-    """Refuse to run if the evaluator model equals the system model."""
+def require_eval_gen() -> None:
+    """Ensure the external evaluator (EVAL_GEN_*) is configured. Same model as
+    LLM_* is allowed but warned — judging your own model is less trustworthy."""
     if not is_configured():
         raise RuntimeError(
             "Eval generator not configured. Set EVAL_GEN_BASE_URL / EVAL_GEN_API_KEY "
-            "/ EVAL_GEN_MODEL (a model DIFFERENT from LLM_MODEL)."
+            "/ EVAL_GEN_MODEL."
         )
     system_model = resolve_structured_llm_config().get("model", "")
-    if eval_gen_config()["model"] == system_model:
-        raise RuntimeError(
-            f"EVAL_GEN_MODEL and the system LLM_MODEL must differ (both are "
-            f"{system_model!r}) — using the same model to generate and grade defeats the eval."
+    if system_model and eval_gen_config()["model"] == system_model:
+        print(
+            f"[evals] note: EVAL_GEN_MODEL == LLM_MODEL ({system_model!r}); the model "
+            "is grading itself — scores on the honesty/sycophancy axis are less "
+            "trustworthy. Use a different EVAL_GEN_MODEL when you can.",
+            file=sys.stderr,
         )

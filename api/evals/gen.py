@@ -5,12 +5,12 @@ import json
 
 import httpx
 
-from evals.config import eval_gen_config, enforce_distinct_model
+from evals.config import eval_gen_config, require_eval_gen
 from evals.judge import _extract_json
 
 
 async def generate_conversation(instruction: str, n: int = 6) -> list[str]:
-    enforce_distinct_model()
+    require_eval_gen()
     cfg = eval_gen_config()
     prompt = (
         f"Produce exactly {n} first-person user messages (a person talking to an AI) "
