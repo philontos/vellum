@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.config.dimensions_loader import DIMENSION_MAP
 from app.model_loop import traits as traits_job
-from app.store import memory, model
+from app.store import model
 
 _DATA = Path(__file__).parent / "data" / "traits"
 
@@ -29,9 +29,8 @@ async def run_case(case: dict) -> dict:
     prior = DIMENSION_MAP[dim].get("score_range", [0, 100])
     prior_mid = (prior[0] + prior[1]) / 2
 
-    end = -1
-    for line in case["conversation"]:
-        end = memory.append_message("user", line)["turn"]
+    from evals._utils import seed_user_lines
+    end = seed_user_lines(case["conversation"])
     await traits_job.run(0, end)
 
     cur = model.get_trait(dim)

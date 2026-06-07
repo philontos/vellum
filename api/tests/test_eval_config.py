@@ -26,3 +26,11 @@ def test_enforce_distinct_ok_when_different(monkeypatch):
     monkeypatch.setenv("EVAL_GEN_API_KEY", "k")
     monkeypatch.setenv("EVAL_GEN_BASE_URL", "https://eval.test/v1")
     ec.enforce_distinct_model()   # must not raise
+
+
+def test_enforce_raises_when_unconfigured(monkeypatch):
+    monkeypatch.delenv("EVAL_GEN_MODEL", raising=False)
+    monkeypatch.delenv("EVAL_GEN_BASE_URL", raising=False)
+    monkeypatch.delenv("EVAL_GEN_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="not configured"):
+        ec.enforce_distinct_model()

@@ -1,4 +1,4 @@
-"""CLI: python -m evals.run <recall|traits|facts|dossier|altitude|all>
+"""CLI: python -m evals.run <recall|traits|facts|altitude|all>
 
 Real eval runner. Requires LLM_* (system under test) and EVAL_GEN_* (external
 evaluator, distinct model). Each case runs against a fresh temp data dir so cases
@@ -69,4 +69,6 @@ async def _main(which: str):
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "all"
+    if which != "all" and which not in _EVALS:
+        sys.exit(f"Unknown eval {which!r}. Choose from: {', '.join(_EVALS)} or all")
     asyncio.run(_main(which))

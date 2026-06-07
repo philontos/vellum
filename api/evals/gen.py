@@ -1,9 +1,12 @@
 """Generate a synthetic conversation that ENACTS a target (show, don't tell),
 using the external evaluator model EVAL_GEN_*. Used to (re)author committed trait
 conversation fixtures and persona conversations."""
+import json
+
 import httpx
 
 from evals.config import eval_gen_config, enforce_distinct_model
+from evals.judge import _extract_json
 
 
 async def generate_conversation(instruction: str, n: int = 6) -> list[str]:
@@ -23,7 +26,5 @@ async def generate_conversation(instruction: str, n: int = 6) -> list[str]:
                   "messages": [{"role": "user", "content": prompt}]},
         )
     resp.raise_for_status()
-    import json
     content = resp.json()["choices"][0]["message"]["content"]
-    s, e = content.find("{"), content.rfind("}")
-    return json.loads(content[s:e + 1])["messages"]
+    return _extract_json(content)["messages"]
