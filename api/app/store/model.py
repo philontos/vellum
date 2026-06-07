@@ -89,3 +89,22 @@ def supersede_fact(fact_id: int) -> None:
             "WHERE id = ?",
             (fact_id,),
         )
+
+
+def all_facts() -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM facts ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def all_traits() -> list[dict]:
+    with get_conn() as conn:
+        dims = [r["dimension"] for r in
+                conn.execute("SELECT dimension FROM trait_current ORDER BY dimension")]
+    return [get_trait(d) for d in dims]
+
+
+def get_dossier_row() -> dict:
+    with get_conn() as conn:
+        row = conn.execute("SELECT content, updated_at FROM dossier WHERE id = 1").fetchone()
+    return dict(row) if row else {"content": "", "updated_at": None}
