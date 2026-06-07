@@ -1,0 +1,13 @@
+[
+  {
+    "name": "offer_decision",
+    "corpus": [
+      {"role": "user", "content": "I got a startup offer but I'm scared it's unstable"},
+      {"role": "assistant", "content": "weigh autonomy against security; what does the floor look like"},
+      {"role": "user", "content": "my cat threw up on the rug this morning"},
+      {"role": "user", "content": "the weather has been grey all week"}
+    ],
+    "query": "what did we discuss about that job offer",
+    "expect_turns": [0]
+  }
+]

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "basics",
+    "conversation": [
+      "just so you know I'm allergic to penicillin",
+      "my younger sister Lin is visiting from Shanghai next week",
+      "anyway the weather's been grey"
+    ],
+    "expect_facts": ["allergic to penicillin", "sister", "Shanghai"]
+  }
+]
