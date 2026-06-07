@@ -47,7 +47,7 @@ async def _facts():
 
 async def _altitude():
     from evals import altitude
-    ec.enforce_distinct_model()
+    ec.require_eval_gen()
     out = []
     for q in altitude.load_questions():
         _fresh_data_dir()
@@ -57,7 +57,7 @@ async def _altitude():
 
 async def _consultant():
     from evals import consultant
-    ec.enforce_distinct_model()
+    ec.require_eval_gen()
     out = []
     for probe in consultant.load_probes():
         out.append(await consultant.run_probe(probe))

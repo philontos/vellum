@@ -3,34 +3,34 @@ import pytest
 from evals import config as ec
 
 
+def _set_gen(monkeypatch, model, base="https://eval.test/v1", key="k"):
+    monkeypatch.setenv("EVAL_GEN_BASE_URL", base)
+    monkeypatch.setenv("EVAL_GEN_API_KEY", key)
+    monkeypatch.setenv("EVAL_GEN_MODEL", model)
+
+
 def test_resolves_eval_gen(monkeypatch):
-    monkeypatch.setenv("EVAL_GEN_BASE_URL", "https://eval.test/v1")
-    monkeypatch.setenv("EVAL_GEN_API_KEY", "k")
-    monkeypatch.setenv("EVAL_GEN_MODEL", "judge-model")
+    _set_gen(monkeypatch, "judge-model")
     cfg = ec.eval_gen_config()
     assert cfg["model"] == "judge-model" and cfg["base_url"] == "https://eval.test/v1"
 
 
-def test_enforce_distinct_raises_when_same(monkeypatch):
-    monkeypatch.setenv("LLM_MODEL", "same-model")
-    monkeypatch.setenv("EVAL_GEN_MODEL", "same-model")
-    monkeypatch.setenv("EVAL_GEN_API_KEY", "k")
-    monkeypatch.setenv("EVAL_GEN_BASE_URL", "https://eval.test/v1")
-    with pytest.raises(RuntimeError, match="must differ"):
-        ec.enforce_distinct_model()
-
-
-def test_enforce_distinct_ok_when_different(monkeypatch):
+def test_require_eval_gen_ok_when_configured(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "system-model")
-    monkeypatch.setenv("EVAL_GEN_MODEL", "judge-model")
-    monkeypatch.setenv("EVAL_GEN_API_KEY", "k")
-    monkeypatch.setenv("EVAL_GEN_BASE_URL", "https://eval.test/v1")
-    ec.enforce_distinct_model()   # must not raise
+    _set_gen(monkeypatch, "judge-model")
+    ec.require_eval_gen()   # different models → no raise, no warning
 
 
-def test_enforce_raises_when_unconfigured(monkeypatch):
+def test_same_model_allowed_but_warns(monkeypatch, capsys):
+    monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+    _set_gen(monkeypatch, "deepseek-chat")
+    ec.require_eval_gen()   # same model is now ALLOWED (no raise)
+    assert "grading itself" in capsys.readouterr().err
+
+
+def test_require_eval_gen_raises_when_unconfigured(monkeypatch):
     monkeypatch.delenv("EVAL_GEN_MODEL", raising=False)
     monkeypatch.delenv("EVAL_GEN_BASE_URL", raising=False)
     monkeypatch.delenv("EVAL_GEN_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="not configured"):
-        ec.enforce_distinct_model()
+        ec.require_eval_gen()
