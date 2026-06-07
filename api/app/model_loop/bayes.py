@@ -47,7 +47,7 @@ def merge_subdims(dimension: str, old_content: dict, new_content: dict) -> dict:
                 merged[key] = old_val
             continue
 
-        if isinstance(old_val, dict) and "score" in old_val:
+        if isinstance(old_val, dict) and "score" in old_val and "tau" in old_val:
             old_score, old_tau = float(old_val["score"]), float(old_val["tau"])
         else:
             old_score, old_tau = prior, tau_prior

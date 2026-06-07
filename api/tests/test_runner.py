@@ -34,6 +34,21 @@ async def test_facts_run_every_call_others_gated(migrated_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_pending_idempotent(migrated_db, monkeypatch):
+    ran = {"facts": 0}
+    async def facts_job(s, e): ran["facts"] += 1
+    async def noop(s, e): pass
+    monkeypatch.setattr(runner.facts, "run", facts_job)
+    monkeypatch.setattr(runner.traits, "run", noop)
+    monkeypatch.setattr(runner.summary, "run", noop)
+    monkeypatch.setattr(runner.dossier, "run", noop)
+    memory.append_message("user", "x")
+    await runner.run_pending()
+    await runner.run_pending()          # no new turns → no-op
+    assert ran["facts"] == 1
+
+
+@pytest.mark.asyncio
 async def test_one_failing_job_does_not_block_others(migrated_db, monkeypatch):
     async def boom(start_turn, end_turn):
         raise RuntimeError("trait broke")

@@ -19,3 +19,13 @@ async def test_dossier_rewritten_from_span_and_prior(migrated_db, monkeypatch):
 
     assert "autonomy" in model.get_dossier()
     assert "Prior: enjoys learning." in seen["prompt"]   # prior fed in for rewrite
+
+
+@pytest.mark.asyncio
+async def test_dossier_missing_key_is_noop(migrated_db, monkeypatch):
+    model.set_dossier("original portrait")
+    async def empty(system_prompt, user_prompt="", **kw): return {}
+    monkeypatch.setattr(dossier, "chat_json", empty)
+    memory.append_message("user", "x")
+    await dossier.run(0, 0)
+    assert model.get_dossier() == "original portrait"

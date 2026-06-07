@@ -6,12 +6,8 @@ from string import Template
 from app.config.dimensions_loader import DIMENSION_MAP
 from app.llm.client import chat_json
 from app.model_loop import bayes
+from app.model_loop._span import span_text
 from app.store import memory, model
-
-
-def _span_text(start_turn: int, end_turn: int) -> str:
-    rows = memory.messages_in_turn_range(start_turn, end_turn)
-    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
 
 
 def _profile_summary(dimension: str) -> str:
@@ -23,7 +19,7 @@ def _profile_summary(dimension: str) -> str:
 
 
 async def run(start_turn: int, end_turn: int) -> None:
-    span = _span_text(start_turn, end_turn)
+    span = span_text(start_turn, end_turn)
     if not span.strip():
         return
     for key, dim in DIMENSION_MAP.items():

@@ -2,6 +2,7 @@
 and add the new ones (dedup against active facts). MVP — supersession of facts
 that become false is a later refinement."""
 from app.llm.client import chat_json
+from app.model_loop._span import span_text
 from app.store import memory, model
 
 _PROMPT = (
@@ -14,13 +15,8 @@ _PROMPT = (
 )
 
 
-def _span_text(start_turn: int, end_turn: int) -> str:
-    rows = memory.messages_in_turn_range(start_turn, end_turn)
-    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
-
-
 async def run(start_turn: int, end_turn: int) -> None:
-    span = _span_text(start_turn, end_turn)
+    span = span_text(start_turn, end_turn)
     if not span.strip():
         return
     try:

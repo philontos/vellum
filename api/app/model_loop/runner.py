@@ -18,8 +18,11 @@ async def _run_concern(concern: str, job, gap_threshold: int, max_turn: int) -> 
     try:
         await job(cursor + 1, max_turn)
         memory.advance_cursor(concern, max_turn)
-    except Exception:
-        pass        # isolated: leave cursor unadvanced; re-runs next time
+    except Exception as exc:
+        import traceback
+        print(f"[model_loop] {concern} job failed: {exc!r}", flush=True)
+        traceback.print_exc()
+        # leave cursor unadvanced; re-runs next time
 
 
 async def run_pending() -> None:

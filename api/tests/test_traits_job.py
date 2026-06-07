@@ -21,3 +21,15 @@ async def test_trait_job_updates_current_and_history(migrated_db, monkeypatch):
     cur = model.get_trait("ocean")
     assert cur["content_json"]["O"]["score"] > 50
     assert len(model.get_trait_history("ocean")) == 1     # snapshot appended
+
+
+@pytest.mark.asyncio
+async def test_trait_null_signal_keeps_old(migrated_db, monkeypatch):
+    model.set_trait("ocean", {"O": {"score": 70, "tau": 5.0, "confidence": 0.5}}, 1)
+    async def all_null(system_prompt, user_prompt="", **kw):
+        return {"O": None, "C": None, "E": None, "A": None, "N": None}
+    monkeypatch.setattr(traits, "chat_json", all_null)
+    monkeypatch.setattr(traits, "DIMENSION_MAP", {"ocean": traits.DIMENSION_MAP["ocean"]})
+    memory.append_message("user", "a neutral sentence")
+    await traits.run(0, 0)
+    assert model.get_trait("ocean")["content_json"]["O"]["score"] == 70
