@@ -25,6 +25,12 @@ def recent_tail(limit: int) -> list[dict]:
     return [dict(r) for r in reversed(rows)]
 
 
+def get_message(message_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def messages_in_turn_range(start_turn: int, end_turn: int) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
