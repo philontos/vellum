@@ -25,4 +25,10 @@ describe("parseData", () => {
     expect(parseData(": comment")).toBeNull();
     expect(parseData("data: {not json}")).toBeNull();
   });
+  it("passes through an empty delta", () => {
+    expect(parseData('data: {"delta":""}')).toEqual({ type: "delta", text: "" });
+  });
+  it("returns null when the delta field is absent", () => {
+    expect(parseData('data: {"foo":1}')).toBeNull();
+  });
 });
