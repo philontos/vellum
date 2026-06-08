@@ -1,5 +1,5 @@
 from app.store import traces
-from app.store.db import get_conn
+from app.store.observability import get_conn
 
 
 def _record(stage="chat", pinned=False, reasoning="chain of thought"):

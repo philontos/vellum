@@ -15,15 +15,21 @@ _PROMPT = (
 )
 
 
+async def extract_facts(span: str) -> list[str]:
+    """Extract durable facts from a span. Pure compute — NO DB write. The eval
+    calls this directly and measures recall; production `run()` dedups + persists."""
+    result = await chat_json(system_prompt=_PROMPT + span, user_prompt="", stage="facts")
+    return [f.strip() for f in (result.get("facts") or []) if isinstance(f, str) and f.strip()]
+
+
 async def run(start_turn: int, end_turn: int) -> None:
     span = span_text(start_turn, end_turn)
     if not span.strip():
         return
     try:
-        result = await chat_json(system_prompt=_PROMPT + span, user_prompt="", stage="facts")
+        new_facts = await extract_facts(span)
     except Exception:
         return
-    new_facts = [f.strip() for f in (result.get("facts") or []) if isinstance(f, str) and f.strip()]
     existing = {f["text"].lower() for f in model.active_facts()}
     for text in new_facts:
         if text.lower() not in existing:

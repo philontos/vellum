@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 from app.model_loop import facts as facts_job
-from app.store import model
 
 _DATA = Path(__file__).parent / "data" / "facts_cases.json"
 
@@ -19,10 +18,9 @@ def fact_recall(expected: list[str], actual: list[str]) -> dict:
 
 
 async def run_case(case: dict) -> dict:
-    from evals._utils import seed_user_lines
-    end = seed_user_lines(case["conversation"])
-    await facts_job.run(0, end)
-    actual = [f["text"] for f in model.active_facts()]
+    # DB-free: extract directly over the case span (cold start, no persistence)
+    span = "\n".join(f"user: {line}" for line in case["conversation"])
+    actual = await facts_job.extract_facts(span)
     return {"name": case.get("name", "?"), **fact_recall(case["expect_facts"], actual),
             "actual": actual}
 

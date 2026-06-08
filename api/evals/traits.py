@@ -1,13 +1,16 @@
 """Per-dimension trait eval: feed a conversation engineered to express ONE
-target (dimension, sub-dimension, direction), run the REAL trait job, then check
-the target moved the right way and non-target sub-dimensions did not swing past a
-crosstalk tolerance. Dimension-agnostic — driven by the case's `dimension`."""
+target (dimension, sub-dimension, direction), run the REAL extract+merge over it,
+then check the target moved the right way and non-target sub-dimensions did not
+swing past a crosstalk tolerance. Dimension-agnostic — driven by the case's `dimension`.
+
+Cold start by construction: each case is a single observation against an empty
+prior, scored via the production `extract_one` seam (extract + bayes merge, NO DB
+write, NO read-back). See spec §5."""
 import json
 from pathlib import Path
 
 from app.config.dimensions_loader import DIMENSION_MAP
 from app.model_loop import traits as traits_job
-from app.store import model
 
 _DATA = Path(__file__).parent / "data" / "traits"
 
@@ -29,16 +32,14 @@ async def run_case(case: dict) -> dict:
     prior = DIMENSION_MAP[dim].get("score_range", [0, 100])
     prior_mid = (prior[0] + prior[1]) / 2
 
-    from evals._utils import seed_user_lines
-    end = seed_user_lines(case["conversation"])
-    await traits_job.run(0, end)
+    # user-only span built directly from the case — no DB, cold start (empty prior)
+    span = "\n".join(f"user: {line}" for line in case["conversation"])
+    merged = await traits_job.extract_one(span, dim, DIMENSION_MAP[dim], {})
 
-    cur = model.get_trait(dim)
-    content = cur["content_json"] if cur else {}
-    target_score = content.get(target_sub, {}).get("score")
+    target_score = (merged.get(target_sub) or {}).get("score")
 
     crosstalk_ok = True
-    for sub, val in content.items():
+    for sub, val in merged.items():
         if sub == target_sub or not isinstance(val, dict) or "score" not in val:
             continue
         if abs(val["score"] - prior_mid) > tol:

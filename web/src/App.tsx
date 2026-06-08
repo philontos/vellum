@@ -3,10 +3,11 @@ import { MessageList } from "./components/MessageList";
 import { Composer } from "./components/Composer";
 import { ModelPanel } from "./components/ModelPanel";
 import { TracesPanel } from "./components/TracesPanel";
+import { EvalPanel } from "./components/EvalPanel";
 import { useChat } from "./hooks/useChat";
 import { useT } from "./i18n";
 
-type View = "chat" | "model" | "traces";
+type View = "chat" | "model" | "traces" | "evals";
 
 export default function App() {
   const [view, setView] = useState<View>("chat");
@@ -29,6 +30,7 @@ export default function App() {
         {tab("chat", t("nav.chat"))}
         {tab("model", t("nav.you"))}
         {tab("traces", t("nav.traces"))}
+        {tab("evals", t("nav.evals"))}
         <button
           onClick={() => setLang(lang === "en" ? "zh" : "en")}
           className="ml-auto px-2 py-2 text-sm text-gray-500 hover:text-gray-700"
@@ -45,6 +47,7 @@ export default function App() {
       )}
       {view === "model" && <ModelPanel />}
       {view === "traces" && <TracesPanel />}
+      {view === "evals" && <EvalPanel />}
     </div>
   );
 }

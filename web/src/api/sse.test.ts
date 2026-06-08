@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitFrames, parseData } from "./sse";
+import { splitFrames, parseData, parseEvalFrame } from "./sse";
 
 describe("splitFrames", () => {
   it("splits complete \\n\\n frames and keeps the remainder", () => {
@@ -30,5 +30,28 @@ describe("parseData", () => {
   });
   it("returns null when the delta field is absent", () => {
     expect(parseData('data: {"foo":1}')).toBeNull();
+  });
+});
+
+describe("parseEvalFrame", () => {
+  it("parses a run frame", () => {
+    expect(parseEvalFrame('data: {"run":{"id":1,"suite":"traits","total":3}}'))
+      .toEqual({ kind: "run", data: { id: 1, suite: "traits", total: 3 } });
+  });
+  it("parses a case frame", () => {
+    expect(parseEvalFrame('data: {"case":{"seq":0,"case":"ocean_O_high","status":"pass"}}'))
+      .toEqual({ kind: "case", data: { seq: 0, case: "ocean_O_high", status: "pass" } });
+  });
+  it("parses a done frame", () => {
+    expect(parseEvalFrame('data: {"done":{"status":"done","aggregate":{"pass":1}}}'))
+      .toEqual({ kind: "done", data: { status: "done", aggregate: { pass: 1 } } });
+  });
+  it("recognizes [DONE] as end", () => {
+    expect(parseEvalFrame("data: [DONE]")).toEqual({ kind: "end" });
+  });
+  it("ignores comments / malformed / unknown shapes", () => {
+    expect(parseEvalFrame(": comment")).toBeNull();
+    expect(parseEvalFrame("data: {not json}")).toBeNull();
+    expect(parseEvalFrame('data: {"foo":1}')).toBeNull();
   });
 });

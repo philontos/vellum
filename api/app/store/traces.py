@@ -1,35 +1,41 @@
 """Observability DAO: raw LLM-call traces. Diagnostic exhaust — not memory,
-not retrieved, not modeled. Retention = rolling window of heavy fields
-(prompt/output) + forever-metadata; prune nulls heavy fields but keeps the row;
-pinned rows are spared."""
+not retrieved, not modeled. Lives in observability.db (see app.store.observability).
+Retention = rolling window of heavy fields (prompt/output) + forever-metadata;
+prune nulls heavy fields but keeps the row; pinned rows are spared. Eval traces
+(eval_run_id IS NOT NULL) are NEVER pruned — they're durable observation tied to
+their run, deleted only when the run is."""
 import json
 
-from app.store.db import get_conn
+from app.store.observability import get_conn
 
 
 def record(*, turn, stage, model, params, prompt, output,
            prompt_tokens, completion_tokens, duration_ms, reasoning=None,
-           pinned=False) -> int:
+           pinned=False, eval_run_id=None, eval_case=None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO traces(turn, stage, model, params, prompt, output, "
-            "reasoning, prompt_tokens, completion_tokens, duration_ms, pinned) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "reasoning, prompt_tokens, completion_tokens, duration_ms, pinned, "
+            "eval_run_id, eval_case) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (turn, stage, model, json.dumps(params, ensure_ascii=False),
              prompt, output, reasoning, prompt_tokens, completion_tokens,
-             duration_ms, 1 if pinned else 0),
+             duration_ms, 1 if pinned else 0, eval_run_id, eval_case),
         )
         return cur.lastrowid
 
 
 def prune(keep_last: int) -> None:
     """Null out prompt/output/reasoning on all but the most recent `keep_last`
-    unpinned rows. Rows (and their lightweight metadata) are always kept."""
+    unpinned CHAT traces. Eval traces (eval_run_id IS NOT NULL) are exempt — kept
+    in full until their run is deleted. Rows (and lightweight metadata) always kept."""
     with get_conn() as conn:
         conn.execute(
             "UPDATE traces SET prompt = NULL, output = NULL, reasoning = NULL "
-            "WHERE pinned = 0 AND prompt IS NOT NULL AND id NOT IN ("
-            "  SELECT id FROM traces WHERE pinned = 0 ORDER BY id DESC LIMIT ?"
+            "WHERE pinned = 0 AND eval_run_id IS NULL AND prompt IS NOT NULL "
+            "AND id NOT IN ("
+            "  SELECT id FROM traces WHERE pinned = 0 AND eval_run_id IS NULL "
+            "  ORDER BY id DESC LIMIT ?"
             ")",
             (keep_last,),
         )
@@ -44,15 +50,19 @@ def pin(trace_id: int, pinned: bool = True) -> None:
 
 
 def list_recent(limit: int = 100, stage: str | None = None) -> list[dict]:
+    """Recent CHAT traces (eval traces excluded — view those per run via
+    app.store.observability.traces_for_run)."""
     with get_conn() as conn:
         if stage:
             rows = conn.execute(
-                "SELECT * FROM traces WHERE stage = ? ORDER BY id DESC LIMIT ?",
+                "SELECT * FROM traces WHERE eval_run_id IS NULL AND stage = ? "
+                "ORDER BY id DESC LIMIT ?",
                 (stage, limit),
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT * FROM traces ORDER BY id DESC LIMIT ?", (limit,)
+                "SELECT * FROM traces WHERE eval_run_id IS NULL "
+                "ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
     return [dict(r) for r in rows]
 

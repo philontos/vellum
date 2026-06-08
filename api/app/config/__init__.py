@@ -12,6 +12,13 @@ def db_path() -> Path:
     return data_dir() / "vellum.db"
 
 
+def observability_db_path() -> Path:
+    """Dedicated DB for diagnostic traces + eval runs/results. Separate file from
+    vellum.db so observability data is decoupled from the personal-model data and
+    can be retained/consumed independently."""
+    return data_dir() / "observability.db"
+
+
 def vector_dir() -> Path:
     return data_dir() / "vectors"
 
