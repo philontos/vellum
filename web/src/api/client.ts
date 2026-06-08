@@ -1,4 +1,4 @@
-import { splitFrames, parseData } from "./sse";
+import { splitFrames, parseData, parseEvalFrame } from "./sse";
 
 export type Message = { turn: number; role: "user" | "assistant"; content: string };
 
@@ -50,6 +50,71 @@ export async function patchTrace(id: number, patch: { pinned?: boolean; note?: s
     body: JSON.stringify(patch),
   });
   if (!r.ok) throw new Error(`patch failed: ${r.status}`);
+}
+
+// --- evals ---------------------------------------------------------------
+
+export type EvalSuite = { key: string; needs_eval_gen: boolean };
+export type EvalRun = {
+  id: number; suite: string; status: "running" | "done" | "error";
+  model: string | null; eval_model: string | null;
+  total: number; completed: number;
+  aggregate: Record<string, unknown> | null; error: string | null;
+  started_at: string; finished_at: string | null;
+};
+export type EvalResult = {
+  id: number; run_id: number; seq: number; case_name: string;
+  status: "pass" | "fail" | "scored" | "error";
+  result: Record<string, unknown> | null; error: string | null; created_at: string;
+};
+export type EvalTrace = Trace & { eval_case: string | null };
+export type EvalRunDetail = { run: EvalRun; results: EvalResult[]; traces: EvalTrace[] };
+
+export async function getEvalRuns(limit = 50): Promise<{ runs: EvalRun[]; suites: EvalSuite[] }> {
+  const r = await fetch(`/inspect/evals?limit=${limit}`);
+  if (!r.ok) throw new Error(`evals failed: ${r.status}`);
+  return r.json();
+}
+
+export async function getEvalRun(id: number): Promise<EvalRunDetail> {
+  const r = await fetch(`/inspect/evals/${id}`);
+  if (!r.ok) throw new Error(`eval run failed: ${r.status}`);
+  return r.json();
+}
+
+export type EvalRunMeta = { id: number; suite: string; total: number; needs_eval_gen: boolean };
+export type EvalCaseEvent = {
+  seq: number; case: string; status: EvalResult["status"];
+  result: Record<string, unknown> | null; error: string | null;
+};
+export type EvalDoneEvent = { run_id: number; status: string; aggregate: Record<string, unknown> | null; error?: string };
+
+/** POST /inspect/evals/run and stream the run. Resolves when the stream ends. */
+export async function streamEvalRun(
+  suite: string,
+  cb: { onRun?: (m: EvalRunMeta) => void; onCase?: (c: EvalCaseEvent) => void; onDone?: (d: EvalDoneEvent) => void },
+): Promise<void> {
+  const r = await fetch(`/inspect/evals/run?suite=${encodeURIComponent(suite)}`, { method: "POST" });
+  if (!r.ok || !r.body) throw new Error(`eval run failed: ${r.status}`);
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const { frames, rest } = splitFrames(buffer);
+    buffer = rest;
+    for (const frame of frames) {
+      const ev = parseEvalFrame(frame);
+      if (!ev) continue;
+      if (ev.kind === "run") cb.onRun?.(ev.data as unknown as EvalRunMeta);
+      else if (ev.kind === "case") cb.onCase?.(ev.data as unknown as EvalCaseEvent);
+      else if (ev.kind === "done") cb.onDone?.(ev.data as unknown as EvalDoneEvent);
+      else if (ev.kind === "end") return;
+    }
+  }
 }
 
 export async function streamChat(message: string, onDelta: (t: string) => void): Promise<void> {

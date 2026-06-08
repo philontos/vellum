@@ -39,6 +39,22 @@ export const DICT = {
     "traces.notePh": "note (good / broken / wrong extraction…)",
     "traces.empty": "No traces yet (chat a bit, wait for background modeling).",
     "traces.pruned": "(pruned by rotation; pin to protect future ones)",
+
+    // evals panel
+    "nav.evals": "Evals",
+    "eval.run": "Run",
+    "eval.runningBtn": "Running…",
+    "eval.running": "running {done}/{total}",
+    "eval.needsJudge": "needs judge",
+    "eval.ruleBased": "rule-based",
+    "eval.count": "{n} runs",
+    "eval.expand": "Detail",
+    "eval.collapse": "Collapse",
+    "eval.empty": "No eval runs yet — pick a suite and Run.",
+    "eval.noCases": "(no cases)",
+    "eval.casesTitle": "Cases",
+    "eval.tracesTitle": "Traces",
+    "eval.tracePruned": "(no output)",
   },
   zh: {
     "nav.chat": "聊天",
@@ -68,6 +84,22 @@ export const DICT = {
     "traces.notePh": "备注（好/塌了/抽错了…）",
     "traces.empty": "还没有 trace（聊几句、等后台建模触发）。",
     "traces.pruned": "（已滚动清除；pin 可保护未来的）",
+
+    // evals panel
+    "nav.evals": "评测",
+    "eval.run": "运行",
+    "eval.runningBtn": "运行中…",
+    "eval.running": "运行中 {done}/{total}",
+    "eval.needsJudge": "需裁判",
+    "eval.ruleBased": "规则判定",
+    "eval.count": "{n} 次运行",
+    "eval.expand": "详情",
+    "eval.collapse": "收起",
+    "eval.empty": "还没有评测 run —— 选个套件点运行。",
+    "eval.noCases": "（没有 case）",
+    "eval.casesTitle": "Case 明细",
+    "eval.tracesTitle": "Trace",
+    "eval.tracePruned": "（无输出）",
   },
 } as const;
 

@@ -1,5 +1,5 @@
 from app.store import traces, model
-from app.store.db import get_conn
+from app.store.observability import get_conn
 
 
 def _rec(stage="trait"):
