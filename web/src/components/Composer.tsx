@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useT } from "../i18n";
 
 export function Composer({ onSend, disabled }: { onSend: (t: string) => void; disabled: boolean }) {
+  const { t: tr } = useT();
   const [text, setText] = useState("");
   function submit() {
     const t = text.trim();
@@ -15,7 +17,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
         rows={1}
         value={text}
         aria-label="Message"
-        placeholder="跟它聊点什么…"
+        placeholder={tr("composer.placeholder")}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -29,7 +31,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
         onClick={submit}
         disabled={disabled}
       >
-        发送
+        {tr("composer.send")}
       </button>
     </div>
   );
