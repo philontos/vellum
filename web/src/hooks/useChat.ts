@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { getHistory, streamChat, type Message } from "../api/client";
+import { useT } from "../i18n";
 
 export function useChat() {
+  const { t } = useT();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
   const streamingRef = useRef(false);
@@ -40,7 +42,7 @@ export function useChat() {
       console.error("chat stream failed", e);
       setMessages((m) =>
         m.map((msg) =>
-          msg.turn === asstTurn ? { ...msg, content: "⚠️ 出错了，请重试" } : msg,
+          msg.turn === asstTurn ? { ...msg, content: t("chat.error") } : msg,
         ),
       );
     } finally {
