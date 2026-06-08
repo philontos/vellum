@@ -11,8 +11,11 @@ modeling) is captured as an inspectable trace.
 
 ```
 api/   FastAPI + SQLite + hnswlib — chat loop (sync) + background modeling (async)
-web/   React + Vite + Tailwind   — Chat / 你是谁 (your model) / Traces panels
+web/   React + Vite + Tailwind   — Chat / You (your model) / Traces panels
 ```
+
+The web UI ships in English (default) and 中文 — toggle with the **中 / EN**
+switch in the header; the choice is remembered in `localStorage`.
 
 ---
 
@@ -78,7 +81,7 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 
 ---
 
-## Notes / 注意事项
+## Notes
 
 - **Migrations are not auto-run on startup.** After the first setup, and after any
   pull that adds a file under `api/migrations/`, re-run:
@@ -105,7 +108,7 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 
 ## Inspecting your model
 
-- **你是谁** — live dossier, facts, and trait dimensions, with per-dimension
+- **You** — live dossier, facts, and trait dimensions, with per-dimension
   history curves as they shift over the conversation.
 - **Traces** — every LLM call (chat + facts/trait/summary/dossier), with the full
   prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
