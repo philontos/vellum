@@ -18,6 +18,8 @@ export const DICT = {
 
     // chat
     "chat.error": "⚠️ Something went wrong, please retry",
+    "chat.you": "You",
+    "chat.vellum": "Vellum",
 
     // model panel (你是谁)
     "model.loading": "Loading…",
@@ -65,6 +67,8 @@ export const DICT = {
     "composer.send": "发送",
 
     "chat.error": "⚠️ 出错了，请重试",
+    "chat.you": "你",
+    "chat.vellum": "Vellum",
 
     "model.loading": "加载中…",
     "model.dossierTitle": "Dossier — 你是谁",

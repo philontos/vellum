@@ -11,28 +11,30 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
     setText("");
   }
   return (
-    <div className="flex gap-2 border-t border-gray-200 p-3">
-      <textarea
-        className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring"
-        rows={1}
-        value={text}
-        aria-label="Message"
-        placeholder={tr("composer.placeholder")}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-      />
-      <button
-        className="rounded-xl bg-blue-600 px-4 text-sm font-medium text-white disabled:opacity-40"
-        onClick={submit}
-        disabled={disabled}
-      >
-        {tr("composer.send")}
-      </button>
+    <div className="border-t border-line bg-gradient-to-b from-transparent to-paper-raised">
+      <div className="mx-auto flex max-w-[46rem] items-end gap-3 px-6 py-4">
+        <textarea
+          className="flex-1 resize-none rounded-[13px] border border-card-line bg-card px-4 py-3 text-sm text-ink shadow-card placeholder:text-muted focus:border-terracotta/40 focus:outline-none focus:ring-2 focus:ring-terracotta/15"
+          rows={1}
+          value={text}
+          aria-label="Message"
+          placeholder={tr("composer.placeholder")}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <button
+          className="rounded-[13px] bg-terracotta px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-terracotta-ink disabled:opacity-40"
+          onClick={submit}
+          disabled={disabled}
+        >
+          {tr("composer.send")}
+        </button>
+      </div>
     </div>
   );
 }
