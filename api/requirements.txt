@@ -5,3 +5,13 @@ hnswlib==0.8.0
 numpy==2.2.1
 pytest==8.3.4
 pytest-asyncio==0.25.2
+
+# --- At-rest encryption (optional) ---------------------------------------
+# SQLCipher driver. Encryption is opt-in (set VELLUM_DB_KEY); without this
+# package the app runs unencrypted, so it is intentionally NOT auto-installed
+# here. To enable encryption, install it explicitly:
+#   macOS:  brew install sqlcipher
+#           PKG_CONFIG_PATH=/opt/homebrew/opt/sqlcipher/lib/pkgconfig \
+#               pip install sqlcipher3==0.6.2
+#   Linux:  apt-get install libsqlcipher-dev && pip install sqlcipher3==0.6.2
+# sqlcipher3==0.6.2

@@ -1,15 +1,20 @@
-"""HNSW vector index. Holds embeddings + integer labels ONLY (no text).
-Labels map back to source rows via the `vector_refs` table (see store.memory).
+"""HNSW vector index. The raw embeddings (float32) live in vellum.db's
+`embeddings` table — so SQLCipher covers them — keyed by the same integer label
+that `vector_refs` maps back to a source row (see store.memory). The hnswlib
+graph itself is never written to disk: it is held in a process-global cache and
+rebuilt from the persisted rows on first use (and whenever the active DB path
+changes, e.g. across tests or VELLUM_DATA_DIR switches).
 
-`memory_index()` swaps the on-disk index for a throwaway in-process one — used to
-isolate eval-case scratch (recall) alongside db.memory_scratch: zero disk, gone
-when the block exits."""
+`memory_index()` swaps the db-backed index for a throwaway in-process one — used
+to isolate eval-case scratch (recall) alongside db.memory_scratch: zero disk,
+gone when the block exits."""
 from contextlib import contextmanager
 
 import hnswlib
 import numpy as np
 
-from app.config import vector_dir
+from app.config import db_path
+from app.store.db import get_conn
 
 MAX_ELEMENTS = 1_000_000
 
@@ -17,10 +22,14 @@ MAX_ELEMENTS = 1_000_000
 # {"index": hnswlib.Index | None, "dim": int | None}. Set by memory_index().
 _mem: dict | None = None
 
+# Process-global db-backed index, lazily (re)built from the embeddings table.
+# Keyed by db path so switching VELLUM_DATA_DIR rebuilds instead of leaking.
+_db_index: dict = {"path": None, "index": None, "dim": None}
+
 
 @contextmanager
 def memory_index():
-    """Hold the vector index purely in memory (no files) for the duration."""
+    """Hold the vector index purely in memory (no db, no files) for the duration."""
     global _mem
     prev = _mem
     _mem = {"index": None, "dim": None}
@@ -30,72 +39,93 @@ def memory_index():
         _mem = prev
 
 
+def _new_index(dim: int) -> hnswlib.Index:
+    index = hnswlib.Index(space="cosine", dim=dim)
+    index.init_index(max_elements=MAX_ELEMENTS, ef_construction=200, M=16)
+    index.set_ef(64)
+    return index
+
+
+def _rebuild_from_db(path: str) -> None:
+    """Reload the process-global index from the persisted embeddings of `path`."""
+    _db_index.update(path=path, index=None, dim=None)
+    with get_conn() as conn:
+        rows = conn.execute("SELECT label, vec, dim FROM embeddings").fetchall()
+    if not rows:
+        return
+    dim = rows[0]["dim"]
+    index = _new_index(dim)
+    labels = np.array([r["label"] for r in rows])
+    vecs = np.array(
+        [np.frombuffer(r["vec"], dtype=np.float32) for r in rows], dtype=np.float32
+    )
+    index.add_items(vecs, labels)
+    _db_index.update(index=index, dim=dim)
+
+
+def _state() -> dict:
+    """The active index state — the scratch dict inside memory_index(), else the
+    process-global db-backed one (rebuilt if the active DB path changed)."""
+    if _mem is not None:
+        return _mem
+    cur = str(db_path())
+    if _db_index["path"] != cur:
+        _rebuild_from_db(cur)
+    return _db_index
+
+
 class VectorStore:
     def __init__(self):
         self._mem = _mem is not None
-        if self._mem:
-            self.dim = _mem["dim"]
-            self.index = _mem["index"]
-            return
-        d = vector_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        self._index_path = d / "index.bin"
-        self._dim_file = d / "dim.txt"
-        self.index: hnswlib.Index | None = None
-        self.dim: int | None = None
-        if self._dim_file.exists():
-            self.dim = int(self._dim_file.read_text().strip())
-            self._load_or_init()
 
-    def _load_or_init(self):
-        self.index = hnswlib.Index(space="cosine", dim=self.dim)
-        if not self._mem and self._index_path.exists():
-            self.index.load_index(str(self._index_path), max_elements=MAX_ELEMENTS)
-        else:
-            self.index.init_index(max_elements=MAX_ELEMENTS, ef_construction=200, M=16)
-        self.index.set_ef(64)
+    @property
+    def index(self) -> hnswlib.Index | None:
+        return _state()["index"]
+
+    @property
+    def dim(self) -> int | None:
+        return _state()["dim"]
 
     def add(self, label: int, embedding: list[float], *, save: bool = True):
-        if self.dim is None:
-            self.dim = len(embedding)
-            if self._mem:
-                _mem["dim"] = self.dim
-            else:
-                self._dim_file.write_text(str(self.dim))
-            self._load_or_init()
-        self.index.add_items(
+        st = _state()
+        if st["dim"] is None:
+            st["dim"] = len(embedding)
+            st["index"] = _new_index(st["dim"])
+        st["index"].add_items(
             np.array([embedding], dtype=np.float32),
             np.array([label]),
         )
-        if self._mem:
-            _mem["index"] = self.index        # share across instances in the block
-        elif save:
-            self.save()
-
-    def save(self):
-        if not self._mem and self.index is not None:
-            self.index.save_index(str(self._index_path))
+        if not self._mem and save:
+            with get_conn() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO embeddings(label, vec, dim) VALUES (?, ?, ?)",
+                    (label, np.asarray(embedding, dtype=np.float32).tobytes(), st["dim"]),
+                )
 
     def search_scored(self, embedding: list[float], k: int = 5) -> list[tuple[int, float]]:
         """Like search() but returns (label, cosine_similarity) pairs, highest first.
         hnswlib cosine 'distance' = 1 - similarity, so similarity = 1 - distance."""
-        if self.index is None or self.index.get_current_count() == 0:
+        st = _state()
+        index = st["index"]
+        if index is None or index.get_current_count() == 0:
             return []
-        if self.dim is not None and len(embedding) != self.dim:
-            raise ValueError(f"Query dim {len(embedding)} != index dim {self.dim}")
-        labels, distances = self.index.knn_query(
+        if st["dim"] is not None and len(embedding) != st["dim"]:
+            raise ValueError(f"Query dim {len(embedding)} != index dim {st['dim']}")
+        labels, distances = index.knn_query(
             np.array([embedding], dtype=np.float32),
-            k=min(k, self.index.get_current_count()),
+            k=min(k, index.get_current_count()),
         )
         return [(int(l), 1.0 - float(d)) for l, d in zip(labels[0], distances[0])]
 
     def search(self, embedding: list[float], k: int = 5) -> list[int]:
-        if self.index is None or self.index.get_current_count() == 0:
+        st = _state()
+        index = st["index"]
+        if index is None or index.get_current_count() == 0:
             return []
-        if self.dim is not None and len(embedding) != self.dim:
-            raise ValueError(f"Query dim {len(embedding)} != index dim {self.dim}")
-        labels, _ = self.index.knn_query(
+        if st["dim"] is not None and len(embedding) != st["dim"]:
+            raise ValueError(f"Query dim {len(embedding)} != index dim {st['dim']}")
+        labels, _ = index.knn_query(
             np.array([embedding], dtype=np.float32),
-            k=min(k, self.index.get_current_count()),
+            k=min(k, index.get_current_count()),
         )
         return labels[0].tolist()

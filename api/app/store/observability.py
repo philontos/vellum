@@ -7,10 +7,12 @@ no separate migration runner for this DB. The `traces` table lives here (the raw
 trace DAO in app.store.traces opens its connection through this module); eval_runs
 and eval_results are the panel's durable records."""
 import json
-import sqlite3
 from contextlib import contextmanager
 
 from app.config import observability_db_path
+from app.store import crypto
+
+_sqlite = crypto.sqlite_module()
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -64,11 +66,12 @@ CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(run_id);
 _initialized: set[str] = set()
 
 
-def _connect() -> sqlite3.Connection:
+def _connect() -> _sqlite.Connection:
     p = observability_db_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(p)
-    conn.row_factory = sqlite3.Row
+    conn = _sqlite.connect(p)
+    crypto.apply_key(conn)
+    conn.row_factory = _sqlite.Row
     key = str(p)
     if key not in _initialized:
         conn.executescript(_SCHEMA)
@@ -125,7 +128,7 @@ def finish_run(run_id: int, status: str, aggregate: dict | None = None,
         )
 
 
-def _run_row(r: sqlite3.Row) -> dict:
+def _run_row(r: _sqlite.Row) -> dict:
     d = dict(r)
     d["aggregate"] = json.loads(d.pop("aggregate_json")) if d.get("aggregate_json") else None
     return d
@@ -160,7 +163,7 @@ def add_result(run_id: int, seq: int, case_name: str, status: str,
         return cur.lastrowid
 
 
-def _result_row(r: sqlite3.Row) -> dict:
+def _result_row(r: _sqlite.Row) -> dict:
     d = dict(r)
     d["result"] = json.loads(d.pop("result_json")) if d.get("result_json") else None
     return d
