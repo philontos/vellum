@@ -1,8 +1,8 @@
-import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
 from app.config import db_path
+from app.store import crypto
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -10,14 +10,19 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations"
 _scratch_uri: str | None = None
 
 
-def _connect() -> sqlite3.Connection:
+def _connect():
+    """Open a connection. On-disk connections are unlocked with VELLUM_DB_KEY
+    when set (see app.store.crypto); the ephemeral in-memory scratch never
+    touches disk, so it is never keyed."""
+    sqlite = crypto.sqlite_module()
     if _scratch_uri is not None:
-        conn = sqlite3.connect(_scratch_uri, uri=True)
+        conn = sqlite.connect(_scratch_uri, uri=True)
     else:
         p = db_path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(p)
-    conn.row_factory = sqlite3.Row
+        conn = sqlite.connect(p)
+        crypto.apply_key(conn)
+    conn.row_factory = sqlite.Row
     return conn
 
 
@@ -30,7 +35,9 @@ def memory_scratch(name: str):
     target); the eval stream runs cases sequentially, in a subprocess."""
     global _scratch_uri
     uri = f"file:{name}?mode=memory&cache=shared"
-    keep = sqlite3.connect(uri, uri=True)   # keepalive holds the in-memory DB alive
+    # keepalive holds the in-memory DB alive; must use the SAME driver as
+    # _connect() so the shared-cache namespace matches.
+    keep = crypto.sqlite_module().connect(uri, uri=True)
     prev, _scratch_uri = _scratch_uri, uri
     try:
         run_migrations()

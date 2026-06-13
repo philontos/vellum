@@ -78,26 +78,72 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `LLM_SUPPORTS_TOOLS` | `1` | Set `0` for a chat model that can't tool-call (recall degrades to injected context). |
 | `LLM_TIMEOUT_SECONDS` | `60` | Per-request timeout. |
 | `VELLUM_PERSONA` | `neutral` | Persona file under `api/app/config/persona/`. |
+| `VELLUM_DB_KEY` / `VELLUM_DB_KEY_FILE` | _(unset)_ | 256-bit hex key enabling SQLCipher at-rest encryption. Unset = plaintext. See *Encryption & multi-device*. |
+| `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
 ---
 
+## Encryption & multi-device (optional)
+
+By default everything is plaintext SQLite. To encrypt at rest, set a key and the
+whole database is transparently AES-256 encrypted via SQLCipher — every query,
+migration, and the vector index keep working unchanged.
+
+```bash
+# 0. one-time: install the SQLCipher driver (not auto-installed)
+brew install sqlcipher                                            # macOS
+PKG_CONFIG_PATH=/opt/homebrew/opt/sqlcipher/lib/pkgconfig pip install sqlcipher3==0.6.2
+
+# 1. generate a 256-bit key (printed ONCE, never saved)
+python -m app.keygen            # -> store it in a password manager / key file
+
+# 2. encrypt an existing plaintext db in place (idempotent)
+VELLUM_DB_KEY=<64-hex> python -m app.encrypt_db
+
+# 3. run with the key supplied at runtime (kept OUTSIDE the data dir)
+export VELLUM_DB_KEY=<64-hex>   # or VELLUM_DB_KEY_FILE=/path/to/key.hex
+uvicorn app.main:app --port 18080 --env-file .env
+```
+
+- **The key is yours alone.** It is never written into the data dir, so a stolen
+  `data/` is just ciphertext. With a raw 256-bit key there is no passphrase to
+  brute-force and **no backdoor — lose the key and the data is gone forever.**
+- **Vectors are covered too:** embeddings live inside `vellum.db` (no separate
+  plaintext `index.bin`); the HNSW index is rebuilt in memory on first use.
+- The app **refuses to start** with a clear message if the db is encrypted but
+  `VELLUM_DB_KEY` is unset.
+
+**Sync between devices** — because the encrypted file is opaque, you can push it
+to an (ideally private) git remote and pull it on another device. Treat it as a
+baton: one active device at a time.
+
+```bash
+export VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git
+python -m app.sync push      # checkpoint -> commit vellum.db -> push
+python -m app.sync pull      # fetch -> refuses if you have un-pushed local changes
+python -m app.sync status    # ahead / behind the remote
+```
+
+Only `vellum.db` is synced (the canonical state); `observability.db` stays
+per-device. The key never goes in the repo — carry it out-of-band.
+
 ## Notes
 
-- **Migrations are not auto-run on startup.** After the first setup, and after any
-  pull that adds a file under `api/migrations/`, re-run:
+- **Migrations run automatically on app startup** (FastAPI lifespan) and are
+  forward-only and idempotent. For CLI-only flows you can still run them by hand:
   `python -c "from app.store import db; db.run_migrations()"` (from `api/`, with
-  `VELLUM_DATA_DIR` matching your `.env` if you customized it). They are
-  forward-only and idempotent — never edit a committed migration, add a new one.
+  `VELLUM_DATA_DIR` matching your `.env`). Never edit a committed migration — add a new one.
 - **`.env` is not auto-loaded by the app.** Pass it via `uvicorn --env-file .env`
   (shown above) or export it into your shell. Tests and evals read the process
   environment directly.
 - **Embeddings need a real `/embeddings` provider.** DeepSeek, Claude, and
   Moonshot don't offer one — point `EMBED_*` at OpenAI, a local Ollama (`bge-m3`),
-  Volcengine ARK, etc. **Changing the embedding model invalidates the index** —
-  delete `api/data/vectors` and let it rebuild.
-- **Single-user, local only.** No auth, no accounts. All text lives in SQLite
-  (`api/data/vellum.db`); embeddings + integer labels live in `api/data/vectors`.
-  To reset everything, delete `api/data/`.
+  Volcengine ARK, etc. **Changing the embedding model invalidates stored
+  embeddings** (different dimension) — clear the `embeddings` table (or delete
+  `api/data/` to reset) so they rebuild as you chat.
+- **Single-user, local only.** No auth, no accounts. All text and embeddings live
+  in SQLite (`api/data/vellum.db`); the HNSW vector graph is rebuilt in memory from
+  it on demand. To reset everything, delete `api/data/`.
 - **Reasoning models:** chain-of-thought (`reasoning_content` / `reasoning`) is
   captured into traces for inspection, but never streamed into the chat answer.
 - **Tests:** backend `pytest` (from `api/`); web `pnpm test` (from `web/`).
