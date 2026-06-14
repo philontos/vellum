@@ -21,32 +21,46 @@ switch in the header; the choice is remembered in `localStorage`.
 
 ## Requirements
 
-- **Python 3.12**
+- **Python 3.12** — your system `python3` may be older (macOS ships 3.9), so use
+  `python3.12` explicitly as shown below. Install with `brew install python@3.12`.
 - **Node 18+** with **pnpm**
+- **SQLCipher** native library + `pkg-config` — for the default encrypted setup.
+  macOS: `brew install sqlcipher pkg-config`; Linux: `apt-get install libsqlcipher-dev pkg-config`.
+  On macOS `api/setup.sh` installs these for you.
 - An OpenAI-compatible **chat** endpoint, and an OpenAI-compatible **embeddings**
   endpoint (same provider or different — see notes; DeepSeek/Claude/Moonshot have
   no embeddings, so you'll point `EMBED_*` elsewhere).
 
 ---
 
-## Run it
+## Quick start
+
+Two services: the **backend** (FastAPI, port 18080) and the **web UI** (Vite,
+port 5173). Start the backend first — the UI proxies to it.
 
 ### 1. Backend (port 18080)
 
 ```bash
 cd api
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+./setup.sh                    # venv + deps + SQLCipher + a generated key in api/.env
+                              # (back up the key it prints!) — see Encryption below
 
-cp .env.example .env          # then fill in your keys (see Configuration below)
+# fill in your LLM/embedding keys in the api/.env it created — see Configuration
 
-# Create / upgrade the SQLite schema. Migrations are NOT auto-run — see Notes.
-python -c "from app.store import db; db.run_migrations()"
-
+source .venv/bin/activate
 uvicorn app.main:app --port 18080 --env-file .env --reload
 ```
 
-### 2. Frontend (port 5173)
+`setup.sh` is idempotent and leaves you **encrypted by default**: it creates the
+venv, installs deps + the SQLCipher driver, writes a 256-bit `VELLUM_DB_KEY` into
+`api/.env`, and creates the already-encrypted schema. Re-run it any time; it never
+regenerates an existing key. The schema is also created/upgraded automatically on
+every startup, so there's no separate migration step. Prefer plaintext / no
+encryption? See the end of *Encryption*. Leave this terminal running.
+
+### 2. Web UI (port 5173)
+
+In a second terminal:
 
 ```bash
 cd web
@@ -54,8 +68,12 @@ pnpm install
 pnpm dev
 ```
 
-Open **http://localhost:5173**. The dev server proxies `/chat`, `/history`,
-`/inspect`, `/health` to the backend on `:18080`, so start the backend first.
+### 3. Open it
+
+Go to **http://localhost:5173** and start chatting. The dev server proxies `/chat`,
+`/history`, `/inspect`, `/health` to the backend on `:18080`.
+
+Backend-only sanity check: `curl http://localhost:18080/health` → `{"status":"ok"}`.
 
 ---
 
@@ -78,54 +96,89 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `LLM_SUPPORTS_TOOLS` | `1` | Set `0` for a chat model that can't tool-call (recall degrades to injected context). |
 | `LLM_TIMEOUT_SECONDS` | `60` | Per-request timeout. |
 | `VELLUM_PERSONA` | `neutral` | Persona file under `api/app/config/persona/`. |
-| `VELLUM_DB_KEY` / `VELLUM_DB_KEY_FILE` | _(unset)_ | 256-bit hex key enabling SQLCipher at-rest encryption. Unset = plaintext. See *Encryption & multi-device*. |
+| `VELLUM_DB_KEY` / `VELLUM_DB_KEY_FILE` | _(unset)_ | 256-bit hex key enabling SQLCipher at-rest encryption. Unset = plaintext. See *Encryption* below. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
 ---
 
-## Encryption & multi-device (optional)
+## Encryption
 
-By default everything is plaintext SQLite. To encrypt at rest, set a key and the
-whole database is transparently AES-256 encrypted via SQLCipher — every query,
-migration, and the vector index keep working unchanged.
+`api/setup.sh` makes the backend **encrypted by default**: the **whole database**
+is transparently AES-256 encrypted via SQLCipher — every query, migration, and the
+vector index keep working unchanged. Running it once gets you there:
 
 ```bash
-# 0. one-time: install the SQLCipher driver (not auto-installed)
-brew install sqlcipher                                            # macOS
-PKG_CONFIG_PATH=/opt/homebrew/opt/sqlcipher/lib/pkgconfig pip install sqlcipher3==0.6.2
-
-# 1. generate a 256-bit key (printed ONCE, never saved)
-python -m app.keygen            # -> store it in a password manager / key file
-
-# 2. encrypt an existing plaintext db in place (idempotent)
-VELLUM_DB_KEY=<64-hex> python -m app.encrypt_db
-
-# 3. run with the key supplied at runtime (kept OUTSIDE the data dir)
-export VELLUM_DB_KEY=<64-hex>   # or VELLUM_DB_KEY_FILE=/path/to/key.hex
-uvicorn app.main:app --port 18080 --env-file .env
+cd api
+./setup.sh
 ```
 
-- **The key is yours alone.** It is never written into the data dir, so a stolen
-  `data/` is just ciphertext. With a raw 256-bit key there is no passphrase to
-  brute-force and **no backdoor — lose the key and the data is gone forever.**
+What it does (all idempotent — safe to re-run):
+
+1. creates `.venv` (Python 3.12) and installs `requirements.txt`;
+2. installs the SQLCipher native library + `pkg-config` (macOS, via Homebrew) and
+   the `sqlcipher3` driver into the **same** venv;
+3. generates a 256-bit key into `api/.env` as `VELLUM_DB_KEY` — **printed once;
+   back it up;**
+4. creates the already-encrypted schema, so the db is born as ciphertext.
+
+- **The key is yours alone.** `api/.env` is git-ignored and never leaves the
+  machine; a stolen synced repo or `data/` dir is just ciphertext. There is **no
+  backdoor — lose the key and the data is gone forever.** Reuse the *same* key on
+  any device you sync to (below).
 - **Vectors are covered too:** embeddings live inside `vellum.db` (no separate
   plaintext `index.bin`); the HNSW index is rebuilt in memory on first use.
 - The app **refuses to start** with a clear message if the db is encrypted but
-  `VELLUM_DB_KEY` is unset.
+  `VELLUM_DB_KEY` is missing or wrong.
 
-**Sync between devices** — because the encrypted file is opaque, you can push it
-to an (ideally private) git remote and pull it on another device. Treat it as a
-baton: one active device at a time.
+> **Already have a plaintext `data/`?** Encrypt it in place once (idempotent):
+> ```bash
+> VELLUM_DB_KEY=<64-hex> python -m app.encrypt_db
+> ```
+
+### Multi-device sync (optional)
+
+Your data dir (`api/data/`) is itself a tiny git repo whose only tracked file is the
+encrypted `vellum.db`; the sync commands manage it for you and push it to a remote
+that only ever sees ciphertext. Treat it as a baton: one active device at a time.
+
+**One-time setup:** create an empty **private** repo (e.g. on GitHub, named
+`vellum-data` — do *not* add a README/.gitignore, leave it empty). Then on your
+first device:
 
 ```bash
-export VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git
-python -m app.sync push      # checkpoint -> commit vellum.db -> push
-python -m app.sync pull      # fetch -> refuses if you have un-pushed local changes
-python -m app.sync status    # ahead / behind the remote
+cd api && source .venv/bin/activate
+echo 'VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git' >> .env
+
+set -a && source .env && set +a          # sync reads the process env, not .env
+python -m app.sync push                  # checkpoint -> commit vellum.db -> push
+python -m app.sync status                # ahead / behind the remote
 ```
 
-Only `vellum.db` is synced (the canonical state); `observability.db` stays
-per-device. The key never goes in the repo — carry it out-of-band.
+**Adding a second device:** install the same way, but **before** running
+`./setup.sh` put your *existing* key into `api/.env` — the encrypted db only opens
+with the key that created it, and setup keeps an existing key instead of making a
+new one. Then point it at the same remote and pull:
+
+```bash
+set -a && source .env && set +a
+python -m app.sync pull                  # hard-resets local vellum.db to the remote;
+                                         # refuses if you have un-pushed local changes
+```
+
+Only `vellum.db` is synced (the canonical state); `observability.db` (traces/evals)
+stays per-device. The key never goes in the repo — carry it out-of-band.
+
+### Prefer plaintext (no encryption)?
+
+Skip `setup.sh` and do the manual flow — no key, no SQLCipher needed:
+
+```bash
+cd api
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env                     # leave VELLUM_DB_KEY unset
+uvicorn app.main:app --port 18080 --env-file .env --reload
+```
 
 ## Notes
 
