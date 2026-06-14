@@ -137,36 +137,61 @@ What it does (all idempotent — safe to re-run):
 
 ### Multi-device sync (optional)
 
-Your data dir (`api/data/`) is itself a tiny git repo whose only tracked file is the
-encrypted `vellum.db`; the sync commands manage it for you and push it to a remote
-that only ever sees ciphertext. Treat it as a baton: one active device at a time.
+Your data dir (`api/data/`) is its own little git repo that tracks **only** the
+encrypted `vellum.db`; `app.sync` manages it and pushes it to a remote that only
+ever sees ciphertext. It is **one active device at a time** — a baton, not live
+multi-master.
 
-**One-time setup:** create an empty **private** repo (e.g. on GitHub, named
-`vellum-data` — do *not* add a README/.gitignore, leave it empty). Then on your
-first device:
+Run every command below from `api/` with the venv activated
+(`source .venv/bin/activate`).
+
+#### First device — push
 
 ```bash
-cd api && source .venv/bin/activate
+# 1. create an empty PRIVATE repo for the ciphertext (don't add README/.gitignore)
+gh repo create vellum-data --private          # or create it in the GitHub UI
+
+# 2. point sync at it (saved in .env so you don't retype it)
 echo 'VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git' >> .env
 
-set -a && source .env && set +a          # sync reads the process env, not .env
-python -m app.sync push                  # checkpoint -> commit vellum.db -> push
-python -m app.sync status                # ahead / behind the remote
+# 3. load .env into the shell — sync reads the process env, NOT .env
+set -a && source .env && set +a
+
+# 4. push: builds the data repo, commits vellum.db, pushes to the remote
+python -m app.sync push                       # -> "pushed."
+python -m app.sync status                     # ahead / behind the remote
 ```
 
-**Adding a second device:** install the same way, but **before** running
-`./setup.sh` put your *existing* key into `api/.env` — the encrypted db only opens
-with the key that created it, and setup keeps an existing key instead of making a
-new one. Then point it at the same remote and pull:
+#### Second device — pull
+
+The catch is the **key**: the encrypted db only opens with the key that created it,
+so put that *same* key into `.env` **before** running `setup.sh` — otherwise setup
+generates a new key that won't match.
 
 ```bash
+# 1. get the code
+git clone git@github.com:you/vellum.git && cd vellum/api
+
+# 2. put the SAME key + the remote into .env BEFORE anything else
+cp .env.example .env
+echo 'VELLUM_DB_KEY=<the-64-hex-key-from-device-1>'           >> .env
+echo 'VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git'  >> .env
+#    ...and fill in your LLM/embedding keys too
+
+# 3. set up the env — you should see "VELLUM_DB_KEY already set — keeping it"
+./setup.sh
+
+# 4. pull the db (no need to clone vellum-data by hand — sync sets it up)
+source .venv/bin/activate
 set -a && source .env && set +a
-python -m app.sync pull                  # hard-resets local vellum.db to the remote;
-                                         # refuses if you have un-pushed local changes
+python -m app.sync pull                        # -> "pulled."
 ```
 
-Only `vellum.db` is synced (the canonical state); `observability.db` (traces/evals)
-stays per-device. The key never goes in the repo — carry it out-of-band.
+`pull` does a `git reset --hard`, so it **overwrites local with the remote**, and it
+refuses when you have un-pushed local changes — you can't silently lose work. The
+habit: `pull` before you start on a device, `push` when you're done. Only `vellum.db`
+is synced; `observability.db` (traces/evals) stays per-device. The key never goes
+into either repo — carry it out-of-band (a password manager).
 
 ### Prefer plaintext (no encryption)?
 
