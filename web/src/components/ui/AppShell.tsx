@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useT } from "../../i18n";
 import { NavItem } from "./NavItem";
+import { PrivacyToggle } from "../PrivacyToggle";
 
 export type View = "chat" | "model" | "traces" | "evals";
 
@@ -31,15 +32,18 @@ export function AppShell({
         {nav.map((n) => (
           <NavItem key={n.key} label={n.label} active={view === n.key} onClick={() => onChange(n.key)} />
         ))}
-        <div className="mt-auto flex items-center justify-between border-t border-line px-2.5 pt-3 text-xs text-muted">
-          <span>{lang === "en" ? "EN" : "中文"}</span>
-          <button
-            onClick={() => setLang(lang === "en" ? "zh" : "en")}
-            title={lang === "en" ? "切换到中文" : "Switch to English"}
-            className="rounded-full border border-line bg-card px-2.5 py-1 text-muted transition-colors hover:text-ink"
-          >
-            {lang === "en" ? "中" : "EN"}
-          </button>
+        <div className="mt-auto flex flex-col gap-2 border-t border-line px-2.5 pt-3 text-xs text-muted">
+          <PrivacyToggle />
+          <div className="flex items-center justify-between">
+            <span>{lang === "en" ? "EN" : "中文"}</span>
+            <button
+              onClick={() => setLang(lang === "en" ? "zh" : "en")}
+              title={lang === "en" ? "切换到中文" : "Switch to English"}
+              className="rounded-full border border-line bg-card px-2.5 py-1 text-muted transition-colors hover:text-ink"
+            >
+              {lang === "en" ? "中" : "EN"}
+            </button>
+          </div>
         </div>
       </nav>
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>

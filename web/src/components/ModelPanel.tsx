@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { getModel, type ModelView } from "../api/client";
 import { useT } from "../i18n";
+import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { TraitChart } from "./TraitChart";
 import { Card } from "./ui/Card";
 import { SectionHeader } from "./ui/SectionHeader";
 
 export function ModelPanel() {
   const { t } = useT();
+  const blur = usePrivacyBlur();
   const [m, setM] = useState<ModelView | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
@@ -25,7 +27,11 @@ export function ModelPanel() {
           <SectionHeader label={t("model.dossierTitle")} />
           <Card className="px-5 py-4">
             <div className="whitespace-pre-wrap font-serif text-[15.5px] leading-[1.72] text-ink-soft">
-              {m.dossier || <span className="text-muted">{t("model.dossierEmpty")}</span>}
+              {m.dossier ? (
+                <span className={blur}>{m.dossier}</span>
+              ) : (
+                <span className="text-muted">{t("model.dossierEmpty")}</span>
+              )}
             </div>
           </Card>
         </section>
@@ -36,13 +42,13 @@ export function ModelPanel() {
             {activeFacts.map((f) => (
               <li key={f.id} className="flex gap-2.5">
                 <span className="text-terracotta">—</span>
-                <span>{f.text}</span>
+                <span className={blur}>{f.text}</span>
               </li>
             ))}
             {oldFacts.map((f) => (
               <li key={f.id} className="flex gap-2.5 text-muted line-through">
                 <span className="text-line">—</span>
-                <span>{f.text}</span>
+                <span className={blur}>{f.text}</span>
               </li>
             ))}
             {m.facts.length === 0 && <li className="text-muted">{t("model.factsEmpty")}</li>}

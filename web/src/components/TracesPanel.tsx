@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getTraces, patchTrace, type Trace } from "../api/client";
 import { useT } from "../i18n";
+import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { Tag } from "./ui/StatusChip";
 import { ReadingBlock } from "./ui/ReadingBlock";
 
@@ -8,6 +9,7 @@ const STAGES = ["", "chat", "facts", "trait", "summary", "dossier"];
 
 export function TracesPanel() {
   const { t: tr } = useT();
+  const blur = usePrivacyBlur();
   const [stage, setStage] = useState("");
   const [rows, setRows] = useState<Trace[]>([]);
   const [open, setOpen] = useState<number | null>(null);
@@ -74,14 +76,18 @@ export function TracesPanel() {
                 <input
                   defaultValue={t.note ?? ""}
                   placeholder={tr("traces.notePh")}
-                  className="w-full rounded-lg border border-card-line bg-card px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-terracotta/15"
+                  className={`w-full rounded-lg border border-card-line bg-card px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-terracotta/15 ${blur}`}
                   onBlur={(e) => note(t, e.target.value)}
                 />
-                <ReadingBlock label="PROMPT">
+                <ReadingBlock label="PROMPT" className={t.prompt ? blur : ""}>
                   {t.prompt ?? <span className="text-muted">{tr("traces.pruned")}</span>}
                 </ReadingBlock>
-                {t.reasoning && <ReadingBlock label="REASONING">{t.reasoning}</ReadingBlock>}
-                <ReadingBlock label="OUTPUT">
+                {t.reasoning && (
+                  <ReadingBlock label="REASONING" className={blur}>
+                    {t.reasoning}
+                  </ReadingBlock>
+                )}
+                <ReadingBlock label="OUTPUT" className={t.output ? blur : ""}>
                   {t.output ?? <span className="text-muted">{tr("traces.pruned")}</span>}
                 </ReadingBlock>
               </div>

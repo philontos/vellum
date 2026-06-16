@@ -57,6 +57,19 @@ export const DICT = {
     "eval.casesTitle": "Cases",
     "eval.tracesTitle": "Traces",
     "eval.tracePruned": "(no output)",
+
+    // privacy screen (shoulder-surfing mask, NOT encryption)
+    "privacy.hidden": "Hidden",
+    "privacy.shown": "Shown",
+    "privacy.clickToReveal": "Click to reveal (enter PIN)",
+    "privacy.clickToHide": "Click to hide",
+    "privacy.setTitle": "Set a PIN to reveal",
+    "privacy.enterTitle": "Enter PIN to reveal",
+    "privacy.placeholder": "PIN",
+    "privacy.confirm": "OK",
+    "privacy.wrong": "Wrong PIN",
+    "privacy.forgot": "Forgot? Reset PIN",
+    "privacy.resetConfirm": "Reset the PIN? Content stays hidden until you set a new one. Your data is not affected.",
   },
   zh: {
     "nav.chat": "聊天",
@@ -104,6 +117,19 @@ export const DICT = {
     "eval.casesTitle": "Case 明细",
     "eval.tracesTitle": "Trace",
     "eval.tracePruned": "（无输出）",
+
+    // privacy screen (shoulder-surfing mask, NOT encryption)
+    "privacy.hidden": "已隐藏",
+    "privacy.shown": "显示中",
+    "privacy.clickToReveal": "点击显示（输入 PIN）",
+    "privacy.clickToHide": "点击隐藏",
+    "privacy.setTitle": "设置一个 PIN 以显示",
+    "privacy.enterTitle": "输入 PIN 以显示",
+    "privacy.placeholder": "PIN",
+    "privacy.confirm": "确定",
+    "privacy.wrong": "PIN 错误",
+    "privacy.forgot": "忘记了？重置 PIN",
+    "privacy.resetConfirm": "重置 PIN？在你设置新 PIN 前内容保持隐藏。你的数据不受影响。",
   },
 } as const;
 
