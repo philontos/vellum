@@ -8,6 +8,7 @@ changes, e.g. across tests or VELLUM_DATA_DIR switches).
 `memory_index()` swaps the db-backed index for a throwaway in-process one — used
 to isolate eval-case scratch (recall) alongside db.memory_scratch: zero disk,
 gone when the block exits."""
+import os
 from contextlib import contextmanager
 
 import hnswlib
@@ -16,7 +17,11 @@ import numpy as np
 from app.config import db_path
 from app.store.db import get_conn
 
-MAX_ELEMENTS = 1_000_000
+# HNSW capacity grows on demand (resize_index in VectorStore.add), so memory stays
+# proportional to how many vectors actually exist. Pre-allocating millions of slots
+# up front would OOM a small box (hnswlib zeroes the whole arena at init_index).
+# Start modest; override with VELLUM_HNSW_INITIAL_ELEMENTS for more headroom.
+INITIAL_ELEMENTS = max(1, int(os.getenv("VELLUM_HNSW_INITIAL_ELEMENTS", "4096")))
 
 # When not None, VectorStore operates purely in memory against this shared state:
 # {"index": hnswlib.Index | None, "dim": int | None}. Set by memory_index().
@@ -39,9 +44,10 @@ def memory_index():
         _mem = prev
 
 
-def _new_index(dim: int) -> hnswlib.Index:
+def _new_index(dim: int, capacity: int | None = None) -> hnswlib.Index:
+    cap = INITIAL_ELEMENTS if capacity is None else max(capacity, 1)
     index = hnswlib.Index(space="cosine", dim=dim)
-    index.init_index(max_elements=MAX_ELEMENTS, ef_construction=200, M=16)
+    index.init_index(max_elements=cap, ef_construction=200, M=16)
     index.set_ef(64)
     return index
 
@@ -54,7 +60,8 @@ def _rebuild_from_db(path: str) -> None:
     if not rows:
         return
     dim = rows[0]["dim"]
-    index = _new_index(dim)
+    # size to the existing rows (+ headroom), not a fixed huge arena
+    index = _new_index(dim, capacity=len(rows) + INITIAL_ELEMENTS)
     labels = np.array([r["label"] for r in rows])
     vecs = np.array(
         [np.frombuffer(r["vec"], dtype=np.float32) for r in rows], dtype=np.float32
@@ -91,7 +98,11 @@ class VectorStore:
         if st["dim"] is None:
             st["dim"] = len(embedding)
             st["index"] = _new_index(st["dim"])
-        st["index"].add_items(
+        index = st["index"]
+        # grow on demand so the arena stays proportional to actual usage
+        if index.get_current_count() + 1 > index.get_max_elements():
+            index.resize_index(index.get_max_elements() * 2)
+        index.add_items(
             np.array([embedding], dtype=np.float32),
             np.array([label]),
         )
