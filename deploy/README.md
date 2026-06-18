@@ -3,6 +3,15 @@
 Single-user, **localhost-only** backend + built web, reached over an **SSH
 tunnel**. No public exposure, no domain, no ICP filing. Mainland-to-mainland.
 
+> **One-command deploy (after the one-time setup in §1):** `deploy/start.sh` builds
+> the web, installs/refreshes the systemd service, and starts it — it does §2–§3
+> for you. Re-run it after every `git pull`.
+> ```bash
+> VELLUM_PORT=18090 ./deploy/start.sh   # drop VELLUM_PORT= to use the default 18080
+> ```
+> The numbered steps below document what it does, plus prereqs (§0), data
+> migration (§1), the firewall (§4), tunnel access (§5), and backups (§6).
+
 ## 0. Prereqs (Debian/Ubuntu VPS)
 - `sudo apt-get install -y python3.12 python3.12-venv libsqlcipher-dev pkg-config git`
   — the **`python3.12-venv`** package is required; without it `setup.sh` can't build the venv.
@@ -82,3 +91,19 @@ a shell alias, or `autossh` / a login launch agent so it reconnects.
       out (app is **not** public).
 - [ ] `deploy/backup.sh` runs clean; the remote repo shows only the encrypted
       `vellum.db`.
+
+## 8. Updating / restarting
+
+After pulling new code, just re-run the one-command script — it rebuilds the web,
+refreshes the unit, and restarts the service:
+```bash
+cd <repo> && git pull
+VELLUM_PORT=18090 ./deploy/start.sh     # same port you deployed with
+```
+Lower-level controls when you don't need a rebuild:
+```bash
+sudo systemctl restart vellum    # restart now
+sudo systemctl status vellum     # is it running?
+journalctl -u vellum -f          # live logs (Ctrl-C to stop)
+```
+Data isn't touched by an update — it lives in `api/data/` (and your backup remote).
