@@ -7,6 +7,15 @@ import { ReadingBlock } from "./ui/ReadingBlock";
 
 const STAGES = ["", "chat", "facts", "trait", "summary", "dossier"];
 
+// Stage → mark colour (echoes the chat ledger's page-edge marks).
+const STAGE_DOT: Record<string, string> = {
+  chat: "bg-accent",
+  facts: "bg-status-pass-fg",
+  trait: "bg-status-info-fg",
+  summary: "bg-gold",
+  dossier: "bg-status-warn-fg",
+};
+
 export function TracesPanel() {
   const { t: tr } = useT();
   const blur = usePrivacyBlur();
@@ -29,18 +38,18 @@ export function TracesPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="v-canvas flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
         <select
           value={stage}
           onChange={(e) => setStage(e.target.value)}
-          className="rounded-lg border border-card-line bg-card px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-terracotta/15"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
         >
           {STAGES.map((s) => <option key={s} value={s}>{s || tr("traces.allStages")}</option>)}
         </select>
         <button
           onClick={() => load()}
-          className="rounded-lg border border-card-line bg-card px-3 py-1.5 text-ink-soft transition-colors hover:bg-paper-raised"
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-ink-soft transition-colors hover:bg-white/5"
         >
           {tr("traces.refresh")}
         </button>
@@ -53,19 +62,20 @@ export function TracesPanel() {
               <button
                 onClick={() => pin(t)}
                 title={tr("traces.pin")}
-                className={t.pinned ? "text-terracotta" : "text-muted transition-colors hover:text-ink-soft"}
+                className={t.pinned ? "text-accent" : "text-muted transition-colors hover:text-ink-soft"}
               >
                 {t.pinned ? "★" : "☆"}
               </button>
+              <span className={`h-1.5 w-1.5 flex-none rounded-full ${STAGE_DOT[t.stage] ?? "bg-muted"}`} />
               <Tag>{t.stage}</Tag>
               <span className="text-ink-soft">{t.model}</span>
-              <span className="text-xs text-muted">
+              <span className="font-mono text-[11px] text-muted">
                 {t.prompt_tokens ?? "?"}→{t.completion_tokens ?? "?"} tok · {t.duration_ms ?? "?"}ms
               </span>
               {t.reasoning && <span title={tr("traces.hasReasoning")}>🧠</span>}
-              <span className="ml-auto text-xs text-muted">{t.created_at}</span>
+              <span className="ml-auto font-mono text-[11px] text-muted">{t.created_at}</span>
               <button
-                className="text-terracotta-ink transition-colors hover:text-terracotta"
+                className="text-accent transition-colors hover:text-accent-ink"
                 onClick={() => setOpen(open === t.id ? null : t.id)}
               >
                 {open === t.id ? tr("traces.collapse") : tr("traces.expand")}
@@ -76,7 +86,7 @@ export function TracesPanel() {
                 <input
                   defaultValue={t.note ?? ""}
                   placeholder={tr("traces.notePh")}
-                  className={`w-full rounded-lg border border-card-line bg-card px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-terracotta/15 ${blur}`}
+                  className={`w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 ${blur}`}
                   onBlur={(e) => note(t, e.target.value)}
                 />
                 <ReadingBlock label="PROMPT" className={t.prompt ? blur : ""}>

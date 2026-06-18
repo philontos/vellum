@@ -3,7 +3,6 @@ import { getModel, type ModelView } from "../api/client";
 import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { TraitChart } from "./TraitChart";
-import { Card } from "./ui/Card";
 import { SectionHeader } from "./ui/SectionHeader";
 
 export function ModelPanel() {
@@ -21,33 +20,33 @@ export function ModelPanel() {
   const oldFacts = m.facts.filter((f) => f.status !== "active");
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="v-canvas flex-1 overflow-y-auto">
       <div className="mx-auto max-w-3xl space-y-9 px-8 py-10">
+        <h1 className="font-serif text-[26px] tracking-tight text-ink">{t("nav.you")}</h1>
+
         <section>
           <SectionHeader label={t("model.dossierTitle")} />
-          <Card className="px-5 py-4">
-            <div className="whitespace-pre-wrap font-serif text-[15.5px] leading-[1.72] text-ink-soft">
-              {m.dossier ? (
-                <span className={blur}>{m.dossier}</span>
-              ) : (
-                <span className="text-muted">{t("model.dossierEmpty")}</span>
-              )}
-            </div>
-          </Card>
+          {m.dossier ? (
+            <p className={`v-dropcap whitespace-pre-wrap font-serif text-[17px] leading-[1.76] text-ink ${blur}`}>
+              {m.dossier}
+            </p>
+          ) : (
+            <p className="font-serif text-[17px] text-muted">{t("model.dossierEmpty")}</p>
+          )}
         </section>
 
         <section>
           <SectionHeader label={t("model.factsTitle")} />
-          <ul className="space-y-1.5 text-sm text-ink-soft">
+          <ul className="space-y-2.5 text-sm">
             {activeFacts.map((f) => (
-              <li key={f.id} className="flex gap-2.5">
-                <span className="text-terracotta">—</span>
+              <li key={f.id} className="flex gap-3 text-ink-soft">
+                <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-gold" />
                 <span className={blur}>{f.text}</span>
               </li>
             ))}
             {oldFacts.map((f) => (
-              <li key={f.id} className="flex gap-2.5 text-muted line-through">
-                <span className="text-line">—</span>
+              <li key={f.id} className="flex gap-3 text-muted line-through decoration-line">
+                <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-line" />
                 <span className={blur}>{f.text}</span>
               </li>
             ))}
