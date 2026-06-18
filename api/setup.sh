@@ -22,9 +22,20 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
 fi
 
 # 1. venv — ONE venv holds everything, including the SQLCipher binding.
-if [ ! -d .venv ]; then
+#    Recreate when missing OR when a previous attempt left a venv WITHOUT pip
+#    (e.g. Debian/Ubuntu where `python3.12 -m venv` needs the python3.12-venv
+#    package — without it the .venv dir is created but pip is never installed,
+#    and a plain `[ -d .venv ]` check would skip recreation forever).
+if [ ! -x .venv/bin/pip ]; then
+  rm -rf .venv
   echo "==> creating .venv ($PYTHON)"
-  "$PYTHON" -m venv .venv
+  if ! "$PYTHON" -m venv .venv || [ ! -x .venv/bin/pip ]; then
+    rm -rf .venv
+    echo "ERROR: could not create a virtualenv with pip using '$PYTHON'." >&2
+    echo "  macOS:         brew install python@3.12" >&2
+    echo "  Debian/Ubuntu: sudo apt-get install -y python3.12-venv" >&2
+    exit 1
+  fi
 fi
 PIP=.venv/bin/pip
 PY=.venv/bin/python
