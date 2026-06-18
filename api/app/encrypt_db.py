@@ -19,7 +19,6 @@ import numpy as np
 
 from app.config import db_path, observability_db_path, vector_dir
 from app.store import crypto
-from app.store.vectors import MAX_ELEMENTS
 
 
 def is_encrypted(path: Path) -> bool:
@@ -64,7 +63,7 @@ def fold_index_bin() -> int:
         return 0
     dim = int(dim_file.read_text().strip())
     index = hnswlib.Index(space="cosine", dim=dim)
-    index.load_index(str(idx_path), max_elements=MAX_ELEMENTS)
+    index.load_index(str(idx_path))  # 0 = use the capacity saved in the file
     labels = index.get_ids_list()
     conn = crypto.sqlite_module().connect(str(db_path()))  # plaintext, no key
     try:
