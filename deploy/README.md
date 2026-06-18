@@ -94,12 +94,13 @@ a shell alias, or `autossh` / a login launch agent so it reconnects.
 
 ## 8. Updating / restarting
 
-After pulling new code, just re-run the one-command script — it rebuilds the web,
-refreshes the unit, and restarts the service:
+Update to the latest code and redeploy in one shot — `update.sh` runs `git pull`
+then `start.sh` (rebuild web + refresh unit + restart):
 ```bash
-cd <repo> && git pull
-VELLUM_PORT=18090 ./deploy/start.sh     # same port you deployed with
+VELLUM_PORT=18090 ./deploy/update.sh     # the port you deployed with
 ```
+Or do it by hand: `git pull` then `VELLUM_PORT=18090 ./deploy/start.sh`.
+
 Lower-level controls when you don't need a rebuild:
 ```bash
 sudo systemctl restart vellum    # restart now
