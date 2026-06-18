@@ -22,7 +22,9 @@ switch in the header; the choice is remembered in `localStorage`.
 ## Requirements
 
 - **Python 3.12** — your system `python3` may be older (macOS ships 3.9), so use
-  `python3.12` explicitly as shown below. Install with `brew install python@3.12`.
+  `python3.12` explicitly as shown below. macOS: `brew install python@3.12`.
+  Debian/Ubuntu: `sudo apt-get install python3.12 python3.12-venv` (the `-venv`
+  package is needed for `setup.sh` to build the virtualenv).
 - **Node 18+** with **pnpm**
 - **SQLCipher** native library + `pkg-config` — for the default encrypted setup.
   macOS: `brew install sqlcipher pkg-config`; Linux: `apt-get install libsqlcipher-dev pkg-config`.
