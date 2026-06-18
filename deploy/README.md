@@ -4,9 +4,13 @@ Single-user, **localhost-only** backend + built web, reached over an **SSH
 tunnel**. No public exposure, no domain, no ICP filing. Mainland-to-mainland.
 
 ## 0. Prereqs (Debian/Ubuntu VPS)
-- Python 3.12, Node 18+ with `pnpm`, `git`
-- `sudo apt-get install -y libsqlcipher-dev pkg-config`
-- a non-root user `vellum`
+- `sudo apt-get install -y python3.12 python3.12-venv libsqlcipher-dev pkg-config git`
+  — the **`python3.12-venv`** package is required; without it `setup.sh` can't build the venv.
+- Node 18+ and **pnpm**. If `pnpm` is missing even though Node is installed:
+  `npm install -g pnpm` (or `corepack enable pnpm`).
+- Decide where it lives and who runs it. The steps below assume `/opt/vellum` and a
+  dedicated `vellum` user (cleanest). Running **as root under your home dir** also
+  works — just adjust the paths in `vellum.service` and drop its `User=`/`Group=` lines.
 
 ## 1. Backend
 ```bash
@@ -30,12 +34,16 @@ cd /opt/vellum/web && pnpm install && pnpm build   # -> web/dist
 ```
 
 ## 3. Install + start the service
+Default port is **18080**. If it's already taken (check `ss -ltn | grep :18080`),
+set a free one in the unit — edit `vellum.service` and change `Environment=VELLUM_PORT=`
+to e.g. `18090` — and use that same port in the tunnel (§5) and the curl below.
+
 ```bash
 sudo cp /opt/vellum/deploy/vellum.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now vellum
 systemctl status vellum                     # active (running)
-curl -s http://127.0.0.1:18080/health       # {"status":"ok"}
+curl -s http://127.0.0.1:18080/health       # {"status":"ok"}  (use your VELLUM_PORT)
 ```
 
 ## 4. Lock down the network (the "ACL")
@@ -52,7 +60,8 @@ curl -s http://127.0.0.1:18080/health       # {"status":"ok"}
 
 ## 5. Access from each PC (SSH tunnel)
 ```bash
-ssh -N -L 18080:127.0.0.1:18080 vellum@<VPS_IP>
+# local 18080  ->  VPS 127.0.0.1:<VELLUM_PORT>   (remote = the port you set in §3)
+ssh -N -L 18080:127.0.0.1:18080 <user>@<VPS_IP>
 ```
 then open <http://localhost:18080>. Convenience: add a `~/.ssh/config` host +
 a shell alias, or `autossh` / a login launch agent so it reconnects.
