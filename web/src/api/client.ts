@@ -1,6 +1,11 @@
 import { splitFrames, parseData, parseEvalFrame } from "./sse";
 
-export type Message = { turn: number; role: "user" | "assistant"; content: string };
+export type Message = {
+  turn: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at?: string; // ISO/sqlite datetime; present from /history, stamped client-side for live turns
+};
 
 export async function getHistory(limit = 200): Promise<Message[]> {
   const r = await fetch(`/history?limit=${limit}`);

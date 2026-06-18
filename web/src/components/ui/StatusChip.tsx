@@ -24,6 +24,8 @@ export function StatusChip({ status }: { status: string }) {
 /** Quiet neutral label pill — for non-status tags like a trace stage. */
 export function Tag({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full bg-paper-raised px-2 py-0.5 text-xs text-muted">{children}</span>
+    <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs text-muted">
+      {children}
+    </span>
   );
 }

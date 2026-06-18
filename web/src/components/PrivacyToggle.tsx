@@ -53,14 +53,14 @@ export function PrivacyToggle() {
       <button
         onClick={onTrigger}
         title={hidden ? t("privacy.clickToReveal") : t("privacy.clickToHide")}
-        className="flex w-full items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-1 text-xs text-muted transition-colors hover:text-ink"
+        className="flex w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-xs text-muted transition-colors hover:text-ink"
       >
         <span aria-hidden>{hidden ? "🔒" : "🔓"}</span>
         <span>{hidden ? t("privacy.hidden") : t("privacy.shown")}</span>
       </button>
 
       {open && hidden && (
-        <div className="absolute bottom-full left-0 z-10 mb-2 w-56 rounded-lg border border-card-line bg-card p-3 shadow-float">
+        <div className="absolute bottom-full left-0 z-10 mb-2 w-56 rounded-lg border border-line bg-surface p-3 shadow-float">
           <div className="mb-2 text-xs font-medium text-ink-soft">
             {hasPin ? t("privacy.enterTitle") : t("privacy.setTitle")}
           </div>
@@ -77,14 +77,14 @@ export function PrivacyToggle() {
               if (e.key === "Enter") submit();
               if (e.key === "Escape") close();
             }}
-            className="w-full rounded-lg border border-card-line bg-paper px-2.5 py-1.5 text-sm text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-terracotta/15"
+            className="w-full rounded-lg border border-line bg-well px-2.5 py-1.5 text-sm text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
           {error && <div className="mt-1.5 text-xs text-status-fail-fg">{t("privacy.wrong")}</div>}
           <div className="mt-2.5 flex items-center justify-between">
             <button
               onClick={submit}
               disabled={busy}
-              className="rounded-lg border border-card-line bg-paper px-3 py-1 text-xs text-ink-soft transition-colors hover:bg-paper-raised disabled:opacity-50"
+              className="rounded-lg border border-line bg-well px-3 py-1 text-xs text-ink-soft transition-colors hover:bg-white/5 disabled:opacity-50"
             >
               {t("privacy.confirm")}
             </button>

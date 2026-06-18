@@ -25,9 +25,11 @@ export function AppShell({
 
   return (
     <div className="mx-auto flex h-full max-w-[1120px] border-line sm:border-x">
-      <nav className="flex w-[172px] flex-none flex-col gap-0.5 border-r border-line bg-gradient-to-b from-paper to-paper-raised px-4 py-5">
-        <div className="px-2.5 pb-5 pt-0.5 font-serif text-[23px] font-medium tracking-tight text-ink">
+      <nav className="flex w-[172px] flex-none flex-col gap-0.5 border-r border-line bg-gradient-to-b from-[#161009] to-[#0e0b07] px-4 py-5">
+        <div className="relative mb-4 w-max px-2.5 pt-0.5 font-serif text-[23px] font-medium tracking-tight text-ink">
           Vellum
+          {/* a nib stroke under the wordmark */}
+          <span className="absolute bottom-1.5 left-2.5 h-0.5 w-[21px] rounded-full bg-accent" />
         </div>
         {nav.map((n) => (
           <NavItem key={n.key} label={n.label} active={view === n.key} onClick={() => onChange(n.key)} />
@@ -39,14 +41,14 @@ export function AppShell({
             <button
               onClick={() => setLang(lang === "en" ? "zh" : "en")}
               title={lang === "en" ? "切换到中文" : "Switch to English"}
-              className="rounded-full border border-line bg-card px-2.5 py-1 text-muted transition-colors hover:text-ink"
+              className="rounded-full border border-line bg-surface px-2.5 py-1 text-ink-soft transition-colors hover:text-ink"
             >
               {lang === "en" ? "中" : "EN"}
             </button>
           </div>
         </div>
       </nav>
-      <main className="flex min-w-0 flex-1 flex-col">{children}</main>
+      <main className="v-canvas flex min-w-0 flex-1 flex-col">{children}</main>
     </div>
   );
 }

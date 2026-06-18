@@ -3,8 +3,8 @@ import { Card } from "./ui/Card";
 
 const W = 280, H = 90, PAD = 6;
 
-// Muted editorial series — terracotta, slate, sage, ochre, plum, teal.
-const COLORS = ["#B25A3A", "#3A6071", "#5C7A52", "#8A6A1E", "#7A5570", "#3F726E"];
+// Ember Noir series — sienna, gold, sage, slate, ochre, plum (legible on the dark ground).
+const COLORS = ["#D0663F", "#C6975A", "#9ABF82", "#8FB1C2", "#D9B36A", "#A98BC9"];
 
 export function TraitChart({ dim }: { dim: TraitDim }) {
   const subs = Object.entries(dim.content_json)
@@ -22,7 +22,7 @@ export function TraitChart({ dim }: { dim: TraitDim }) {
       {subs.map(([k, score], i) => (
         <div key={k} className="mb-1.5 flex items-center gap-2 text-xs">
           <span className="w-6 text-muted">{k}</span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper-raised">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
             <div
               className="h-full rounded-full"
               style={{ width: `${score}%`, background: COLORS[i % COLORS.length] }}

@@ -55,13 +55,13 @@ export function EvalPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="v-canvas flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
         <select
           value={suite}
           onChange={(e) => setSuite(e.target.value)}
           disabled={!!live}
-          className="rounded-lg border border-card-line bg-card px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-terracotta/15 disabled:opacity-50"
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
         >
           {suites.map((s) => <option key={s.key} value={s.key}>{s.key}</option>)}
         </select>
@@ -73,7 +73,7 @@ export function EvalPanel() {
         <button
           onClick={run}
           disabled={!!live || !suite}
-          className="rounded-lg bg-terracotta px-3.5 py-1.5 font-medium text-white transition-colors hover:bg-terracotta-ink disabled:bg-muted disabled:opacity-50"
+          className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:bg-surface disabled:text-muted disabled:opacity-60"
         >
           {live ? t("eval.runningBtn") : t("eval.run")}
         </button>
@@ -82,12 +82,13 @@ export function EvalPanel() {
 
       <div className="flex-1 overflow-y-auto">
         {live && (
-          <div className="border-b border-line bg-paper-raised px-4 py-3 text-sm">
+          <div className="border-b border-line bg-surface px-4 py-3 text-sm">
             <div className="flex items-center gap-2">
               <Tag>{live.suite}</Tag>
               <span className="text-ink-soft">
                 {t("eval.running", { done: live.completed, total: live.total || "?" })}
               </span>
+              <span className="v-caret" aria-hidden />
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
               {live.cases.map((c) => (
@@ -110,9 +111,9 @@ export function EvalPanel() {
                   ? t("eval.running", { done: r.completed, total: r.total })
                   : summarize(r.aggregate)}
               </span>
-              <span className="ml-auto text-xs text-muted">{r.started_at}</span>
+              <span className="ml-auto font-mono text-[11px] text-muted">{r.started_at}</span>
               <button
-                className="text-terracotta-ink transition-colors hover:text-terracotta"
+                className="text-accent transition-colors hover:text-accent-ink"
                 onClick={() => toggle(r.id)}
               >
                 {open === r.id ? t("eval.collapse") : t("eval.expand")}
@@ -130,7 +131,7 @@ export function EvalPanel() {
                     <div className="text-xs text-muted">{t("eval.noCases")}</div>
                   )}
                   {detail.results.map((c) => (
-                    <div key={c.id} className="mt-1.5 rounded-lg bg-paper-raised p-3 text-xs">
+                    <div key={c.id} className="mt-1.5 rounded-lg border border-line bg-surface p-3 text-xs">
                       <div className="flex items-center gap-2">
                         <StatusChip status={c.status} />
                         <span className="font-medium text-ink">{c.case_name}</span>
@@ -148,10 +149,10 @@ export function EvalPanel() {
                     </div>
                     {detail.traces.map((tr) => (
                       <div key={tr.id} className="mt-1.5 text-xs">
-                        <div className="text-muted">
+                        <div className="font-mono text-[11px] text-muted">
                           {tr.eval_case} · {tr.stage} · {tr.prompt_tokens ?? "?"}→{tr.completion_tokens ?? "?"} tok · {tr.duration_ms ?? "?"}ms
                         </div>
-                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-paper-raised p-3 font-sans leading-relaxed text-ink-soft">
+                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-well p-3 font-mono text-[11px] leading-relaxed text-ink-soft">
                           {tr.output ?? <span className="text-muted">{t("eval.tracePruned")}</span>}
                         </pre>
                       </div>

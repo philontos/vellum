@@ -15,7 +15,7 @@ export default function App() {
     <AppShell view={view} onChange={setView}>
       {view === "chat" && (
         <>
-          <MessageList messages={messages} />
+          <MessageList messages={messages} streaming={streaming} />
           <Composer onSend={send} disabled={streaming} />
         </>
       )}

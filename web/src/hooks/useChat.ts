@@ -23,10 +23,11 @@ export function useChat() {
     if (!text.trim() || streamingRef.current) return;
     const userTurn = nextTurn.current++;
     const asstTurn = nextTurn.current++;
+    const now = new Date().toISOString();
     setMessages((m) => [
       ...m,
-      { turn: userTurn, role: "user", content: text },
-      { turn: asstTurn, role: "assistant", content: "" },
+      { turn: userTurn, role: "user", content: text, created_at: now },
+      { turn: asstTurn, role: "assistant", content: "", created_at: now },
     ]);
     streamingRef.current = true;
     setStreaming(true);

@@ -11,10 +11,10 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
     setText("");
   }
   return (
-    <div className="border-t border-line bg-gradient-to-b from-transparent to-paper-raised">
+    <div className="border-t border-line bg-gradient-to-b from-transparent to-base">
       <div className="mx-auto flex max-w-[46rem] items-end gap-3 px-6 py-4">
         <textarea
-          className="flex-1 resize-none rounded-[13px] border border-card-line bg-card px-4 py-3 text-sm text-ink shadow-card placeholder:text-muted focus:border-terracotta/40 focus:outline-none focus:ring-2 focus:ring-terracotta/15"
+          className="flex-1 resize-none rounded-[13px] border border-line bg-surface px-4 py-3 text-sm text-ink placeholder:text-muted focus:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/15"
           rows={1}
           value={text}
           aria-label="Message"
@@ -28,7 +28,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
           }}
         />
         <button
-          className="rounded-[13px] bg-terracotta px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-terracotta-ink disabled:opacity-40"
+          className="rounded-[13px] bg-accent px-5 py-3 text-sm font-semibold text-accent-fg shadow-[0_5px_16px_rgba(208,102,63,0.18)] transition-colors hover:bg-accent-ink disabled:opacity-40"
           onClick={submit}
           disabled={disabled}
         >

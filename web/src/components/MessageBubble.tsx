@@ -2,28 +2,43 @@ import type { Message } from "../api/client";
 import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 
-export function MessageBubble({ m }: { m: Message }) {
+/**
+ * One entry in the ledger. No bubbles — speaker is read from the type
+ * (Vellum = serif voice, You = sans) and a page-edge mark. The newest
+ * Vellum mark glows; a caret blinks there while the reply streams in.
+ */
+export function MessageBubble({
+  m,
+  latest,
+  streaming,
+}: {
+  m: Message;
+  latest: boolean;
+  streaming: boolean;
+}) {
   const { t } = useT();
   const blur = usePrivacyBlur();
   const mine = m.role === "user";
+  const live = !mine && latest;
+
+  const tick = mine
+    ? "border border-gold/70 bg-transparent" // your mark — a quiet gold ring
+    : live
+      ? "bg-accent v-glow" // newest reply — the one live spark
+      : "bg-accent/40"; // earlier replies recede
+
   return (
-    <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-      <div
-        className={`mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] ${
-          mine ? "text-terracotta-ink" : "text-muted"
-        }`}
-      >
-        {mine ? t("chat.you") : t("chat.vellum")}
-      </div>
+    <div className="v-turn">
+      <span className={`v-tick ${tick}`} aria-hidden />
+      <span className="sr-only">{mine ? t("chat.you") : t("chat.vellum")}</span>
       {mine ? (
-        // Your words — a solid ink bubble, paper-cream text.
-        <div className="max-w-[78%] whitespace-pre-wrap rounded-bubble rounded-br-[5px] bg-ink px-4 py-2.5 text-sm leading-relaxed text-paper">
+        <div className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.58] text-ink-soft">
           <span className={blur}>{m.content || "…"}</span>
         </div>
       ) : (
-        // Vellum's reply — the serif "voice", no bubble.
-        <div className="max-w-[90%] whitespace-pre-wrap font-serif text-[16.5px] leading-[1.66] text-ink-soft">
+        <div className="whitespace-pre-wrap font-serif text-[17px] leading-[1.68] text-ink">
           <span className={blur}>{m.content || "…"}</span>
+          {live && streaming && <span className="v-caret" aria-hidden />}
         </div>
       )}
     </div>
