@@ -1,11 +1,13 @@
 import type { Message } from "../api/client";
 import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
+import { Markdown } from "./Markdown";
 
 /**
- * One entry in the ledger. No bubbles — speaker is read from the type
- * (Vellum = serif voice, You = sans) and a page-edge mark. The newest
- * Vellum mark glows; a caret blinks there while the reply streams in.
+ * One entry in the ledger. The two voices are set off, not bubbled: your words
+ * arrive as a recessed, gold-edged "slip" in a sans hand; Vellum answers in the
+ * open serif manuscript with its markdown rendered. The newest reply's mark
+ * glows and a caret blinks there while it streams in.
  */
 export function MessageBubble({
   m,
@@ -30,15 +32,19 @@ export function MessageBubble({
   return (
     <div className="v-turn">
       <span className={`v-tick ${tick}`} aria-hidden />
-      <span className="sr-only">{mine ? t("chat.you") : t("chat.vellum")}</span>
       {mine ? (
-        <div className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.58] text-ink-soft">
-          <span className={blur}>{m.content || "…"}</span>
+        <div className="v-slip">
+          <div className="v-eyebrow v-eyebrow--you">{t("chat.you")}</div>
+          <div className={`whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft ${blur}`}>
+            {m.content || "…"}
+          </div>
         </div>
       ) : (
-        <div className="whitespace-pre-wrap font-serif text-[17px] leading-[1.68] text-ink">
-          <span className={blur}>{m.content || "…"}</span>
-          {live && streaming && <span className="v-caret" aria-hidden />}
+        <div>
+          <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
+          <div className={blur}>
+            <Markdown text={m.content || "…"} caret={live && streaming} />
+          </div>
         </div>
       )}
     </div>

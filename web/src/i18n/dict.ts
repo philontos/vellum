@@ -21,6 +21,13 @@ export const DICT = {
     "chat.you": "You",
     "chat.vellum": "Vellum",
 
+    // context rail (what Vellum is learning, alongside the conversation)
+    "rail.title": "Vellum",
+    "rail.sub": "What it's piecing together about you",
+    "rail.factsTitle": "Recent reads",
+    "rail.empty": "Nothing yet — it forms reads as you talk.",
+    "rail.session": "This thread · {n} turns",
+
     // model panel (你是谁)
     "model.loading": "Loading…",
     "model.dossierTitle": "Dossier — who you are",
@@ -82,6 +89,12 @@ export const DICT = {
     "chat.error": "⚠️ 出错了，请重试",
     "chat.you": "你",
     "chat.vellum": "Vellum",
+
+    "rail.title": "Vellum",
+    "rail.sub": "它正在拼凑对你的理解",
+    "rail.factsTitle": "近期读到的你",
+    "rail.empty": "还没有——它会随着聊天慢慢读出你。",
+    "rail.session": "本次对话 · {n} 轮",
 
     "model.loading": "加载中…",
     "model.dossierTitle": "Dossier — 你是谁",
