@@ -24,8 +24,8 @@ export function AppShell({
   ];
 
   return (
-    <div className="mx-auto flex h-full max-w-[1120px] border-line sm:border-x">
-      <nav className="flex w-[172px] flex-none flex-col gap-0.5 border-r border-line bg-gradient-to-b from-[#161009] to-[#0e0b07] px-4 py-5">
+    <div className="flex h-full w-full">
+      <nav className="flex w-[160px] flex-none flex-col gap-0.5 border-r border-line bg-gradient-to-b from-[#161009] to-[#0e0b07] px-4 py-5 sm:w-[180px]">
         <div className="relative mb-4 w-max px-2.5 pt-0.5 font-serif text-[23px] font-medium tracking-tight text-ink">
           Vellum
           {/* a nib stroke under the wordmark */}

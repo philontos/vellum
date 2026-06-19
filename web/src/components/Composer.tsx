@@ -12,7 +12,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
   }
   return (
     <div className="border-t border-line bg-gradient-to-b from-transparent to-base">
-      <div className="mx-auto flex max-w-[46rem] items-end gap-3 px-6 py-4">
+      <div className="mx-auto flex w-full max-w-[47rem] items-end gap-3 px-5 py-4 sm:px-8">
         <textarea
           className="flex-1 resize-none rounded-[13px] border border-line bg-surface px-4 py-3 text-sm text-ink placeholder:text-muted focus:border-accent/40 focus:outline-none focus:ring-2 focus:ring-accent/15"
           rows={1}

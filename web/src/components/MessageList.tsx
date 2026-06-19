@@ -35,7 +35,7 @@ export function MessageList({ messages, streaming }: { messages: Message[]; stre
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="v-ledger mx-auto flex max-w-[46rem] flex-col gap-6 px-6 py-10">
+      <div className="v-ledger mx-auto flex w-full max-w-[47rem] flex-col gap-7 px-5 py-10 sm:px-8">
         {messages.map((m, i) => {
           const day = dayOf(m.created_at);
           const label = day && day !== prevDay ? dayLabel(m.created_at!, lang) : "";
