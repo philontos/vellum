@@ -24,6 +24,30 @@ def test_messages_in_turn_range_inclusive(migrated_db):
     assert [m["turn"] for m in rows] == [1, 2, 3]
 
 
+def test_messages_before_returns_window_below_turn_in_order(migrated_db):
+    for i in range(10):
+        memory.append_message("user", f"m{i}")
+    # the 3 messages immediately older than turn 7 -> turns 4,5,6 (oldest->newest)
+    rows = memory.messages_before(before_turn=7, limit=3)
+    assert [m["turn"] for m in rows] == [4, 5, 6]
+
+
+def test_messages_before_at_start_returns_empty(migrated_db):
+    for i in range(3):
+        memory.append_message("user", f"m{i}")
+    assert memory.messages_before(before_turn=0, limit=5) == []
+
+
+def test_list_summaries_newest_first_with_keyset_pagination(migrated_db):
+    ids = [memory.add_summary(i, i + 1, f"day {i}") for i in range(5)]
+    # newest-first page
+    page1 = memory.list_summaries(limit=2)
+    assert [s["id"] for s in page1] == [ids[4], ids[3]]
+    # next page: everything with id < the last id we saw
+    page2 = memory.list_summaries(limit=2, before_id=page1[-1]["id"])
+    assert [s["id"] for s in page2] == [ids[2], ids[1]]
+
+
 def test_summary_add_and_get(migrated_db):
     sid = memory.add_summary(0, 4, "discussed the offer")
     s = memory.get_summary(sid)

@@ -1,5 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { streamChat, streamEvalRun } from "./client";
+import { getHistory, getDiary, getDiaryMessages, streamChat, streamEvalRun } from "./client";
+
+/** Stub fetch with a JSON body; captures the requested URLs for assertions. */
+function stubJson(body: unknown): string[] {
+  const urls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      urls.push(url);
+      return { ok: true, json: async () => body } as unknown as Response;
+    }),
+  );
+  return urls;
+}
 
 /** A fake fetch Response whose body streams the given string chunks, then ends. */
 function streamResponse(chunks: string[]): Response {
@@ -32,6 +45,45 @@ function stalledResponse(onSignal: (s: AbortSignal | undefined) => void) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+describe("getHistory", () => {
+  it("loads the recent tail by default", async () => {
+    const urls = stubJson({ messages: [{ turn: 0, role: "user", content: "hi" }] });
+    const msgs = await getHistory();
+    expect(urls[0]).toBe("/history?limit=200");
+    expect(msgs).toEqual([{ turn: 0, role: "user", content: "hi" }]);
+  });
+
+  it("passes before= for scroll-up paging", async () => {
+    const urls = stubJson({ messages: [] });
+    await getHistory({ before: 12, limit: 30 });
+    expect(urls[0]).toBe("/history?limit=30&before=12");
+  });
+});
+
+describe("getDiary", () => {
+  it("lists cards (default page) and returns them", async () => {
+    const urls = stubJson({ cards: [{ id: 3, start_turn: 0, end_turn: 5, content: "x", created_at: "2026-06-20" }] });
+    const cards = await getDiary();
+    expect(urls[0]).toBe("/diary?limit=20");
+    expect(cards[0].id).toBe(3);
+  });
+
+  it("passes before= for keyset paging", async () => {
+    const urls = stubJson({ cards: [] });
+    await getDiary(7);
+    expect(urls[0]).toBe("/diary?limit=20&before=7");
+  });
+});
+
+describe("getDiaryMessages", () => {
+  it("fetches a card's span detail", async () => {
+    const urls = stubJson({ summary: { id: 7 }, messages: [{ turn: 1, role: "user", content: "a" }] });
+    const detail = await getDiaryMessages(7);
+    expect(urls[0]).toBe("/diary/7");
+    expect(detail.messages).toHaveLength(1);
+  });
 });
 
 describe("streamChat", () => {

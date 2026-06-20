@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.routes import chat as chat_routes
+from app.routes import diary as diary_routes
 from app.routes import history as history_routes
 from app.routes import inspect as inspect_routes
 from app.store import crypto, db
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Vellum", lifespan=lifespan)
     app.include_router(chat_routes.router)
     app.include_router(history_routes.router)
+    app.include_router(diary_routes.router)
     app.include_router(inspect_routes.router)
 
     @app.get("/health")

@@ -25,6 +25,17 @@ def recent_tail(limit: int) -> list[dict]:
     return [dict(r) for r in reversed(rows)]
 
 
+def messages_before(before_turn: int, limit: int) -> list[dict]:
+    """The `limit` messages immediately older than `before_turn` (turn strictly
+    less than it), returned oldest->newest. Keyset page for chat scroll-up."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE turn < ? ORDER BY turn DESC LIMIT ?",
+            (before_turn, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
 def get_message(message_id: int) -> dict | None:
     with get_conn() as conn:
         row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
@@ -54,6 +65,22 @@ def add_summary(start_turn: int, end_turn: int, content: str) -> int:
             (start_turn, end_turn, content),
         )
         return cur.lastrowid
+
+
+def list_summaries(limit: int, before_id: int | None = None) -> list[dict]:
+    """Summary 'cards' newest-first (id desc). When `before_id` is given, only
+    those with id strictly less than it — keyset page for the diary timeline."""
+    with get_conn() as conn:
+        if before_id is None:
+            rows = conn.execute(
+                "SELECT * FROM summaries ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM summaries WHERE id < ? ORDER BY id DESC LIMIT ?",
+                (before_id, limit),
+            ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def get_summary(summary_id: int) -> dict | None:

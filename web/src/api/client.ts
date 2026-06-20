@@ -34,10 +34,42 @@ export type Message = {
   activity?: ActivityItem[]; // live-only: tool calls (e.g. web_search) made this turn
 };
 
-export async function getHistory(limit = 200): Promise<Message[]> {
-  const r = await fetch(`/history?limit=${limit}`);
+/**
+ * Load chat history. Without `before` it returns the recent tail (page load);
+ * with `before` it returns the window of messages immediately older than that
+ * turn — the chat view's scroll-up page.
+ */
+export async function getHistory(opts: { limit?: number; before?: number } = {}): Promise<Message[]> {
+  const q = new URLSearchParams({ limit: String(opts.limit ?? 200) });
+  if (opts.before !== undefined) q.set("before", String(opts.before));
+  const r = await fetch(`/history?${q}`);
   if (!r.ok) throw new Error(`history failed: ${r.status}`);
   return (await r.json()).messages;
+}
+
+/** One diary timeline card — a background summary of a conversation span. */
+export type DiaryCard = {
+  id: number;
+  start_turn: number;
+  end_turn: number;
+  content: string;
+  created_at: string;
+};
+
+/** List diary cards newest-first. `before` is a card id (keyset paging). */
+export async function getDiary(before?: number, limit = 20): Promise<DiaryCard[]> {
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (before !== undefined) q.set("before", String(before));
+  const r = await fetch(`/diary?${q}`);
+  if (!r.ok) throw new Error(`diary failed: ${r.status}`);
+  return (await r.json()).cards;
+}
+
+/** Expand one diary card into the full message span it digests. */
+export async function getDiaryMessages(id: number): Promise<{ summary: DiaryCard; messages: Message[] }> {
+  const r = await fetch(`/diary/${id}`);
+  if (!r.ok) throw new Error(`diary detail failed: ${r.status}`);
+  return r.json();
 }
 
 /**
