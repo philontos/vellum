@@ -44,25 +44,33 @@ async def chat(body: ChatIn):
         final = ""
         reasoning = None
         prompt_tokens = completion_tokens = duration_ms = None
-        async for ev in respond.stream(messages):
-            if ev["type"] == "delta":
-                yield f"data: {json.dumps({'delta': ev['text']}, ensure_ascii=False)}\n\n"
-            elif ev["type"] == "final":
-                final = ev["content"]
-                reasoning = ev.get("reasoning")
-                prompt_tokens = ev.get("prompt_tokens")
-                completion_tokens = ev.get("completion_tokens")
-                duration_ms = ev.get("duration_ms")
-        ingest.persist_assistant(final)
-        traces.record(
-            turn=None, stage="chat", model=cfg.get("model"),
-            params={"provider": cfg.get("provider")},
-            prompt=json.dumps(messages, ensure_ascii=False), output=final,
-            reasoning=reasoning,
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-            duration_ms=duration_ms,
-        )
-        _track(asyncio.create_task(runner.run_pending()))  # background, non-blocking
-        yield "data: [DONE]\n\n"
+        try:
+            async for ev in respond.stream(messages):
+                if ev["type"] == "delta":
+                    yield f"data: {json.dumps({'delta': ev['text']}, ensure_ascii=False)}\n\n"
+                elif ev["type"] == "final":
+                    final = ev["content"]
+                    reasoning = ev.get("reasoning")
+                    prompt_tokens = ev.get("prompt_tokens")
+                    completion_tokens = ev.get("completion_tokens")
+                    duration_ms = ev.get("duration_ms")
+            ingest.persist_assistant(final)
+            traces.record(
+                turn=None, stage="chat", model=cfg.get("model"),
+                params={"provider": cfg.get("provider")},
+                prompt=json.dumps(messages, ensure_ascii=False), output=final,
+                reasoning=reasoning,
+                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                duration_ms=duration_ms,
+            )
+            _track(asyncio.create_task(runner.run_pending()))  # background, non-blocking
+        except Exception as exc:
+            # Surface the failure as an SSE frame instead of letting the generator
+            # raise: an uncaught raise sends no error and no [DONE], so the client's
+            # stream reader hangs forever. The full error is already in traces.
+            yield f"data: {json.dumps({'error': str(exc) or exc.__class__.__name__}, ensure_ascii=False)}\n\n"
+        finally:
+            # Always terminate the stream so the client can stop waiting.
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")

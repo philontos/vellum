@@ -1,5 +1,29 @@
 import { splitFrames, parseData, parseEvalFrame } from "./sse";
 
+/**
+ * Read the next chunk, but reject if nothing arrives within `idleMs` — and abort
+ * the request so a silently-dead connection (e.g. a dropped SSH tunnel that
+ * sends no FIN/RST) can't leave the reader hanging forever.
+ */
+async function readWithTimeout<T>(
+  reader: { read: () => Promise<T> },
+  idleMs: number,
+  ctrl: AbortController,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ctrl.abort();
+      reject(new Error(`stream timed out after ${idleMs}ms with no data`));
+    }, idleMs);
+  });
+  try {
+    return await Promise.race([reader.read(), timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
 export type Message = {
   turn: number;
   role: "user" | "assistant";
@@ -98,51 +122,73 @@ export type EvalDoneEvent = { run_id: number; status: string; aggregate: Record<
 export async function streamEvalRun(
   suite: string,
   cb: { onRun?: (m: EvalRunMeta) => void; onCase?: (c: EvalCaseEvent) => void; onDone?: (d: EvalDoneEvent) => void },
+  opts: { idleTimeoutMs?: number } = {},
 ): Promise<void> {
-  const r = await fetch(`/inspect/evals/run?suite=${encodeURIComponent(suite)}`, { method: "POST" });
+  const idleMs = opts.idleTimeoutMs ?? 120_000;
+  const ctrl = new AbortController();
+  const r = await fetch(`/inspect/evals/run?suite=${encodeURIComponent(suite)}`, {
+    method: "POST",
+    signal: ctrl.signal,
+  });
   if (!r.ok || !r.body) throw new Error(`eval run failed: ${r.status}`);
 
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const { frames, rest } = splitFrames(buffer);
-    buffer = rest;
-    for (const frame of frames) {
-      const ev = parseEvalFrame(frame);
-      if (!ev) continue;
-      if (ev.kind === "run") cb.onRun?.(ev.data as unknown as EvalRunMeta);
-      else if (ev.kind === "case") cb.onCase?.(ev.data as unknown as EvalCaseEvent);
-      else if (ev.kind === "done") cb.onDone?.(ev.data as unknown as EvalDoneEvent);
-      else if (ev.kind === "end") return;
+  try {
+    for (;;) {
+      const { value, done } = await readWithTimeout(reader, idleMs, ctrl);
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const { frames, rest } = splitFrames(buffer);
+      buffer = rest;
+      for (const frame of frames) {
+        const ev = parseEvalFrame(frame);
+        if (!ev) continue;
+        if (ev.kind === "run") cb.onRun?.(ev.data as unknown as EvalRunMeta);
+        else if (ev.kind === "case") cb.onCase?.(ev.data as unknown as EvalCaseEvent);
+        else if (ev.kind === "done") cb.onDone?.(ev.data as unknown as EvalDoneEvent);
+        else if (ev.kind === "end") return;
+      }
     }
+  } finally {
+    ctrl.abort();
   }
 }
 
-export async function streamChat(message: string, onDelta: (t: string) => void): Promise<void> {
+export async function streamChat(
+  message: string,
+  onDelta: (t: string) => void,
+  opts: { idleTimeoutMs?: number } = {},
+): Promise<void> {
+  const idleMs = opts.idleTimeoutMs ?? 90_000;
+  const ctrl = new AbortController();
   const r = await fetch("/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
+    signal: ctrl.signal,
   });
   if (!r.ok || !r.body) throw new Error(`chat failed: ${r.status}`);
 
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const { frames, rest } = splitFrames(buffer);
-    buffer = rest;
-    for (const frame of frames) {
-      const ev = parseData(frame);
-      if (ev?.type === "delta") onDelta(ev.text);
-      else if (ev?.type === "done") return;
+  try {
+    for (;;) {
+      const { value, done } = await readWithTimeout(reader, idleMs, ctrl);
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const { frames, rest } = splitFrames(buffer);
+      buffer = rest;
+      for (const frame of frames) {
+        const ev = parseData(frame);
+        if (ev?.type === "delta") onDelta(ev.text);
+        else if (ev?.type === "error") throw new Error(ev.message);
+        else if (ev?.type === "done") return;
+      }
     }
+  } finally {
+    ctrl.abort();
   }
 }
