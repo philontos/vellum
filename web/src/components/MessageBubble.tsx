@@ -3,6 +3,7 @@ import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { Markdown } from "./Markdown";
 import { ProcessBlock } from "./ProcessBlock";
+import { TypingDots } from "./TypingDots";
 
 /**
  * One turn, set to its own side. Your words arrive on the right as a recessed,
@@ -24,6 +25,9 @@ export function MessageBubble({
   const blur = usePrivacyBlur();
   const mine = m.role === "user";
   const live = !mine && latest;
+  // The hopping dots are the "nothing has arrived yet" beat — they vanish the
+  // instant any text streams in, reasoning and tool activity included.
+  const nothingYet = !m.content && !m.reasoning?.trim() && !m.activity?.length;
 
   if (mine) {
     return (
@@ -49,7 +53,13 @@ export function MessageBubble({
           hasContent={!!m.content}
         />
         <div className={blur}>
-          <Markdown text={m.content || "…"} caret={live && streaming} />
+          {m.content ? (
+            <Markdown text={m.content} caret={live && streaming} />
+          ) : live && streaming && nothingYet ? (
+            <TypingDots />
+          ) : live ? null : ( // thinking already shows in the gloss above; keep the answer quiet
+            <Markdown text="…" />
+          )}
         </div>
       </div>
     </div>

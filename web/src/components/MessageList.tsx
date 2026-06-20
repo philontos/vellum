@@ -25,16 +25,25 @@ function dayLabel(ts: string, lang: string): string {
 
 export function MessageList({ messages, streaming }: { messages: Message[]; streaming: boolean }) {
   const { lang } = useT();
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Follow the stream only while the reader is parked at the bottom. Once they
+  // scroll up to re-read, we never yank the viewport back — no auto-positioning.
+  const pinned = useRef(true);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollRef.current;
+    if (el && pinned.current) el.scrollTop = el.scrollHeight; // instant, no smooth re-centering
   }, [messages]);
 
   const lastIdx = messages.length - 1;
   let prevDay = "";
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[58rem] flex-col gap-7 px-5 py-10 sm:px-8 2xl:max-w-[60rem]">
         {messages.map((m, i) => {
           const day = dayOf(m.created_at);
@@ -51,7 +60,6 @@ export function MessageList({ messages, streaming }: { messages: Message[]; stre
             </div>
           );
         })}
-        <div ref={endRef} />
       </div>
     </div>
   );
