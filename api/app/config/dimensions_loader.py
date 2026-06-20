@@ -24,3 +24,24 @@ def load_dimensions() -> dict:
 
 
 DIMENSION_MAP = load_dimensions()
+
+
+def dimension_meta(key: str) -> dict | None:
+    """Frontend-facing display metadata for one dimension: its name, whether its
+    sub-dimensions sort by score, and each sub-dimension's label (+ `poles` when
+    bipolar). None for an unknown/disabled dimension."""
+    d = DIMENSION_MAP.get(key)
+    if not d:
+        return None
+    subs = []
+    for s in d.get("sub_dimensions", []):
+        sub = {"key": s["key"], "name": s["name"]}
+        if s.get("poles"):
+            sub["poles"] = list(s["poles"])
+        subs.append(sub)
+    return {
+        "name": d.get("name", key),
+        "label": d.get("summary_label", key),
+        "sort_by_score": bool(d.get("sort_by_score", False)),
+        "sub_dimensions": subs,
+    }
