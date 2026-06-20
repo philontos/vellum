@@ -15,6 +15,11 @@ facts, and nothing is hidden by retrieval. This is what keeps the board converge
 and contradiction-free instead of growing without bound. Each fact is best-effort
 and isolated: one failure never blocks the others.
 
+reconcile only acts on the new fact in hand, so it can't reach residual
+old-vs-old redundancy that no new fact happens to touch. So every X turns (gated
+on the turn number, no extra runner) run() also runs a whole-board `compact` pass
+— the downward force that lets the active set actually shrink, not only grow.
+
 Facts are DURABLE anchors (allergies, names, locations, identity). Convergence is
 by redundancy/contradiction, never by age — those anchors are never dropped."""
 from app import config
@@ -50,6 +55,22 @@ _RECONCILE_PROMPT = (
     "\"<statement to store; omit for duplicate>\", \"retire\": [<id>, ...]}}. "
     "Match the user's language.\n\n"
     "## New fact\n{fact}\n\n## From this conversation\n{span}\n\n## Existing board\n{board}"
+)
+
+_COMPACT_PROMPT = (
+    "Here is the full board of DURABLE facts about a user. Compact it WITHOUT "
+    "losing information:\n"
+    "- MERGE facts that say the same thing, or where one subsumes another, into a "
+    "single clear statement.\n"
+    "- RETIRE a fact only when another fact contradicts or supersedes it.\n"
+    "- NEVER drop a fact that is still unique and uncontradicted. Do NOT retire by "
+    "age — durable anchors (allergies, names, locations, identity) stay forever.\n"
+    "Aim to keep the board under ~{target} facts by merging, but never drop a "
+    "unique, uncontradicted fact just to hit a number. When unsure, leave it.\n\n"
+    "Respond as strict JSON: {{\"merge\": [{{\"ids\": [<id>, <id>, ...], \"text\": "
+    "\"<merged statement>\"}}], \"retire\": [<id>, ...]}} (use [] when nothing "
+    "applies; every merge group needs >=2 ids). Match the user's language.\n\n"
+    "## Facts\n{board}"
 )
 
 
@@ -92,16 +113,58 @@ async def reconcile_one(fact: str, span: str, source_turn: int | None) -> None:
     _apply_decision(decision, active, source_turn)
 
 
-async def run(start_turn: int, end_turn: int) -> None:
-    span = span_text(start_turn, end_turn)
-    if not span.strip():
+def _apply_compaction(plan: dict, active: list[dict]) -> None:
+    """Apply a whole-board compaction plan. Same defensive shape as a reconcile
+    merge: a merge needs >=2 known ids and non-empty text; merged facts become a
+    fresh row (source_turn = latest contributing turn) and their originals retire."""
+    by_id = {f["id"]: f for f in active}
+    for group in plan.get("merge") or []:
+        ids = [i for i in (group.get("ids") or []) if i in by_id]
+        text = (group.get("text") or "").strip()
+        if len(ids) < 2 or not text:
+            continue
+        turns = [by_id[i]["source_turn"] for i in ids if by_id[i]["source_turn"] is not None]
+        model.add_fact(text, source_turn=max(turns) if turns else None)
+        for i in ids:
+            model.supersede_fact(i)
+    for i in plan.get("retire") or []:
+        if i in by_id:
+            model.supersede_fact(i)
+
+
+async def compact() -> None:
+    """Scan the whole active board and merge residual redundancy in one LLM call.
+    No-op when there is nothing to compact."""
+    active = model.active_facts()
+    if len(active) < 2:
+        return
+    board = "\n".join(f"{f['id']}. {f['text']}" for f in active)
+    plan = await chat_json(
+        system_prompt=_COMPACT_PROMPT.format(target=config.facts_target_count(), board=board),
+        user_prompt="", stage="compact")
+    _apply_compaction(plan, active)
+
+
+async def _maybe_compact(end_turn: int) -> None:
+    every = config.facts_compact_every()
+    if every <= 0 or end_turn < 0 or end_turn % every != 0:
         return
     try:
-        new_facts = await extract_facts(span)
+        await compact()
     except Exception:
         return
-    for fact in new_facts:
+
+
+async def run(start_turn: int, end_turn: int) -> None:
+    span = span_text(start_turn, end_turn)
+    if span.strip():
         try:
-            await reconcile_one(fact, span, end_turn)
+            new_facts = await extract_facts(span)
         except Exception:
-            continue
+            new_facts = []
+        for fact in new_facts:
+            try:
+                await reconcile_one(fact, span, end_turn)
+            except Exception:
+                continue
+    await _maybe_compact(end_turn)

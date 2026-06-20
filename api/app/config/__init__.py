@@ -46,6 +46,10 @@ def dossier_batch_m() -> int: return _int("VELLUM_DOSSIER_M", 12)
 # board also makes each per-fact reconcile decision more accurate.
 def facts_target_count() -> int: return _int("VELLUM_FACTS_TARGET", 40)
 
+# Every N turns, the facts job runs a whole-board compaction pass to merge residual
+# redundancy that per-fact reconcile can't reach. 0 disables it.
+def facts_compact_every() -> int: return _int("VELLUM_FACTS_COMPACT_EVERY", 20)
+
 
 # === Web search (optional) ===
 # Off unless a provider AND its key are configured. The chat loop then offers a
