@@ -67,3 +67,12 @@ def web_search_enabled() -> bool:
     if provider == "tavily":
         return bool((os.getenv("TAVILY_API_KEY") or "").strip())
     return False
+
+
+# === Feishu / Lark adapter (optional) ===
+# A WebSocket long-connection bot that bridges Feishu private chats to vellum's
+# brain. Off unless BOTH app credentials are present, so a deployment without
+# them boots exactly as before (the adapter task is never started).
+def feishu_app_id() -> str:     return (os.getenv("FEISHU_APP_ID") or "").strip()
+def feishu_app_secret() -> str: return (os.getenv("FEISHU_APP_SECRET") or "").strip()
+def feishu_enabled() -> bool:   return bool(feishu_app_id() and feishu_app_secret())

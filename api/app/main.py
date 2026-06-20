@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -5,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app import config
 from app.routes import chat as chat_routes
 from app.routes import diary as diary_routes
 from app.routes import history as history_routes
@@ -19,7 +21,20 @@ async def lifespan(app: FastAPI):
     # rebuilt lazily from the db on first use.
     crypto.assert_db_accessible()
     db.run_migrations()
-    yield
+
+    # Bridge Feishu private chats to vellum, in-process, only when configured.
+    # Imported lazily so a deployment without lark-oapi/credentials boots
+    # exactly as before and the test suite never starts the connection.
+    feishu_task = None
+    if config.feishu_enabled():
+        from app.feishu import adapter as feishu_adapter
+        feishu_task = asyncio.create_task(feishu_adapter.run())
+
+    try:
+        yield
+    finally:
+        if feishu_task is not None:
+            feishu_task.cancel()
 
 
 def _web_dist_dir() -> Path:
