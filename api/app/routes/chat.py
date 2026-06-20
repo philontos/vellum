@@ -48,6 +48,14 @@ async def chat(body: ChatIn):
             async for ev in respond.stream(messages):
                 if ev["type"] == "delta":
                     yield f"data: {json.dumps({'delta': ev['text']}, ensure_ascii=False)}\n\n"
+                elif ev["type"] == "reasoning":
+                    yield f"data: {json.dumps({'reasoning': ev['text']}, ensure_ascii=False)}\n\n"
+                elif ev["type"] == "tool_start":
+                    tool = {"phase": "start", "name": ev["name"], "query": ev.get("query", "")}
+                    yield f"data: {json.dumps({'tool': tool}, ensure_ascii=False)}\n\n"
+                elif ev["type"] == "tool_end":
+                    tool = {"phase": "end", "name": ev["name"], "ok": ev.get("ok", True)}
+                    yield f"data: {json.dumps({'tool': tool}, ensure_ascii=False)}\n\n"
                 elif ev["type"] == "final":
                     final = ev["content"]
                     reasoning = ev.get("reasoning")

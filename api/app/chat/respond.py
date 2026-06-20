@@ -44,6 +44,10 @@ async def stream(messages: list[dict]):
             if ev["type"] == "content_delta":
                 content_parts.append(ev["delta"])
                 yield {"type": "delta", "text": ev["delta"]}
+            elif ev["type"] == "reasoning_delta":
+                # Surface the model's thinking live (the trace keeps the full copy
+                # via the done event below).
+                yield {"type": "reasoning", "text": ev["delta"]}
             elif ev["type"] == "done":
                 assistant_msg = ev["message"]
                 finish = ev["finish_reason"]
@@ -59,14 +63,19 @@ async def stream(messages: list[dict]):
         if finish != "tool_calls" or not reg:
             break
 
-        # run each requested tool, append results, loop for another model round
+        # run each requested tool, append results, loop for another model round.
+        # tool_start/tool_end bracket each call so the UI can show the activity.
         for tc in assistant_msg.get("tool_calls") or []:
             fn = tc["function"]
             try:
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {}
+            query = args.get("query") if isinstance(args, dict) else None
+            yield {"type": "tool_start", "name": fn["name"], "query": query or ""}
             result = await reg.adispatch(fn["name"], args)
+            ok = not (isinstance(result, str) and result.startswith("ERROR"))
+            yield {"type": "tool_end", "name": fn["name"], "ok": ok}
             convo.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
 
     # `or None` keeps "unknown" semantics for providers that don't report usage

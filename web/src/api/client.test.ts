@@ -40,15 +40,40 @@ describe("streamChat", () => {
       streamResponse(['data: {"delta":"Hel"}\n\n', 'data: {"delta":"lo"}\n\ndata: [DONE]\n\n']),
     ));
     const got: string[] = [];
-    await streamChat("hi", (t) => got.push(t));
+    await streamChat("hi", { onDelta: (t) => got.push(t) });
     expect(got.join("")).toBe("Hello");
+  });
+
+  it("routes reasoning and tool frames to their handlers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      streamResponse([
+        'data: {"reasoning":"thinking"}\n\n',
+        'data: {"tool":{"phase":"start","name":"web_search","query":"X"}}\n\n',
+        'data: {"tool":{"phase":"end","name":"web_search","ok":true}}\n\n',
+        'data: {"delta":"answer"}\n\ndata: [DONE]\n\n',
+      ]),
+    ));
+    const reasoning: string[] = [];
+    const tools: unknown[] = [];
+    const got: string[] = [];
+    await streamChat("hi", {
+      onDelta: (t) => got.push(t),
+      onReasoning: (r) => reasoning.push(r),
+      onTool: (ev) => tools.push(ev),
+    });
+    expect(reasoning.join("")).toBe("thinking");
+    expect(tools).toEqual([
+      { phase: "start", name: "web_search", query: "X" },
+      { phase: "end", name: "web_search", ok: true },
+    ]);
+    expect(got.join("")).toBe("answer");
   });
 
   it("throws when the server sends an error frame", async () => {
     vi.stubGlobal("fetch", vi.fn(async () =>
       streamResponse(['data: {"delta":"partial"}\n\ndata: {"error":"provider exploded"}\n\ndata: [DONE]\n\n']),
     ));
-    await expect(streamChat("hi", () => {})).rejects.toThrow(/provider exploded/);
+    await expect(streamChat("hi", { onDelta: () => {} })).rejects.toThrow(/provider exploded/);
   });
 
   it("aborts and rejects when the stream stalls past the idle timeout", async () => {
@@ -56,7 +81,7 @@ describe("streamChat", () => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal("fetch", vi.fn(stalledResponse((s) => (signal = s))));
 
-    const p = streamChat("hi", () => {}, { idleTimeoutMs: 1000 });
+    const p = streamChat("hi", { onDelta: () => {} }, { idleTimeoutMs: 1000 });
     const assertion = expect(p).rejects.toThrow(/timed out/i);
     await vi.advanceTimersByTimeAsync(1000);
     await assertion;

@@ -31,8 +31,23 @@ describe("parseData", () => {
   it("passes through an empty delta", () => {
     expect(parseData('data: {"delta":""}')).toEqual({ type: "delta", text: "" });
   });
-  it("returns null when the delta field is absent", () => {
+  it("returns null when no known field is present", () => {
     expect(parseData('data: {"foo":1}')).toBeNull();
+  });
+  it("parses a reasoning frame", () => {
+    expect(parseData('data: {"reasoning":"thinking"}')).toEqual({ type: "reasoning", text: "thinking" });
+  });
+  it("parses a tool start frame", () => {
+    expect(parseData('data: {"tool":{"phase":"start","name":"web_search","query":"X"}}')).toEqual({
+      type: "tool",
+      tool: { phase: "start", name: "web_search", query: "X" },
+    });
+  });
+  it("parses a tool end frame", () => {
+    expect(parseData('data: {"tool":{"phase":"end","name":"web_search","ok":true}}')).toEqual({
+      type: "tool",
+      tool: { phase: "end", name: "web_search", ok: true },
+    });
   });
 });
 

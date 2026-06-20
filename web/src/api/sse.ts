@@ -1,6 +1,10 @@
+export type ToolEvent = { phase: "start" | "end"; name: string; query?: string; ok?: boolean };
+
 export type SSEEvent =
   | { type: "delta"; text: string }
   | { type: "error"; message: string }
+  | { type: "reasoning"; text: string }
+  | { type: "tool"; tool: ToolEvent }
   | { type: "done" };
 
 /** Split a buffer into complete `\n\n`-terminated SSE frames + leftover. */
@@ -20,6 +24,8 @@ export function parseData(frame: string): SSEEvent | null {
     const obj = JSON.parse(payload);
     if (typeof obj.delta === "string") return { type: "delta", text: obj.delta };
     if (typeof obj.error === "string") return { type: "error", message: obj.error };
+    if (typeof obj.reasoning === "string") return { type: "reasoning", text: obj.reasoning };
+    if (obj.tool && typeof obj.tool === "object") return { type: "tool", tool: obj.tool as ToolEvent };
     return null;
   } catch {
     return null;

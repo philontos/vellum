@@ -21,6 +21,9 @@ export const DICT = {
     "chat.error": "⚠️ Something went wrong, please retry",
     "chat.you": "You",
     "chat.vellum": "Vellum",
+    "chat.processLive": "Thinking & searching…",
+    "chat.process": "Reasoning & search",
+    "chat.searchN": "{n} searches",
 
     // context rail (what Vellum is learning, alongside the conversation)
     "rail.title": "Vellum",
@@ -91,6 +94,9 @@ export const DICT = {
     "chat.error": "⚠️ 出错了，请重试",
     "chat.you": "你",
     "chat.vellum": "Vellum",
+    "chat.processLive": "思考与检索中…",
+    "chat.process": "思考与检索",
+    "chat.searchN": "{n} 次搜索",
 
     "rail.title": "Vellum",
     "rail.sub": "它正在拼凑对你的理解",
