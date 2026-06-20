@@ -33,27 +33,6 @@ body {
       theme("colors.base");
   }
 
-  /* Ledger: a page-edge spine the conversation hangs from. */
-  .v-ledger { position: relative; }
-  .v-ledger::before {
-    content: "";
-    position: absolute;
-    left: 18px;
-    top: 10px;
-    bottom: 10px;
-    width: 1px;
-    background: theme("colors.line");
-  }
-  .v-turn { position: relative; padding-left: 34px; }
-  .v-tick {
-    position: absolute;
-    left: 15px;
-    top: 0.55em;
-    width: 6px;
-    height: 6px;
-    border-radius: 9999px;
-  }
-
   /* Illuminated initial — the dossier opens like a manuscript. */
   .v-dropcap::first-letter {
     float: left;
@@ -65,17 +44,18 @@ body {
     color: theme("colors.accent");
   }
 
-  /* Time dividers chunk a long thread into sessions, like chapters. */
+  /* Time dividers chunk a long thread into sessions, like chapters — centered
+     and flanked by hairlines now that the conversation has two sides. */
   .v-timebreak {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding-left: 34px;
     font-size: 9.5px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: theme("colors.muted");
   }
+  .v-timebreak::before,
   .v-timebreak::after {
     content: "";
     height: 1px;
@@ -106,12 +86,12 @@ body {
     color: theme("colors.accent-ink");
   }
 
-  /* Your turn: a recessed slip set into the page, gold-edged — clearly an input,
-     not part of the manuscript Vellum writes back. */
+  /* Your turn: a recessed slip on the right, gold-edged on its outer side —
+     clearly an input, not part of the manuscript Vellum writes back on the left. */
   .v-slip {
     border-radius: 12px;
     border: 1px solid theme("colors.line");
-    border-left: 2px solid rgba(198, 151, 90, 0.5);
+    border-right: 2px solid rgba(198, 151, 90, 0.5);
     background: theme("colors.surface");
     padding: 9px 14px 11px;
   }

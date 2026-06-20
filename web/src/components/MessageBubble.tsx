@@ -5,10 +5,11 @@ import { Markdown } from "./Markdown";
 import { ProcessBlock } from "./ProcessBlock";
 
 /**
- * One entry in the ledger. The two voices are set off, not bubbled: your words
- * arrive as a recessed, gold-edged "slip" in a sans hand; Vellum answers in the
- * open serif manuscript with its markdown rendered. The newest reply's mark
- * glows and a caret blinks there while it streams in.
+ * One turn, set to its own side. Your words arrive on the right as a recessed,
+ * gold-edged "slip" in a sans hand; Vellum answers on the left in the open serif
+ * manuscript with its markdown rendered — its live reasoning/tool activity riding
+ * above the reply in a collapsible block. A caret blinks in the newest reply while
+ * it streams in.
  */
 export function MessageBubble({
   m,
@@ -24,36 +25,33 @@ export function MessageBubble({
   const mine = m.role === "user";
   const live = !mine && latest;
 
-  const tick = mine
-    ? "border border-gold/70 bg-transparent" // your mark — a quiet gold ring
-    : live
-      ? "bg-accent v-glow" // newest reply — the one live spark
-      : "bg-accent/40"; // earlier replies recede
-
-  return (
-    <div className="v-turn">
-      <span className={`v-tick ${tick}`} aria-hidden />
-      {mine ? (
-        <div className="v-slip">
+  if (mine) {
+    return (
+      <div className="flex justify-end">
+        <div className="v-slip max-w-[78%]">
           <div className="v-eyebrow v-eyebrow--you">{t("chat.you")}</div>
           <div className={`whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft ${blur}`}>
             {m.content || "…"}
           </div>
         </div>
-      ) : (
-        <div>
-          <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
-          <ProcessBlock
-            reasoning={m.reasoning}
-            activity={m.activity}
-            live={live}
-            hasContent={!!m.content}
-          />
-          <div className={blur}>
-            <Markdown text={m.content || "…"} caret={live && streaming} />
-          </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[88%]">
+        <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
+        <ProcessBlock
+          reasoning={m.reasoning}
+          activity={m.activity}
+          live={live}
+          hasContent={!!m.content}
+        />
+        <div className={blur}>
+          <Markdown text={m.content || "…"} caret={live && streaming} />
         </div>
-      )}
+      </div>
     </div>
   );
 }
