@@ -41,6 +41,11 @@ def trait_batch_k() -> int:   return _int("VELLUM_TRAIT_K", 6)
 def summary_span_s() -> int:  return _int("VELLUM_SUMMARY_S", 6)
 def dossier_batch_m() -> int: return _int("VELLUM_DOSSIER_M", 12)
 
+# Soft target for the fact board: reconcile is told to keep it around this size by
+# merging near-duplicates (never by dropping unique, uncontradicted facts). A tighter
+# board also makes each per-fact reconcile decision more accurate.
+def facts_target_count() -> int: return _int("VELLUM_FACTS_TARGET", 40)
+
 
 # === Web search (optional) ===
 # Off unless a provider AND its key are configured. The chat loop then offers a
