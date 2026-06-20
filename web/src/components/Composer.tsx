@@ -31,7 +31,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
 
   return (
     <div className="border-t border-line bg-gradient-to-b from-transparent to-base">
-      <div className="mx-auto w-full max-w-[47rem] px-5 py-4 sm:px-8">
+      <div className="mx-auto w-full max-w-[58rem] px-5 py-4 sm:px-8 2xl:max-w-[60rem]">
         <div className="rounded-2xl border border-line bg-surface shadow-card transition-colors focus-within:border-accent/40 focus-within:ring-2 focus-within:ring-accent/15">
           <textarea
             ref={ref}
