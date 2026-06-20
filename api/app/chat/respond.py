@@ -6,14 +6,25 @@ stream and one {"type":"final","content":...} at the end."""
 import json
 
 from app import config
-from app.chat.tools import recall, registry
+from app.chat.tools import recall, registry, websearch
 from app.llm import client as llm
 
 
 def _build_registry() -> registry.ToolRegistry:
     reg = registry.ToolRegistry()
     recall.register_into(reg)
+    if config.web_search_enabled():
+        websearch.register_into(reg)
     return reg
+
+
+def _max_hops() -> int:
+    """Tool-loop ceiling. Web search needs more rounds to search → cross-check →
+    answer, so it lifts the recall-only default when enabled."""
+    hops = config.recall_max_hops()
+    if config.web_search_enabled():
+        hops = max(hops, config.web_search_max_hops())
+    return hops
 
 
 async def stream(messages: list[dict]):
@@ -26,7 +37,7 @@ async def stream(messages: list[dict]):
     # the whole turn (every round-trip), not just the last one.
     prompt_tokens = completion_tokens = duration_ms = 0
 
-    for _hop in range(config.recall_max_hops() + 1):
+    for _hop in range(_max_hops() + 1):
         assistant_msg = None
         finish = "stop"
         async for ev in llm.chat_with_tools_stream(messages=convo, tools=tools, stage="chat"):
