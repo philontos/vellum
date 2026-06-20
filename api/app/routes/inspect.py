@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.config.dimensions_loader import dimension_meta
 from app.llm.client import resolve_structured_llm_config
 from app.store import model, observability as obs, traces
 from evals.config import eval_gen_config
@@ -26,6 +27,7 @@ def inspect_model():
     traits = model.all_traits()
     for t in traits:
         t["history"] = model.get_trait_history(t["dimension"])
+        t["meta"] = dimension_meta(t["dimension"])   # names + pole labels for the UI
     return {
         "dossier": model.get_dossier(),
         "dossier_meta": model.get_dossier_row(),

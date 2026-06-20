@@ -26,6 +26,19 @@ def test_inspect_model_and_traces(migrated_db):
     assert row["pinned"] == 1 and row["note"] == "good"
 
 
+def test_inspect_model_attaches_trait_meta(migrated_db):
+    from app.main import app
+    from app.store import model
+    model.set_trait("mbti", {"E_I": {"score": 64}}, 1)
+
+    c = TestClient(app)
+    traits = c.get("/inspect/model").json()["traits"]
+    mbti = next(t for t in traits if t["dimension"] == "mbti")
+    assert mbti["meta"]["name"]
+    e_i = next(s for s in mbti["meta"]["sub_dimensions"] if s["key"] == "E_I")
+    assert e_i["poles"] == ["I", "E"]
+
+
 def test_inspect_model_excludes_superseded_facts(migrated_db):
     from app.main import app
     from app.store import model

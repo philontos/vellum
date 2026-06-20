@@ -76,12 +76,19 @@ export async function getDiaryMessages(id: number): Promise<{ summary: DiaryCard
  * POST /chat and stream the assistant reply. Calls onDelta for each text chunk.
  * Resolves when the stream completes ([DONE]).
  */
+/** Display metadata for one sub-dimension. `poles` ([low@0, high@100]) marks it
+ * bipolar — the UI renders a centered diverging bar; its absence means unipolar. */
+export type SubDimMeta = { key: string; name: string; poles?: [string, string] };
+export type TraitMeta = {
+  name: string; label: string; sort_by_score: boolean; sub_dimensions: SubDimMeta[];
+};
 export type TraitDim = {
   dimension: string;
   content_json: Record<string, { score?: number; confidence?: number; evidence?: string }>;
   sample_count: number;
   updated_at: string;
   history: { taken_at: string; content_json: Record<string, { score?: number }> }[];
+  meta: TraitMeta | null;
 };
 export type Fact = { id: number; text: string; status: string; source_turn: number | null };
 export type ModelView = { dossier: string; facts: Fact[]; traits: TraitDim[] };

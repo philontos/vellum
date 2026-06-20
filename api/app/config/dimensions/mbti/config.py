@@ -13,11 +13,14 @@ DIMENSION = {
     "summary_label":   "MBTI",
     "sort_by_score":   False,        # keep canonical E/I, S/N, T/F, J/P axis order
 
+    # `poles` = [low, high]: the label at score 0 and the label at score 100. Its
+    # presence marks the axis as bipolar (the UI renders a centered diverging bar);
+    # unipolar dimensions omit it.
     "sub_dimensions": [
-        {"key": "E_I", "name": "Extraversion ↔ Introversion (0=I, 100=E)"},
-        {"key": "S_N", "name": "Sensing       ↔ Intuition    (0=S, 100=N)"},
-        {"key": "T_F", "name": "Thinking      ↔ Feeling      (0=T, 100=F)"},
-        {"key": "J_P", "name": "Judging       ↔ Perceiving   (0=J, 100=P)"},
+        {"key": "E_I", "name": "Extraversion ↔ Introversion (0=I, 100=E)", "poles": ["I", "E"]},
+        {"key": "S_N", "name": "Sensing       ↔ Intuition    (0=S, 100=N)", "poles": ["S", "N"]},
+        {"key": "T_F", "name": "Thinking      ↔ Feeling      (0=T, 100=F)", "poles": ["T", "F"]},
+        {"key": "J_P", "name": "Judging       ↔ Perceiving   (0=J, 100=P)", "poles": ["J", "P"]},
     ],
     "score_range": [0, 100],
 }
