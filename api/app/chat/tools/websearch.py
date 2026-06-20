@@ -10,10 +10,11 @@ _SCHEMA = {
     "function": {
         "name": "web_search",
         "description": (
-            "Search the live web for current information, or to learn about a "
-            "specific company, role, technology, product, or person the user "
-            "refers to that you do not already know. Use a focused query (not the "
-            "raw user message). Cross-check multiple results before relying on them."
+            "Search the live web for information you may not have or that may be "
+            "out of date — recent events, current data, fast-moving or niche "
+            "topics, anything beyond your training. Use a focused query (not the "
+            "raw user message). Treat results as evidence to weigh and cross-check "
+            "across sources before relying on them."
         ),
         "parameters": {
             "type": "object",
