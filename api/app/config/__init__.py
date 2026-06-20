@@ -40,3 +40,21 @@ def persona_name() -> str:     return os.getenv("VELLUM_PERSONA", "neutral")
 def trait_batch_k() -> int:   return _int("VELLUM_TRAIT_K", 6)
 def summary_span_s() -> int:  return _int("VELLUM_SUMMARY_S", 6)
 def dossier_batch_m() -> int: return _int("VELLUM_DOSSIER_M", 12)
+
+
+# === Web search (optional) ===
+# Off unless a provider AND its key are configured. The chat loop then offers a
+# `web_search` tool the model can call on its own (see chat/tools/websearch.py).
+def web_search_provider() -> str:    return (os.getenv("WEB_SEARCH_PROVIDER") or "").strip().lower()
+def web_search_max_results() -> int: return _int("WEB_SEARCH_MAX_RESULTS", 5)
+def web_search_depth() -> str:       return (os.getenv("WEB_SEARCH_DEPTH") or "basic").strip().lower()
+def web_search_max_hops() -> int:    return _int("WEB_SEARCH_MAX_HOPS", 4)
+
+
+def web_search_enabled() -> bool:
+    """True only when a supported provider AND its credential are present, so an
+    unconfigured deployment behaves exactly as before (tool never advertised)."""
+    provider = web_search_provider()
+    if provider == "tavily":
+        return bool((os.getenv("TAVILY_API_KEY") or "").strip())
+    return False

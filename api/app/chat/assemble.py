@@ -14,6 +14,22 @@ _ALTITUDE = (
     "user, and do not bring up their traits or history unless it is relevant."
 )
 
+# Injected only when web search is configured. Turns the raw tool into a
+# verification discipline — Vellum should reason from sources like a careful
+# analyst, not parrot the first hit.
+_RESEARCH_DISCIPLINE = (
+    "## Using web search\n"
+    "You can search the live web with the `web_search` tool. Use it when the user "
+    "refers to a specific company, role, technology, product, or person you do not "
+    "already know, or when the question needs current information. Search with a "
+    "focused query (you already know facts about the user — use them to make the "
+    "query precise). Cross-check multiple sources; distinguish fact from opinion "
+    "and attribute views (\"X argues …\"); cite sources inline as Markdown links "
+    "[title](url); say so plainly when evidence is thin or sources disagree, and "
+    "do not over-claim. Still answer the current question first — do not search "
+    "reflexively."
+)
+
 
 def _trait_summary() -> str:
     with get_conn() as conn:
@@ -41,6 +57,8 @@ async def build_messages(query: str | None = None) -> list[dict]:
         query = last_user["content"] if last_user else ""
 
     sections = [persona.load(), _ALTITUDE]
+    if config.web_search_enabled():
+        sections.append(_RESEARCH_DISCIPLINE)
 
     dossier = model.get_dossier().strip()
     if dossier:
