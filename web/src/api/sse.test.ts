@@ -21,6 +21,9 @@ describe("parseData", () => {
   it("recognizes [DONE]", () => {
     expect(parseData("data: [DONE]")).toEqual({ type: "done" });
   });
+  it("recognizes an error frame", () => {
+    expect(parseData('data: {"error":"boom"}')).toEqual({ type: "error", message: "boom" });
+  });
   it("ignores non-data / malformed lines", () => {
     expect(parseData(": comment")).toBeNull();
     expect(parseData("data: {not json}")).toBeNull();

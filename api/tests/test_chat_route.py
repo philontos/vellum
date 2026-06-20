@@ -51,3 +51,27 @@ def test_chat_streams_and_persists_both_turns(migrated_db, monkeypatch):
     assert row[0]["completion_tokens"] == 5
     assert row[0]["duration_ms"] == 42
     assert row[0]["reasoning"] == "greet the user"  # reasoning captured
+
+
+def test_chat_stream_emits_error_frame_and_done_when_model_fails(migrated_db, monkeypatch):
+    """If the model stream blows up mid-flight, the client must still get an
+    error frame AND the [DONE] sentinel — otherwise the UI spins forever."""
+    _setup(monkeypatch)
+    import app.chat.respond as respond
+
+    async def boom_stream(messages, tools, **kw):
+        yield {"type": "content_delta", "delta": "partial "}
+        raise RuntimeError("provider exploded")
+
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", boom_stream)
+
+    from app.main import app
+    client = TestClient(app, raise_server_exceptions=False)
+    with client.stream("POST", "/chat", json={"message": "hello"}) as r:
+        assert r.status_code == 200
+        body = "".join(r.iter_text())
+
+    assert "partial " in body                 # the delta sent before the failure
+    assert '"error"' in body                  # failure surfaced as an SSE frame
+    assert "provider exploded" in body
+    assert body.strip().endswith("[DONE]")    # stream is always terminated

@@ -1,4 +1,7 @@
-export type SSEEvent = { type: "delta"; text: string } | { type: "done" };
+export type SSEEvent =
+  | { type: "delta"; text: string }
+  | { type: "error"; message: string }
+  | { type: "done" };
 
 /** Split a buffer into complete `\n\n`-terminated SSE frames + leftover. */
 export function splitFrames(buffer: string): { frames: string[]; rest: string } {
@@ -16,6 +19,7 @@ export function parseData(frame: string): SSEEvent | null {
   try {
     const obj = JSON.parse(payload);
     if (typeof obj.delta === "string") return { type: "delta", text: obj.delta };
+    if (typeof obj.error === "string") return { type: "error", message: obj.error };
     return null;
   } catch {
     return null;
