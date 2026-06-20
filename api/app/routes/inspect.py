@@ -29,7 +29,9 @@ def inspect_model():
     return {
         "dossier": model.get_dossier(),
         "dossier_meta": model.get_dossier_row(),
-        "facts": model.all_facts(),
+        # Active only — consolidation retires merged/contradicted facts, and the
+        # superseded tail would otherwise grow without bound on this page.
+        "facts": model.active_facts(),
         "traits": traits,
     }
 
