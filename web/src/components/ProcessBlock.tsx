@@ -38,28 +38,37 @@ export function ProcessBlock({
         : t("chat.process");
 
   const icon = (s: ActivityItem["status"]) => (s === "running" ? "🔍" : s === "error" ? "✗" : "✓");
+  const thinking = live && !hasContent;
 
   return (
-    <div className="mb-2 rounded-md border border-gold/15 bg-accent/15 text-[12px] text-ink-soft">
+    <div className="mb-2.5 text-[12.5px]">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left opacity-75 hover:opacity-100"
+        className="flex items-center gap-2 text-left text-muted transition-colors hover:text-ink-soft"
       >
-        <span className="text-[10px]">{open ? "▾" : "▸"}</span>
-        <span>{header}</span>
+        {thinking ? (
+          <span className="v-think-dot" aria-hidden />
+        ) : (
+          <span className="text-[9px] opacity-60">{open ? "▾" : "▸"}</span>
+        )}
+        <span className="font-serif italic">{header}</span>
       </button>
       {open && (
-        <div className="flex flex-col gap-1 px-3 pb-2.5">
+        <div className="v-gloss mt-1.5 flex flex-col gap-1">
           {items.map((it, i) => (
-            <div key={i} className="flex items-baseline gap-1.5">
-              <span aria-hidden>{icon(it.status)}</span>
-              <span className="font-mono opacity-80">{it.name}</span>
+            <div key={i} className="flex items-baseline gap-1.5 text-ink-soft/70">
+              <span aria-hidden className="text-[10px] opacity-70">
+                {icon(it.status)}
+              </span>
+              <span className="font-mono text-[11px] opacity-80">{it.name}</span>
               {it.query ? <span className="italic opacity-70">“{it.query}”</span> : null}
             </div>
           ))}
           {hasReasoning && (
-            <div className="mt-1 whitespace-pre-wrap leading-relaxed opacity-65">{reasoning}</div>
+            <div className="whitespace-pre-wrap font-serif italic leading-relaxed text-muted">
+              {reasoning}
+            </div>
           )}
         </div>
       )}
