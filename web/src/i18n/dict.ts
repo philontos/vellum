@@ -9,6 +9,7 @@ export const DICT = {
   en: {
     // nav header
     "nav.chat": "Chat",
+    "nav.diary": "Diary",
     "nav.you": "You",
     "nav.traces": "Traces",
 
@@ -24,6 +25,16 @@ export const DICT = {
     "chat.processLive": "Thinking & searching…",
     "chat.process": "Reasoning & search",
     "chat.searchN": "{n} searches",
+    "chat.olderInDiary": "Earlier messages live in the Diary →",
+
+    // diary (a timeline of past conversation, browsed like a journal)
+    "diary.sub": "Past conversations, by the day",
+    "diary.empty": "No diary yet — entries appear once the background summaries are written.",
+    "diary.loading": "Loading…",
+    "diary.end": "That's the beginning.",
+    "diary.span": "turns {start}–{end}",
+    "diary.open": "Open",
+    "diary.collapse": "Collapse",
 
     // context rail (what Vellum is learning, alongside the conversation)
     "rail.title": "Vellum",
@@ -84,6 +95,7 @@ export const DICT = {
   },
   zh: {
     "nav.chat": "聊天",
+    "nav.diary": "日记",
     "nav.you": "你是谁",
     "nav.traces": "Traces",
 
@@ -97,6 +109,16 @@ export const DICT = {
     "chat.processLive": "思考与检索中…",
     "chat.process": "思考与检索",
     "chat.searchN": "{n} 次搜索",
+    "chat.olderInDiary": "更早的消息在『日记』里 →",
+
+    // diary (一条时间线，像翻日记一样回看过往对话)
+    "diary.sub": "过往的对话，按天回看",
+    "diary.empty": "还没有日记——后台写好摘要后会逐条出现。",
+    "diary.loading": "加载中…",
+    "diary.end": "到头了。",
+    "diary.span": "第 {start}–{end} 轮",
+    "diary.open": "展开",
+    "diary.collapse": "收起",
 
     "rail.title": "Vellum",
     "rail.sub": "它正在拼凑对你的理解",

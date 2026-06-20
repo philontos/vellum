@@ -15,16 +15,31 @@ export function ChatLayout({
   streaming,
   onSend,
   railData,
+  canLoadEarlier,
+  cappedEarlier,
+  onLoadEarlier,
+  onOpenDiary,
 }: {
   messages: Message[];
   streaming: boolean;
   onSend: (text: string) => void;
   railData?: ModelView | null; // omit for the live fetch; inject in the demo
+  canLoadEarlier?: boolean;
+  cappedEarlier?: boolean;
+  onLoadEarlier?: () => void;
+  onOpenDiary?: () => void;
 }) {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-[112rem] flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <MessageList messages={messages} streaming={streaming} />
+        <MessageList
+          messages={messages}
+          streaming={streaming}
+          canLoadEarlier={canLoadEarlier}
+          cappedEarlier={cappedEarlier}
+          onLoadEarlier={onLoadEarlier}
+          onOpenDiary={onOpenDiary}
+        />
         <Composer onSend={onSend} disabled={streaming} />
       </div>
       <ContextRail

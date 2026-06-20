@@ -3,7 +3,7 @@ import { useT } from "../../i18n";
 import { NavItem } from "./NavItem";
 import { PrivacyToggle } from "../PrivacyToggle";
 
-export type View = "chat" | "model" | "traces" | "evals";
+export type View = "chat" | "diary" | "model" | "traces" | "evals";
 
 /** Left navigation rail + main canvas. Owns nav + language toggle; panels fill the canvas. */
 export function AppShell({
@@ -18,6 +18,7 @@ export function AppShell({
   const { t, lang, setLang } = useT();
   const nav: { key: View; label: string }[] = [
     { key: "chat", label: t("nav.chat") },
+    { key: "diary", label: t("nav.diary") },
     { key: "model", label: t("nav.you") },
     { key: "traces", label: t("nav.traces") },
     { key: "evals", label: t("nav.evals") },
