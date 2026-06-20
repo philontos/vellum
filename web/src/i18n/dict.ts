@@ -15,6 +15,7 @@ export const DICT = {
     // composer
     "composer.placeholder": "Say something to it…",
     "composer.send": "Send",
+    "composer.hint": "{key} to send · Enter for a new line",
 
     // chat
     "chat.error": "⚠️ Something went wrong, please retry",
@@ -85,6 +86,7 @@ export const DICT = {
 
     "composer.placeholder": "跟它聊点什么…",
     "composer.send": "发送",
+    "composer.hint": "{key} 发送 · Enter 换行",
 
     "chat.error": "⚠️ 出错了，请重试",
     "chat.you": "你",
