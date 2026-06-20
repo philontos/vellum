@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getHistory, streamChat, type Message } from "../api/client";
+import { applyTool } from "../api/activity";
 import { useT } from "../i18n";
 
 export function useChat() {
@@ -31,13 +32,13 @@ export function useChat() {
     ]);
     streamingRef.current = true;
     setStreaming(true);
+    const patch = (fn: (msg: Message) => Message) =>
+      setMessages((m) => m.map((msg) => (msg.turn === asstTurn ? fn(msg) : msg)));
     try {
-      await streamChat(text, (delta) => {
-        setMessages((m) =>
-          m.map((msg) =>
-            msg.turn === asstTurn ? { ...msg, content: msg.content + delta } : msg,
-          ),
-        );
+      await streamChat(text, {
+        onDelta: (delta) => patch((msg) => ({ ...msg, content: msg.content + delta })),
+        onReasoning: (r) => patch((msg) => ({ ...msg, reasoning: (msg.reasoning ?? "") + r })),
+        onTool: (ev) => patch((msg) => ({ ...msg, activity: applyTool(msg.activity, ev) })),
       });
     } catch (e) {
       console.error("chat stream failed", e);

@@ -2,6 +2,7 @@ import type { Message } from "../api/client";
 import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { Markdown } from "./Markdown";
+import { ProcessBlock } from "./ProcessBlock";
 
 /**
  * One entry in the ledger. The two voices are set off, not bubbled: your words
@@ -42,6 +43,12 @@ export function MessageBubble({
       ) : (
         <div>
           <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
+          <ProcessBlock
+            reasoning={m.reasoning}
+            activity={m.activity}
+            live={live}
+            hasContent={!!m.content}
+          />
           <div className={blur}>
             <Markdown text={m.content || "…"} caret={live && streaming} />
           </div>

@@ -520,6 +520,7 @@ async def chat_with_tools_stream(
 
     Yields events:
       {"type":"content_delta",     "delta": str}
+      {"type":"reasoning_delta",   "delta": str}
       {"type":"tool_call_partial", "index": int, "id": str|None,
                                    "name": str|None, "arguments_delta": str}
       {"type":"done",              "finish_reason": str, "message": dict,
@@ -606,11 +607,12 @@ async def chat_with_tools_stream(
                         if text_delta:
                             content_buf += text_delta
                             yield {"type": "content_delta", "delta": text_delta}
-                        # Reasoning is captured for the trace only — not streamed
-                        # to the user (it's diagnostic, not the answer).
+                        # Reasoning is buffered for the trace AND streamed live so
+                        # the UI can show the model's thinking as it forms.
                         reasoning_delta = _extract_reasoning(delta)
                         if reasoning_delta:
                             reasoning_buf += reasoning_delta
+                            yield {"type": "reasoning_delta", "delta": reasoning_delta}
                         for tc_delta in delta.get("tool_calls") or []:
                             idx = tc_delta.get("index", 0)
                             slot = tc_acc.setdefault(idx, {

@@ -1,4 +1,5 @@
-import { splitFrames, parseData, parseEvalFrame } from "./sse";
+import { splitFrames, parseData, parseEvalFrame, type ToolEvent } from "./sse";
+import type { ActivityItem } from "./activity";
 
 /**
  * Read the next chunk, but reject if nothing arrives within `idleMs` — and abort
@@ -29,6 +30,8 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   created_at?: string; // ISO/sqlite datetime; present from /history, stamped client-side for live turns
+  reasoning?: string; // live-only: the model's thinking for this turn (not persisted; see Traces)
+  activity?: ActivityItem[]; // live-only: tool calls (e.g. web_search) made this turn
 };
 
 export async function getHistory(limit = 200): Promise<Message[]> {
@@ -156,9 +159,15 @@ export async function streamEvalRun(
   }
 }
 
+export type StreamHandlers = {
+  onDelta: (t: string) => void;
+  onReasoning?: (t: string) => void;
+  onTool?: (ev: ToolEvent) => void;
+};
+
 export async function streamChat(
   message: string,
-  onDelta: (t: string) => void,
+  handlers: StreamHandlers,
   opts: { idleTimeoutMs?: number } = {},
 ): Promise<void> {
   const idleMs = opts.idleTimeoutMs ?? 90_000;
@@ -183,7 +192,9 @@ export async function streamChat(
       buffer = rest;
       for (const frame of frames) {
         const ev = parseData(frame);
-        if (ev?.type === "delta") onDelta(ev.text);
+        if (ev?.type === "delta") handlers.onDelta(ev.text);
+        else if (ev?.type === "reasoning") handlers.onReasoning?.(ev.text);
+        else if (ev?.type === "tool") handlers.onTool?.(ev.tool);
         else if (ev?.type === "error") throw new Error(ev.message);
         else if (ev?.type === "done") return;
       }
