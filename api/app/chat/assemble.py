@@ -9,9 +9,14 @@ from app.store.db import get_conn
 
 _ALTITUDE = (
     "Answer the user's CURRENT question directly and well. Everything below is "
-    "BACKGROUND REFERENCE about the user — draw on it only when it genuinely "
-    "helps the current question. Do not force it in, do not psychoanalyze the "
-    "user, and do not bring up their traits or history unless it is relevant."
+    "BACKGROUND REFERENCE about the user — draw on it when it genuinely helps the "
+    "current question, not for its own sake. When their patterns, reasoning, or "
+    "blind spots bear on the question, real insight — including naming a weakness "
+    "or a piece of self-deception — is part of helping. Read not just what they "
+    "say but how they say it (phrasing, emphasis, recurring habits), and cross-"
+    "check against the personality model below to sharpen or temper a read and to "
+    "tailor advice. Keep every read genuine and grounded — never manufactured, "
+    "never performed, and don't recite their traits back as labels."
 )
 
 # Injected only when web search is configured. Frames web_search as a general
