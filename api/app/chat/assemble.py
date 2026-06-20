@@ -14,20 +14,22 @@ _ALTITUDE = (
     "user, and do not bring up their traits or history unless it is relevant."
 )
 
-# Injected only when web search is configured. Turns the raw tool into a
-# verification discipline — Vellum should reason from sources like a careful
-# analyst, not parrot the first hit.
+# Injected only when web search is configured. Frames web_search as a general
+# "stay current / fill knowledge gaps" capability — used broadly, but referenced
+# like a careful analyst: weigh sources, don't parrot the first hit.
 _RESEARCH_DISCIPLINE = (
     "## Using web search\n"
-    "You can search the live web with the `web_search` tool. Use it when the user "
-    "refers to a specific company, role, technology, product, or person you do not "
-    "already know, or when the question needs current information. Search with a "
-    "focused query (you already know facts about the user — use them to make the "
-    "query precise). Cross-check multiple sources; distinguish fact from opinion "
-    "and attribute views (\"X argues …\"); cite sources inline as Markdown links "
-    "[title](url); say so plainly when evidence is thin or sources disagree, and "
-    "do not over-claim. Still answer the current question first — do not search "
-    "reflexively."
+    "You have a fixed knowledge cutoff and your training data can be incomplete or "
+    "out of date. You can search the live web with the `web_search` tool — use it "
+    "freely whenever current, time-sensitive, or outside information would make "
+    "your answer more accurate or complete, or when you are not confident you know "
+    "something (you needn't search what you already know well). Use a focused query "
+    "— you already know facts about the user, so use them to make it precise. Treat "
+    "results as evidence to weigh, not as truth: cross-check across sources, "
+    "distinguish fact from opinion and attribute views (\"X argues …\"), cite "
+    "sources inline as Markdown links [title](url), and say plainly when evidence "
+    "is thin, sources disagree, or you remain unsure. Answer the user's current "
+    "question directly — let search support your answer, not replace your judgment."
 )
 
 
