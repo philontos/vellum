@@ -62,9 +62,9 @@ async def chat(body: ChatIn):
                     prompt_tokens = ev.get("prompt_tokens")
                     completion_tokens = ev.get("completion_tokens")
                     duration_ms = ev.get("duration_ms")
-            ingest.persist_assistant(final)
+            assistant = ingest.persist_assistant(final)
             traces.record(
-                turn=None, stage="chat", model=cfg.get("model"),
+                turn=assistant["turn"], stage="chat", model=cfg.get("model"),
                 params={"provider": cfg.get("provider")},
                 prompt=json.dumps(messages, ensure_ascii=False), output=final,
                 reasoning=reasoning,

@@ -1,32 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { getTraces, patchTrace, type Trace } from "../api/client";
 import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
+import { backgroundPasses, groupRounds } from "./traces/group";
+import { RoundCard } from "./traces/RoundCard";
+import { TraceRow } from "./traces/TraceRow";
 import { Tag } from "./ui/StatusChip";
-import { ReadingBlock } from "./ui/ReadingBlock";
 
-const STAGES = ["", "chat", "facts", "trait", "summary", "dossier"];
-
-// Stage → mark colour (echoes the chat ledger's page-edge marks).
-const STAGE_DOT: Record<string, string> = {
-  chat: "bg-accent",
-  facts: "bg-status-pass-fg",
-  trait: "bg-status-info-fg",
-  summary: "bg-gold",
-  dossier: "bg-status-warn-fg",
-};
+type TabKey = "rounds" | "background";
 
 export function TracesPanel() {
   const { t: tr } = useT();
   const blur = usePrivacyBlur();
-  const [stage, setStage] = useState("");
+  const [tab, setTab] = useState<TabKey>("rounds");
   const [rows, setRows] = useState<Trace[]>([]);
-  const [open, setOpen] = useState<number | null>(null);
 
   async function load() {
-    setRows(await getTraces(stage || undefined));
+    setRows(await getTraces());
   }
-  useEffect(() => { load().catch(() => void 0); }, [stage]);
+  useEffect(() => { load().catch(() => void 0); }, []);
 
   async function pin(t: Trace) {
     await patchTrace(t.id, { pinned: !t.pinned });
@@ -37,75 +29,78 @@ export function TracesPanel() {
     load();
   }
 
+  const rounds = groupRounds(rows);
+  const passes = backgroundPasses(rows);
+
   return (
     <div className="v-canvas flex h-full flex-col">
       <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
-        <select
-          value={stage}
-          onChange={(e) => setStage(e.target.value)}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
-        >
-          {STAGES.map((s) => <option key={s} value={s}>{s || tr("traces.allStages")}</option>)}
-        </select>
+        <div className="flex rounded-lg border border-line bg-surface p-0.5">
+          <TabButton active={tab === "rounds"} onClick={() => setTab("rounds")}>
+            {tr("traces.tabRounds")}
+          </TabButton>
+          <TabButton active={tab === "background"} onClick={() => setTab("background")}>
+            {tr("traces.tabBackground")}
+          </TabButton>
+        </div>
         <button
           onClick={() => load()}
           className="rounded-lg border border-line bg-surface px-3 py-1.5 text-ink-soft transition-colors hover:bg-white/5"
         >
           {tr("traces.refresh")}
         </button>
-        <span className="text-muted">{tr("traces.count", { n: rows.length })}</span>
+        <span className="ml-auto text-muted">
+          {tab === "rounds"
+            ? tr("traces.roundCount", { n: rounds.length })
+            : tr("traces.passCount", { n: passes.length })}
+        </span>
       </div>
+
       <div className="flex-1 overflow-y-auto">
-        {rows.map((t) => (
-          <div key={t.id} className="border-b border-line/70 px-4 py-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => pin(t)}
-                title={tr("traces.pin")}
-                className={t.pinned ? "text-accent" : "text-muted transition-colors hover:text-ink-soft"}
-              >
-                {t.pinned ? "★" : "☆"}
-              </button>
-              <span className={`h-1.5 w-1.5 flex-none rounded-full ${STAGE_DOT[t.stage] ?? "bg-muted"}`} />
-              <Tag>{t.stage}</Tag>
-              <span className="text-ink-soft">{t.model}</span>
-              <span className="font-mono text-[11px] text-muted">
-                {t.prompt_tokens ?? "?"}→{t.completion_tokens ?? "?"} tok · {t.duration_ms ?? "?"}ms
-              </span>
-              {t.reasoning && <span title={tr("traces.hasReasoning")}>🧠</span>}
-              <span className="ml-auto font-mono text-[11px] text-muted">{t.created_at}</span>
-              <button
-                className="text-accent transition-colors hover:text-accent-ink"
-                onClick={() => setOpen(open === t.id ? null : t.id)}
-              >
-                {open === t.id ? tr("traces.collapse") : tr("traces.expand")}
-              </button>
+        {tab === "rounds" ? (
+          rounds.length > 0 ? (
+            rounds.map((r) => (
+              <RoundCard key={r.turn ?? "ungrouped"} round={r} onPin={pin} onNote={note} blur={blur} />
+            ))
+          ) : (
+            <div className="p-8 text-muted">{tr("traces.empty")}</div>
+          )
+        ) : passes.length > 0 ? (
+          passes.map((p) => (
+            <div key={p.id} className="border-b border-line/70 px-4 py-3">
+              <TraceRow
+                trace={p}
+                onPin={pin}
+                onNote={note}
+                blur={blur}
+                badge={<SpanBadge from={p.from} to={p.to} />}
+              />
             </div>
-            {open === t.id && (
-              <div className="mt-3 space-y-3">
-                <input
-                  defaultValue={t.note ?? ""}
-                  placeholder={tr("traces.notePh")}
-                  className={`w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 ${blur}`}
-                  onBlur={(e) => note(t, e.target.value)}
-                />
-                <ReadingBlock label="PROMPT" className={t.prompt ? blur : ""}>
-                  {t.prompt ?? <span className="text-muted">{tr("traces.pruned")}</span>}
-                </ReadingBlock>
-                {t.reasoning && (
-                  <ReadingBlock label="REASONING" className={blur}>
-                    {t.reasoning}
-                  </ReadingBlock>
-                )}
-                <ReadingBlock label="OUTPUT" className={t.output ? blur : ""}>
-                  {t.output ?? <span className="text-muted">{tr("traces.pruned")}</span>}
-                </ReadingBlock>
-              </div>
-            )}
-          </div>
-        ))}
-        {rows.length === 0 && <div className="p-8 text-muted">{tr("traces.empty")}</div>}
+          ))
+        ) : (
+          <div className="p-8 text-muted">{tr("traces.emptyBackground")}</div>
+        )}
       </div>
     </div>
   );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-3 py-1 text-sm transition-colors ${
+        active ? "bg-accent/15 text-accent" : "text-muted hover:text-ink-soft"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** "covers turns from–to (N)" — signals a pass is a roll-up over many turns, not one round. */
+function SpanBadge({ from, to }: { from: number | null; to: number | null }) {
+  const { t: tr } = useT();
+  if (from === null || to === null) return null;
+  return <Tag>{tr("traces.span", { from, to, n: to - from + 1 })}</Tag>;
 }

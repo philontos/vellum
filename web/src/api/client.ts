@@ -91,6 +91,7 @@ export type Trace = {
   prompt_tokens: number | null;
   completion_tokens: number | null; duration_ms: number | null; pinned: number;
   note: string | null; created_at: string;
+  params: string | null; // JSON blob; background passes carry {from,to} covered-span
 };
 
 export async function getModel(): Promise<ModelView> {

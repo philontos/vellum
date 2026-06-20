@@ -53,6 +53,27 @@ def test_chat_streams_and_persists_both_turns(migrated_db, monkeypatch):
     assert row[0]["reasoning"] == "greet the user"  # reasoning captured
 
 
+def test_chat_trace_is_tagged_with_the_assistant_turn(migrated_db, monkeypatch):
+    """The chat trace must carry the round's turn (the assistant message's turn)
+    so the Traces panel can group a round's chat with the facts/etc it triggered.
+    Background traces are already stamped with that same max_turn."""
+    _setup(monkeypatch)
+    from app.main import app
+    from app.store import memory
+    from app.store.traces import get_conn
+
+    client = TestClient(app)
+    with client.stream("POST", "/chat", json={"message": "hello"}) as r:
+        assert r.status_code == 200
+        "".join(r.iter_text())
+
+    assistant_turn = memory.recent_tail(1)[0]["turn"]
+    with get_conn() as conn:
+        rows = conn.execute("SELECT turn FROM traces WHERE stage='chat'").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["turn"] == assistant_turn       # not None — anchored to the round
+
+
 def test_chat_stream_emits_error_frame_and_done_when_model_fails(migrated_db, monkeypatch):
     """If the model stream blows up mid-flight, the client must still get an
     error frame AND the [DONE] sentinel — otherwise the UI spins forever."""
