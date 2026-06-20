@@ -52,6 +52,14 @@ export const DICT = {
     "traces.notePh": "note (good / broken / wrong extraction…)",
     "traces.empty": "No traces yet (chat a bit, wait for background modeling).",
     "traces.pruned": "(pruned by rotation; pin to protect future ones)",
+    "traces.tabRounds": "Rounds",
+    "traces.tabBackground": "Background",
+    "traces.roundCount": "{n} rounds",
+    "traces.passCount": "{n} passes",
+    "traces.roundTurn": "turn {turn}",
+    "traces.ungrouped": "earlier (unkeyed)",
+    "traces.span": "turns {from}–{to} ({n})",
+    "traces.emptyBackground": "No background passes yet (they fire as the conversation grows).",
 
     // evals panel
     "nav.evals": "Evals",
@@ -122,6 +130,14 @@ export const DICT = {
     "traces.notePh": "备注（好/塌了/抽错了…）",
     "traces.empty": "还没有 trace（聊几句、等后台建模触发）。",
     "traces.pruned": "（已滚动清除；pin 可保护未来的）",
+    "traces.tabRounds": "对话轮次",
+    "traces.tabBackground": "后台建模",
+    "traces.roundCount": "{n} 轮",
+    "traces.passCount": "{n} 次",
+    "traces.roundTurn": "turn {turn}",
+    "traces.ungrouped": "更早（未编号）",
+    "traces.span": "turn {from}–{to}（{n} 个）",
+    "traces.emptyBackground": "还没有后台建模（随对话推进才触发）。",
 
     // evals panel
     "nav.evals": "评测",
