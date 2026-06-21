@@ -22,6 +22,38 @@ async def test_build_messages_has_altitude_persona_and_tail(migrated_db, monkeyp
     assert msgs[-1] == {"role": "user", "content": "hello there"}   # tail tail
 
 
+def test_trait_summary_renders_named_bands_with_scores(migrated_db):
+    model.set_trait("ocean", {
+        "O": {"score": 75}, "C": {"score": 71}, "E": {"score": 55},
+        "A": {"score": 69}, "N": {"score": 48},
+    }, sample_count=10)
+    out = assemble._trait_summary()
+    assert "Openness" in out          # full sub-dimension name, not bare "O"
+    assert "high (75)" in out         # >60 → high, score kept
+    assert "moderate (55)" in out     # 40-60 → moderate (Extraversion=55)
+
+
+def test_trait_summary_bipolar_uses_correct_pole(migrated_db):
+    # mbti J_P poles ["J","P"] mean 0=J, 100=P, so 72 leans toward P, NOT J.
+    model.set_trait("mbti", {"J_P": {"score": 72}}, sample_count=5)
+    out = assemble._trait_summary()
+    assert "P (72)" in out
+    assert "J (72)" not in out
+
+
+@pytest.mark.asyncio
+async def test_personality_framing_directs_diagnostic_use(migrated_db, monkeypatch):
+    async def fake_retrieve(q, **kw):
+        return []
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    model.set_trait("ocean", {"O": {"score": 75}}, sample_count=5)
+    memory.append_message("user", "hi")
+    system = (await assemble.build_messages())[0]["content"]
+    assert "How the user tends to be" in system        # new header
+    assert "hypotheses" in system.lower()               # diagnostic frame (unique to trait block)
+    assert "reference only" not in system.lower()        # weak framing removed
+
+
 @pytest.mark.asyncio
 async def test_retrieved_snippets_included(migrated_db, monkeypatch):
     async def fake_retrieve(q, **kw):

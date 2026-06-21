@@ -4,6 +4,7 @@ framed so the model leads with the answer and only leans on them when relevant
 (spec §3 altitude)."""
 from app import config
 from app.chat import persona, retrieval
+from app.config.dimensions_loader import dimension_meta
 from app.store import memory, model
 from app.store.db import get_conn
 
@@ -38,21 +39,69 @@ _RESEARCH_DISCIPLINE = (
 )
 
 
+# Frames the trait block as a diagnostic lens, not décor: use it to understand
+# the user past their own words and to surface blind spots / weak points / mental
+# ruts with sharp, honest help — but treat the scores as hypotheses to test
+# against what they actually say, never as verdicts to recite back.
+_TRAIT_FRAME = (
+    "A measured psychological read of the user. Use it to understand them past "
+    "their own words — to anticipate their blind spots, weak points, and habitual "
+    "thinking patterns. When it matters, name those directly and give sharp, "
+    "honest, genuinely useful help, even when it's uncomfortable. Treat the scores "
+    "as hypotheses to test against what the user actually says, not as verdicts "
+    "about who they are; surface a pattern only when their words bear it out. Never "
+    "recite the traits back as labels."
+)
+
+
+def _band(score: float) -> str:
+    """Deterministic high/moderate/low gloss for a 0-100 unipolar score."""
+    if score > 60:
+        return "high"
+    if score < 40:
+        return "low"
+    return "moderate"
+
+
+def _render_sub(sub: dict, score: float) -> str:
+    """One sub-dimension read: named band for unipolar, pole lean for bipolar.
+    `poles` = [label@0, label@100]; 50 is balanced."""
+    s = round(score)
+    poles = sub.get("poles")
+    if poles:
+        low, high = poles
+        dist = abs(score - 50)
+        if dist <= 10:
+            return f"balanced {low}/{high} ({s})"
+        pole = low if score < 50 else high
+        strength = "leans" if dist <= 25 else "strongly"
+        return f"{strength} {pole} ({s})"
+    return f"{sub['name']}: {_band(score)} ({s})"
+
+
 def _trait_summary() -> str:
     with get_conn() as conn:
         rows = conn.execute("SELECT dimension FROM trait_current").fetchall()
-    parts = []
+    lines = []
     for r in rows:
-        t = model.get_trait(r["dimension"])
+        key = r["dimension"]
+        t = model.get_trait(key)
         if not t:
             continue
         scores = {k: v.get("score") for k, v in t["content_json"].items()
-                  if isinstance(v, dict) and "score" in v}
-        if scores:
-            parts.append(f"{r['dimension']}: " +
-                         " ".join(f"{k}={round(v)}" for k, v in scores.items()
-                                  if v is not None))
-    return "\n".join(parts)
+                  if isinstance(v, dict) and v.get("score") is not None}
+        if not scores:
+            continue
+        meta = dimension_meta(key)
+        if not meta:   # unknown/disabled dimension still on the board — render raw
+            lines.append(f"- {key}: " +
+                         ", ".join(f"{k}={round(v)}" for k, v in scores.items()))
+            continue
+        parts = [_render_sub(sub, scores[sub["key"]])
+                 for sub in meta["sub_dimensions"] if scores.get(sub["key"]) is not None]
+        if parts:
+            lines.append(f"- {meta['name']}: " + ", ".join(parts))
+    return "\n".join(lines)
 
 
 async def build_messages(query: str | None = None) -> list[dict]:
@@ -77,7 +126,7 @@ async def build_messages(query: str | None = None) -> list[dict]:
 
     traits = _trait_summary()
     if traits:
-        sections.append("## Personality signal (reference only)\n" + traits)
+        sections.append("## How the user tends to be\n" + _TRAIT_FRAME + "\n\n" + traits)
 
     if query:
         snips = await retrieval.retrieve(query)
