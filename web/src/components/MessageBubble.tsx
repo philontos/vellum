@@ -17,23 +17,43 @@ export function MessageBubble({
   latest,
   streaming,
   onRetry,
+  onDelete,
 }: {
   m: Message;
   latest: boolean;
   streaming: boolean;
   onRetry?: () => void;
+  onDelete?: (turn: number) => void;
 }) {
   const { t } = useT();
   const blur = usePrivacyBlur();
   const mine = m.role === "user";
   const live = !mine && latest;
+  // A stray retry / debug line can be soft-deleted out of history. Never offer it
+  // on the reply still streaming in — that turn isn't persisted server-side yet.
+  const deletable = !!onDelete && !(live && streaming);
+  const del = () => {
+    if (onDelete && window.confirm(t("chat.deleteConfirm"))) onDelete(m.turn);
+  };
+  const DeleteButton = deletable ? (
+    <button
+      type="button"
+      onClick={del}
+      title={t("chat.delete")}
+      aria-label={t("chat.delete")}
+      className="v-msg-del opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+    >
+      ✕
+    </button>
+  ) : null;
   // The hopping dots are the "nothing has arrived yet" beat — they vanish the
   // instant any text streams in, reasoning and tool activity included.
   const nothingYet = !m.content && !m.reasoning?.trim() && !m.activity?.length;
 
   if (mine) {
     return (
-      <div className="flex justify-end">
+      <div className="group flex items-start justify-end gap-1.5">
+        {DeleteButton}
         <div className="v-slip max-w-[78%]">
           <div className="v-eyebrow v-eyebrow--you">{t("chat.you")}</div>
           <div className={`whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft ${blur}`}>
@@ -45,7 +65,7 @@ export function MessageBubble({
   }
 
   return (
-    <div className="flex justify-start">
+    <div className="group flex items-start justify-start gap-1.5">
       <div className="max-w-[88%]">
         <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
         <ProcessBlock
@@ -78,6 +98,7 @@ export function MessageBubble({
           </div>
         )}
       </div>
+      <div className="pt-5">{DeleteButton}</div>
     </div>
   );
 }

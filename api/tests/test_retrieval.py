@@ -31,6 +31,35 @@ async def test_retrieve_hydrates_neighborhood_including_assistant(migrated_db, m
 
 
 @pytest.mark.asyncio
+async def test_soft_deleted_anchor_is_not_retrieved(migrated_db, monkeypatch):
+    _seed(monkeypatch)
+    u = memory.append_message("user", "should I take the offer")
+    label = memory.add_vector_ref("message", u["id"])
+    VectorStore().add(label, [1.0, 0.0, 0.0])
+    memory.soft_delete(u["turn"])  # its vector stays, but the anchor is gone
+
+    snippets = await retrieval.retrieve("thinking about that offer again", k=5)
+    assert snippets == []  # resolve -> None -> skipped
+
+
+@pytest.mark.asyncio
+async def test_soft_deleted_neighbour_drops_out_of_window(migrated_db, monkeypatch):
+    _seed(monkeypatch)
+    u0 = memory.append_message("user", "should I take the offer")     # turn 0
+    memory.append_message("assistant", "build a financial floor")     # turn 1
+    noise = memory.append_message("user", "debug noise xyz")          # turn 2
+    # anchor the only vector on turn 0 (the offer); a wide window spans turn 2
+    lbl = memory.add_vector_ref("message", u0["id"])
+    VectorStore().add(lbl, [1.0, 0.0, 0.0])
+    memory.soft_delete(noise["turn"])
+
+    snippets = await retrieval.retrieve("that offer", k=5, min_sim=0.0, w=2)
+    text = "\n".join(s["text"] for s in snippets)
+    assert "offer" in text and "financial floor" in text
+    assert "debug noise" not in text
+
+
+@pytest.mark.asyncio
 async def test_threshold_gates_irrelevant(migrated_db, monkeypatch):
     _seed(monkeypatch)
     u = memory.append_message("user", "what is the weather")

@@ -41,6 +41,16 @@ export async function getHistory(opts: { limit?: number; before?: number } = {})
   return (await r.json()).messages;
 }
 
+/**
+ * Soft-delete one history turn (a stray retry or debug line). The server keeps
+ * the row but drops it from every model-facing read path; reversible at the db
+ * level. Idempotent — deleting an unknown/already-gone turn still resolves ok.
+ */
+export async function deleteMessage(turn: number): Promise<void> {
+  const r = await fetch(`/history/${turn}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`delete failed: ${r.status}`);
+}
+
 /** One diary timeline card — a background summary of a conversation span. */
 export type DiaryCard = {
   id: number;
