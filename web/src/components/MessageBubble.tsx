@@ -16,10 +16,12 @@ export function MessageBubble({
   m,
   latest,
   streaming,
+  onRetry,
 }: {
   m: Message;
   latest: boolean;
   streaming: boolean;
+  onRetry?: () => void;
 }) {
   const { t } = useT();
   const blur = usePrivacyBlur();
@@ -61,6 +63,20 @@ export function MessageBubble({
             <Markdown text="…" />
           )}
         </div>
+        {m.failed && (
+          <div className="mt-2 flex items-center gap-3 text-[12px] text-muted">
+            <span>{t("chat.error")}</span>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="font-medium text-accent transition-colors hover:text-accent-ink"
+              >
+                {t("chat.retry")}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

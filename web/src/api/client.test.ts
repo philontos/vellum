@@ -42,6 +42,35 @@ function stalledResponse(onSignal: (s: AbortSignal | undefined) => void) {
   };
 }
 
+/** A fake fetch whose Promise never resolves — the connection hangs before any
+ *  response headers arrive (a half-dead SSH tunnel: TCP up, bytes black-holed). */
+function neverConnects(onSignal: (s: AbortSignal | undefined) => void) {
+  return (_url: string, init?: { signal?: AbortSignal }) => {
+    onSignal(init?.signal);
+    return new Promise<Response>(() => {}); // never resolves
+  };
+}
+
+/** A fake fetch that connects, but whose read() rejects the instant its signal
+ *  aborts — lets a test drive an external stop and observe the rejection. */
+function abortAwareResponse(onSignal: (s: AbortSignal | undefined) => void) {
+  return (_url: string, init?: { signal?: AbortSignal }) => {
+    const signal = init?.signal;
+    onSignal(signal);
+    const reader = {
+      read: () =>
+        new Promise<never>((_, reject) => {
+          const fail = () => reject(new DOMException("aborted", "AbortError"));
+          if (signal?.aborted) fail();
+          else signal?.addEventListener("abort", fail, { once: true });
+        }),
+      cancel: async () => {},
+      releaseLock: () => {},
+    };
+    return Promise.resolve({ ok: true, body: { getReader: () => reader } } as unknown as Response);
+  };
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -137,6 +166,39 @@ describe("streamChat", () => {
     const assertion = expect(p).rejects.toThrow(/timed out/i);
     await vi.advanceTimersByTimeAsync(1000);
     await assertion;
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("aborts and rejects when the connection stalls past the connect timeout", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn(neverConnects((s) => (signal = s))));
+
+    const p = streamChat("hi", { onDelta: () => {} }, { connectTimeoutMs: 1000 });
+    const errP = p.then(
+      () => { throw new Error("expected a connect timeout"); },
+      (e: unknown) => e as Error,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    const e = await errP;
+    expect(e.message).toMatch(/timed out/i);
+    expect(e.name).not.toBe("AbortError"); // a timeout, distinguishable from a manual stop
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("lets the caller stop an in-flight stream via opts.signal", async () => {
+    const outer = new AbortController();
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn(abortAwareResponse((s) => (signal = s))));
+
+    const p = streamChat("hi", { onDelta: () => {} }, { signal: outer.signal });
+    const errP = p.then(
+      () => { throw new Error("expected a manual abort"); },
+      (e: unknown) => e as Error,
+    );
+    outer.abort();
+    const e = await errP;
+    expect(e.name).toBe("AbortError"); // a manual stop, not a failure
     expect(signal?.aborted).toBe(true);
   });
 });

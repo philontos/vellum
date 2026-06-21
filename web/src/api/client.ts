@@ -2,27 +2,20 @@ import { splitFrames, parseData, parseEvalFrame, type ToolEvent } from "./sse";
 import type { ActivityItem } from "./activity";
 
 /**
- * Read the next chunk, but reject if nothing arrives within `idleMs` — and abort
- * the request so a silently-dead connection (e.g. a dropped SSH tunnel that
- * sends no FIN/RST) can't leave the reader hanging forever.
+ * Race a promise against a deadline. If it doesn't settle within `ms`, abort the
+ * request and reject — so a silently-dead connection (e.g. a dropped SSH tunnel
+ * that sends no FIN/RST) can't leave us hanging forever. Guards two phases: the
+ * `connect` (waiting for response headers) and each mid-stream `read` (no data).
  */
-async function readWithTimeout<T>(
-  reader: { read: () => Promise<T> },
-  idleMs: number,
-  ctrl: AbortController,
-): Promise<T> {
+function withDeadline<T>(p: Promise<T>, ms: number, ctrl: AbortController, what: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
+  const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
       ctrl.abort();
-      reject(new Error(`stream timed out after ${idleMs}ms with no data`));
-    }, idleMs);
+      reject(new Error(`${what} timed out after ${ms}ms`));
+    }, ms);
   });
-  try {
-    return await Promise.race([reader.read(), timeout]);
-  } finally {
-    clearTimeout(timer!);
-  }
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
 }
 
 export type Message = {
@@ -32,6 +25,7 @@ export type Message = {
   created_at?: string; // ISO/sqlite datetime; present from /history, stamped client-side for live turns
   reasoning?: string; // live-only: the model's thinking for this turn (not persisted; see Traces)
   activity?: ActivityItem[]; // live-only: tool calls (e.g. web_search) made this turn
+  failed?: boolean; // live-only: this turn's stream failed (timeout/network) — the UI offers a retry
 };
 
 /**
@@ -180,7 +174,7 @@ export async function streamEvalRun(
   let buffer = "";
   try {
     for (;;) {
-      const { value, done } = await readWithTimeout(reader, idleMs, ctrl);
+      const { value, done } = await withDeadline(reader.read(), idleMs, ctrl, "stream");
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const { frames, rest } = splitFrames(buffer);
@@ -208,16 +202,31 @@ export type StreamHandlers = {
 export async function streamChat(
   message: string,
   handlers: StreamHandlers,
-  opts: { idleTimeoutMs?: number } = {},
+  opts: { idleTimeoutMs?: number; connectTimeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<void> {
   const idleMs = opts.idleTimeoutMs ?? 90_000;
+  // The connect phase has its own (shorter) deadline: a half-dead tunnel never
+  // returns response headers, and the idle timeout above only guards reads that
+  // happen *after* fetch() resolves — so without this the request hangs forever.
+  const connectMs = opts.connectTimeoutMs ?? 12_000;
   const ctrl = new AbortController();
-  const r = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-    signal: ctrl.signal,
-  });
+  // Let the caller stop an in-flight stream: their abort funnels into ours so a
+  // manual stop, a connect timeout, and an idle timeout all cancel the one fetch.
+  if (opts.signal) {
+    if (opts.signal.aborted) ctrl.abort();
+    else opts.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
+  const r = await withDeadline(
+    fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+      signal: ctrl.signal,
+    }),
+    connectMs,
+    ctrl,
+    "connection",
+  );
   if (!r.ok || !r.body) throw new Error(`chat failed: ${r.status}`);
 
   const reader = r.body.getReader();
@@ -225,7 +234,7 @@ export async function streamChat(
   let buffer = "";
   try {
     for (;;) {
-      const { value, done } = await readWithTimeout(reader, idleMs, ctrl);
+      const { value, done } = await withDeadline(reader.read(), idleMs, ctrl, "stream");
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const { frames, rest } = splitFrames(buffer);

@@ -16,10 +16,12 @@ export const DICT = {
     // composer
     "composer.placeholder": "Say something to it…",
     "composer.send": "Send",
+    "composer.stop": "Stop",
     "composer.hint": "{key} to send · Enter for a new line",
 
     // chat
-    "chat.error": "⚠️ Something went wrong, please retry",
+    "chat.error": "⚠️ Couldn't reach the backend",
+    "chat.retry": "Retry",
     "chat.you": "You",
     "chat.vellum": "Vellum",
     "chat.processLive": "Thinking & searching…",
@@ -109,9 +111,11 @@ export const DICT = {
 
     "composer.placeholder": "跟它聊点什么…",
     "composer.send": "发送",
+    "composer.stop": "停止",
     "composer.hint": "{key} 发送 · Enter 换行",
 
-    "chat.error": "⚠️ 出错了，请重试",
+    "chat.error": "⚠️ 连不上后端",
+    "chat.retry": "重试",
     "chat.you": "你",
     "chat.vellum": "Vellum",
     "chat.processLive": "思考与检索中…",

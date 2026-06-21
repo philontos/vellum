@@ -7,6 +7,7 @@ import { MessageBubble } from "./MessageBubble";
 export function MessageList({
   messages,
   streaming,
+  onRetry,
   canLoadEarlier = false,
   cappedEarlier = false,
   onLoadEarlier,
@@ -14,6 +15,7 @@ export function MessageList({
 }: {
   messages: Message[];
   streaming: boolean;
+  onRetry?: (turn: number) => void;
   canLoadEarlier?: boolean;
   cappedEarlier?: boolean;
   onLoadEarlier?: () => void;
@@ -108,7 +110,12 @@ export function MessageList({
                   {label}
                 </div>
               )}
-              <MessageBubble m={m} latest={i === lastIdx} streaming={streaming} />
+              <MessageBubble
+                m={m}
+                latest={i === lastIdx}
+                streaming={streaming}
+                onRetry={onRetry ? () => onRetry(m.turn) : undefined}
+              />
             </div>
           );
         })}
