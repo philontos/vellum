@@ -3,14 +3,18 @@
 Single-user, **localhost-only** backend + built web, reached over an **SSH
 tunnel**. No public exposure, no domain, no ICP filing. Mainland-to-mainland.
 
-> **One-command deploy (after the one-time setup in §1):** `deploy/start.sh` builds
-> the web, installs/refreshes the systemd service, and starts it — it does §2–§3
-> for you. Re-run it after every `git pull`.
+> **Every deploy is one command.** After the one-time setup (§1), you pull the
+> code yourself and run:
 > ```bash
+> git pull --ff-only
 > VELLUM_PORT=18090 ./deploy/start.sh   # drop VELLUM_PORT= to use the default 18080
 > ```
-> The numbered steps below document what it does, plus prereqs (§0), data
-> migration (§1), the firewall (§4), tunnel access (§5), and backups (§6).
+> `start.sh` refreshes the backend (venv + Python deps + sqlcipher + schema, via
+> `api/setup.sh` — so a pull that adds requirements is picked up automatically),
+> rebuilds the web, writes/refreshes the systemd unit, and restarts the service
+> (whose startup also applies any new DB migrations). Idempotent — re-run it
+> anytime. The numbered sections below document what it does, plus prereqs (§0),
+> data migration (§1), the firewall (§3), tunnel access (§4), and backups (§5).
 
 ## 0. Prereqs (Debian/Ubuntu VPS)
 - `sudo apt-get install -y python3.12 python3.12-venv libsqlcipher-dev pkg-config git`
@@ -19,14 +23,14 @@ tunnel**. No public exposure, no domain, no ICP filing. Mainland-to-mainland.
   `npm install -g pnpm` (or `corepack enable pnpm`).
 - Decide where it lives and who runs it. The steps below assume `/opt/vellum` and a
   dedicated `vellum` user (cleanest). Running **as root under your home dir** also
-  works — just adjust the paths in `vellum.service` and drop its `User=`/`Group=` lines.
+  works — `start.sh` writes the unit with the user/paths it actually runs as.
 
-## 1. Backend
+## 1. First-time setup (once)
 ```bash
 sudo mkdir -p /opt/vellum && sudo chown vellum:vellum /opt/vellum
 sudo -u vellum git clone <your-repo-url> /opt/vellum
 cd /opt/vellum/api
-./setup.sh        # venv + deps + sqlcipher driver + key handling
+./setup.sh        # venv + deps + sqlcipher driver + key handling + schema
 ```
 - **Brand-new data:** `setup.sh` generates `VELLUM_DB_KEY` and prints it — back it up.
 - **Migrating existing data:** put your **existing** key into `api/.env` *before*
@@ -35,27 +39,32 @@ cd /opt/vellum/api
   `scp` `api/data/vellum.db`).
 
 Fill `api/.env`: `LLM_*`, `EMBED_*`, `VELLUM_DB_KEY`, and (for backups)
-`VELLUM_SYNC_REMOTE`.
+`VELLUM_SYNC_REMOTE`. You own this file — `start.sh` never creates or edits it; it
+only refuses to deploy if it's missing.
 
-## 2. Build the web (served by FastAPI on one origin)
+That's the whole one-time part. From here on, **§2 is every deploy**.
+
+## 2. Deploy / redeploy (every time)
+Default port is **18080**. If it's taken (check `ss -ltn | grep :18080`), pass a
+free one — `start.sh` bakes it into the unit, so use the same port in the tunnel (§4).
 ```bash
-cd /opt/vellum/web && pnpm install && pnpm build   # -> web/dist
+cd /opt/vellum && git pull --ff-only
+VELLUM_PORT=18090 ./deploy/start.sh
+```
+`start.sh` re-runs `api/setup.sh` (picking up any new Python deps), rebuilds the
+web (`pnpm install && pnpm build`), writes `/etc/systemd/system/vellum.service`
+(bound to `127.0.0.1`, auto-restart, boot-start, hardened), `daemon-reload`s,
+enables, and restarts the service — then curls `/health`. The restart applies any
+new DB migrations via the app's startup. Data in `api/data/` is never touched.
+
+Lower-level controls when you don't need a full redeploy:
+```bash
+sudo systemctl restart vellum    # restart now
+sudo systemctl status vellum     # is it running?
+journalctl -u vellum -f          # live logs (Ctrl-C to stop)
 ```
 
-## 3. Install + start the service
-Default port is **18080**. If it's already taken (check `ss -ltn | grep :18080`),
-set a free one in the unit — edit `vellum.service` and change `Environment=VELLUM_PORT=`
-to e.g. `18090` — and use that same port in the tunnel (§5) and the curl below.
-
-```bash
-sudo cp /opt/vellum/deploy/vellum.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now vellum
-systemctl status vellum                     # active (running)
-curl -s http://127.0.0.1:18080/health       # {"status":"ok"}  (use your VELLUM_PORT)
-```
-
-## 4. Lock down the network (the "ACL")
+## 3. Lock down the network (the "ACL")
 - The app binds `127.0.0.1` only (the unit enforces `--host 127.0.0.1`) — it is
   not reachable on the public IP.
 - Firewall: allow inbound **SSH only**.
@@ -67,23 +76,26 @@ curl -s http://127.0.0.1:18080/health       # {"status":"ok"}  (use your VELLUM_
   (If your provider has a cloud security group, mirror it: only 22 inbound.)
 - Optional tighter ACL: restrict SSH source to your usual IP ranges.
 
-## 5. Access from each PC (SSH tunnel)
+## 4. Access from each PC (SSH tunnel)
 ```bash
-# local 18080  ->  VPS 127.0.0.1:<VELLUM_PORT>   (remote = the port you set in §3)
-ssh -N -L 18080:127.0.0.1:18080 <user>@<VPS_IP>
+# local 18888  ->  VPS 127.0.0.1:<VELLUM_PORT>   (remote = the port you deployed with)
+ssh -N -L 18888:127.0.0.1:18090 <user>@<VPS_IP>
 ```
-then open <http://localhost:18080>. Convenience: add a `~/.ssh/config` host +
-a shell alias, or `autossh` / a login launch agent so it reconnects.
+then open <http://localhost:18888>. Convenience: add a `~/.ssh/config` host +
+a shell alias, or `autossh` / a login launch agent so it reconnects. (VS Code's
+port-forwarding works too — forward the VPS port and open the localhost link.)
 
-## 6. Encrypted backups (replaces the multi-device baton)
+## 5. Encrypted backups (replaces the multi-device baton)
 - One-time: create an empty **private** repo; set `VELLUM_SYNC_REMOTE` in `api/.env`.
 - Cron for the `vellum` user (`crontab -e`):
   ```cron
   30 3 * * * /opt/vellum/deploy/backup.sh >> /tmp/vellum-backup.log 2>&1
   ```
+  (`backup.sh` checkpoints + pushes the ciphertext db; override its location with
+  `VELLUM_API_DIR=` if you didn't deploy to `/opt/vellum`.)
 - Confirm the remote only ever holds ciphertext.
 
-## 7. Verification checklist
+## 6. Verification checklist
 - [ ] `sudo reboot` → service comes back (`systemctl status vellum`).
 - [ ] `sudo systemctl kill vellum` (or kill the uvicorn PID) → systemd restarts it.
 - [ ] Second PC via the tunnel: chat works, history loads.
@@ -91,20 +103,3 @@ a shell alias, or `autossh` / a login launch agent so it reconnects.
       out (app is **not** public).
 - [ ] `deploy/backup.sh` runs clean; the remote repo shows only the encrypted
       `vellum.db`.
-
-## 8. Updating / restarting
-
-Update to the latest code and redeploy in one shot — `update.sh` runs `git pull`
-then `start.sh` (rebuild web + refresh unit + restart):
-```bash
-VELLUM_PORT=18090 ./deploy/update.sh     # the port you deployed with
-```
-Or do it by hand: `git pull` then `VELLUM_PORT=18090 ./deploy/start.sh`.
-
-Lower-level controls when you don't need a rebuild:
-```bash
-sudo systemctl restart vellum    # restart now
-sudo systemctl status vellum     # is it running?
-journalctl -u vellum -f          # live logs (Ctrl-C to stop)
-```
-Data isn't touched by an update — it lives in `api/data/` (and your backup remote).
