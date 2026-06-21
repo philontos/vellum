@@ -14,7 +14,9 @@ def test_fact_recall_matcher():
 @pytest.mark.asyncio
 async def test_run_case_uses_real_facts_job(migrated_db, monkeypatch):
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
-        return {"facts": ["allergic to penicillin", "has a sister Lin in Shanghai"]}
+        # cold board -> the integrator returns everything perceived as adds
+        return {"add": ["allergic to penicillin", "has a sister Lin in Shanghai"],
+                "update": [], "retire": []}
     monkeypatch.setattr(ef.facts_job, "chat_json", fake_chat_json)
     case = {"conversation": ["I'm allergic to penicillin; sister Lin in Shanghai"],
             "expect_facts": ["penicillin", "Shanghai"]}
