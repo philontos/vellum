@@ -8,6 +8,7 @@ export function MessageList({
   messages,
   streaming,
   onRetry,
+  onDelete,
   canLoadEarlier = false,
   cappedEarlier = false,
   onLoadEarlier,
@@ -16,6 +17,7 @@ export function MessageList({
   messages: Message[];
   streaming: boolean;
   onRetry?: (turn: number) => void;
+  onDelete?: (turn: number) => void;
   canLoadEarlier?: boolean;
   cappedEarlier?: boolean;
   onLoadEarlier?: () => void;
@@ -115,6 +117,7 @@ export function MessageList({
                 latest={i === lastIdx}
                 streaming={streaming}
                 onRetry={onRetry ? () => onRetry(m.turn) : undefined}
+                onDelete={onDelete}
               />
             </div>
           );

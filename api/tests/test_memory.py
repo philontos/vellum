@@ -70,3 +70,53 @@ def test_cursor_get_and_advance(migrated_db):
 def test_advance_unknown_cursor_raises(migrated_db):
     with pytest.raises(ValueError):
         memory.advance_cursor("nope", 5)
+
+
+def test_soft_delete_hides_from_recent_tail(migrated_db):
+    for i in range(5):
+        memory.append_message("user", f"m{i}")
+    assert memory.soft_delete(2) is True
+    tail = memory.recent_tail(limit=10)
+    assert [m["content"] for m in tail] == ["m0", "m1", "m3", "m4"]
+
+
+def test_soft_delete_hides_from_messages_in_turn_range(migrated_db):
+    for i in range(5):
+        memory.append_message("user", f"m{i}")
+    memory.soft_delete(2)
+    rows = memory.messages_in_turn_range(1, 3)
+    assert [m["turn"] for m in rows] == [1, 3]
+
+
+def test_soft_delete_hides_from_messages_before(migrated_db):
+    for i in range(10):
+        memory.append_message("user", f"m{i}")
+    memory.soft_delete(5)
+    rows = memory.messages_before(before_turn=7, limit=3)
+    # turns 4,5,6 are the window below 7; 5 is deleted so it falls through to 3
+    assert [m["turn"] for m in rows] == [3, 4, 6]
+
+
+def test_soft_delete_hides_from_get_message(migrated_db):
+    msg = memory.append_message("user", "secret debug noise")
+    assert memory.get_message(msg["id"])["content"] == "secret debug noise"
+    memory.soft_delete(msg["turn"])
+    assert memory.get_message(msg["id"]) is None
+
+
+def test_soft_delete_is_idempotent(migrated_db):
+    memory.append_message("user", "m0")
+    assert memory.soft_delete(0) is True
+    assert memory.soft_delete(0) is False  # already gone — no-op
+
+
+def test_soft_delete_unknown_turn_returns_false(migrated_db):
+    assert memory.soft_delete(999) is False
+
+
+def test_soft_delete_does_not_reuse_turn_numbers(migrated_db):
+    memory.append_message("user", "m0")
+    memory.append_message("user", "m1")
+    memory.soft_delete(1)
+    nxt = memory.append_message("user", "m2")
+    assert nxt["turn"] == 2  # MAX(turn)+1 still counts the deleted row

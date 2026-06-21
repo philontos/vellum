@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getHistory, streamChat, type Message } from "../api/client";
+import { getHistory, streamChat, deleteMessage, type Message } from "../api/client";
 import { applyTool } from "../api/activity";
 import { prependEarlier } from "../chat/scrollback";
+import { removeTurn } from "../chat/remove";
 
 // The chat view is a bounded scroll-back: a small first page, more loaded as you
 // scroll up, until CAP — past that, the diary is the way further back.
@@ -140,5 +141,17 @@ export function useChat() {
     void runStream(user.content, asstTurn);
   }
 
-  return { messages, streaming, send, stop, retry, loadEarlier, canLoadEarlier, cappedEarlier };
+  // Soft-delete a stray turn (failed retry, debug noise): tell the server, then
+  // take it out of the view. The server keeps the row, so it's reversible; we
+  // only drop it here once the delete is acknowledged.
+  const remove = useCallback(async (turn: number) => {
+    try {
+      await deleteMessage(turn);
+      setMessages((m) => removeTurn(m, turn));
+    } catch (e) {
+      console.error("delete message failed", e);
+    }
+  }, []);
+
+  return { messages, streaming, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier };
 }

@@ -28,6 +28,8 @@ export const DICT = {
     "chat.process": "Reasoning & search",
     "chat.searchN": "{n} searches",
     "chat.olderInDiary": "Earlier messages live in the Diary →",
+    "chat.delete": "Delete from history",
+    "chat.deleteConfirm": "Delete this message from history? It stops being fed to the model and won't be recalled. This is reversible.",
 
     // diary (a timeline of past conversation, browsed like a journal)
     "diary.sub": "Past conversations, by the day",
@@ -122,6 +124,8 @@ export const DICT = {
     "chat.process": "思考与检索",
     "chat.searchN": "{n} 次搜索",
     "chat.olderInDiary": "更早的消息在『日记』里 →",
+    "chat.delete": "从历史中删除",
+    "chat.deleteConfirm": "把这条消息从历史中删除？它将不再喂给模型、也不会被检索召回。此操作可恢复。",
 
     // diary (一条时间线，像翻日记一样回看过往对话)
     "diary.sub": "过往的对话，按天回看",

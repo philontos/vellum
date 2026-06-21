@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getHistory, getDiary, getDiaryMessages, streamChat, streamEvalRun } from "./client";
+import { getHistory, getDiary, getDiaryMessages, deleteMessage, streamChat, streamEvalRun } from "./client";
 
 /** Stub fetch with a JSON body; captures the requested URLs for assertions. */
 function stubJson(body: unknown): string[] {
@@ -112,6 +112,26 @@ describe("getDiaryMessages", () => {
     const detail = await getDiaryMessages(7);
     expect(urls[0]).toBe("/diary/7");
     expect(detail.messages).toHaveLength(1);
+  });
+});
+
+describe("deleteMessage", () => {
+  it("issues DELETE /history/{turn}", async () => {
+    const calls: Array<{ url: string; method?: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string }) => {
+        calls.push({ url, method: init?.method });
+        return { ok: true, json: async () => ({ ok: true, deleted: true }) } as unknown as Response;
+      }),
+    );
+    await deleteMessage(12);
+    expect(calls[0]).toEqual({ url: "/history/12", method: "DELETE" });
+  });
+
+  it("throws on a non-ok response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response));
+    await expect(deleteMessage(3)).rejects.toThrow(/delete failed: 500/);
   });
 });
 

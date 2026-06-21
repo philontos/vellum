@@ -16,6 +16,7 @@ export function ChatLayout({
   onSend,
   onStop,
   onRetry,
+  onDelete,
   railData,
   canLoadEarlier,
   cappedEarlier,
@@ -27,6 +28,7 @@ export function ChatLayout({
   onSend: (text: string) => void;
   onStop: () => void;
   onRetry: (turn: number) => void;
+  onDelete?: (turn: number) => void;
   railData?: ModelView | null; // omit for the live fetch; inject in the demo
   canLoadEarlier?: boolean;
   cappedEarlier?: boolean;
@@ -40,6 +42,7 @@ export function ChatLayout({
           messages={messages}
           streaming={streaming}
           onRetry={onRetry}
+          onDelete={onDelete}
           canLoadEarlier={canLoadEarlier}
           cappedEarlier={cappedEarlier}
           onLoadEarlier={onLoadEarlier}

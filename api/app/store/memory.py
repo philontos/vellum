@@ -17,38 +17,63 @@ def append_message(role: str, content: str) -> dict:
 
 
 def recent_tail(limit: int) -> list[dict]:
-    """Most recent `limit` messages, returned oldest->newest."""
+    """Most recent `limit` live messages, returned oldest->newest. Soft-deleted
+    turns are excluded (see soft_delete)."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM messages ORDER BY turn DESC LIMIT ?", (limit,)
+            "SELECT * FROM messages WHERE deleted_at IS NULL "
+            "ORDER BY turn DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(r) for r in reversed(rows)]
 
 
 def messages_before(before_turn: int, limit: int) -> list[dict]:
-    """The `limit` messages immediately older than `before_turn` (turn strictly
-    less than it), returned oldest->newest. Keyset page for chat scroll-up."""
+    """The `limit` live messages immediately older than `before_turn` (turn
+    strictly less than it), returned oldest->newest. Keyset page for chat
+    scroll-up; soft-deleted turns are skipped."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM messages WHERE turn < ? ORDER BY turn DESC LIMIT ?",
+            "SELECT * FROM messages WHERE turn < ? AND deleted_at IS NULL "
+            "ORDER BY turn DESC LIMIT ?",
             (before_turn, limit),
         ).fetchall()
     return [dict(r) for r in reversed(rows)]
 
 
 def get_message(message_id: int) -> dict | None:
+    """A single live message by id. Returns None for a soft-deleted turn, which
+    is also how retrieval skips deleted anchors for free (see chat.retrieval)."""
     with get_conn() as conn:
-        row = conn.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM messages WHERE id = ? AND deleted_at IS NULL",
+            (message_id,),
+        ).fetchone()
     return dict(row) if row else None
 
 
 def messages_in_turn_range(start_turn: int, end_turn: int) -> list[dict]:
+    """Live messages whose turn is in [start, end]. Soft-deleted turns drop out
+    of the window, so they never resurface as retrieval neighbours either."""
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM messages WHERE turn BETWEEN ? AND ? ORDER BY turn",
+            "SELECT * FROM messages WHERE turn BETWEEN ? AND ? "
+            "AND deleted_at IS NULL ORDER BY turn",
             (start_turn, end_turn),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def soft_delete(turn: int) -> bool:
+    """Mark a turn deleted so it vanishes from every model-facing read path while
+    its row, turn, and vector stay intact (reversible). Returns True if this call
+    marked a previously-live turn, False if the turn is unknown or already gone."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE messages SET deleted_at = datetime('now') "
+            "WHERE turn = ? AND deleted_at IS NULL",
+            (turn,),
+        )
+        return cur.rowcount > 0
 
 
 def max_turn() -> int:

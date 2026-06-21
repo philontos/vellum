@@ -96,6 +96,26 @@ body {
     padding: 9px 14px 11px;
   }
 
+  /* Delete affordance: a quiet hairline glyph that surfaces on hover of its turn
+     and warms to a muted red only when pointed at — never shouting "destroy". */
+  .v-msg-del {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    border: 1px solid theme("colors.line");
+    background: theme("colors.surface");
+    color: theme("colors.muted");
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, opacity 120ms ease;
+  }
+  .v-msg-del:hover {
+    color: #d0663f;
+    border-color: rgba(208, 102, 63, 0.5);
+  }
+
   /* Vellum's thinking, set as a marginal gloss rather than a boxed callout: a
      soft gold rule down the side, indented like a scribe's note in the margin —
      present, but never competing with the reply it annotates. */

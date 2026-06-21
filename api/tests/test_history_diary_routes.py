@@ -26,6 +26,31 @@ def test_history_without_before_is_recent_tail(migrated_db):
     assert [m["turn"] for m in r.json()["messages"]] == [3, 4]
 
 
+def test_delete_history_hides_turn_from_subsequent_reads(migrated_db):
+    from app.store import memory
+    for i in range(5):
+        memory.append_message("user", f"m{i}")
+    client = _client()
+    r = client.delete("/history/2")
+    assert r.status_code == 200 and r.json() == {"ok": True, "deleted": True}
+    turns = [m["turn"] for m in client.get("/history", params={"limit": 10}).json()["messages"]]
+    assert turns == [0, 1, 3, 4]
+
+
+def test_delete_history_is_idempotent(migrated_db):
+    from app.store import memory
+    memory.append_message("user", "m0")
+    client = _client()
+    assert client.delete("/history/0").json() == {"ok": True, "deleted": True}
+    # second delete is a no-op but still succeeds (idempotent)
+    assert client.delete("/history/0").json() == {"ok": True, "deleted": False}
+
+
+def test_delete_history_unknown_turn_is_ok_noop(migrated_db):
+    r = _client().delete("/history/999")
+    assert r.status_code == 200 and r.json() == {"ok": True, "deleted": False}
+
+
 def test_diary_lists_cards_newest_first_and_paginates(migrated_db):
     from app.store import memory
     ids = [memory.add_summary(i, i + 1, f"day {i}") for i in range(5)]
