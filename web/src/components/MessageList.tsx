@@ -22,17 +22,22 @@ export function MessageList({
   const { t, lang } = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
-  // Follow the stream only while the reader is parked at the bottom. Once they
-  // scroll up to re-read, we never yank the viewport back — no auto-positioning.
+  // Auto-follow the stream by default, but the instant the reader scrolls up we
+  // latch it off for the rest of this turn — we never grab the viewport back,
+  // not even if they scroll to the bottom again. Only a fresh turn appended below
+  // (sending a new message) re-arms the follow. Our own follow only ever scrolls
+  // *down*, so any decrease in scrollTop is the reader taking over.
   const pinned = useRef(true);
+  const lastTop = useRef(0);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (el.scrollTop < lastTop.current) pinned.current = false;
+    lastTop.current = el.scrollTop;
   };
 
   // One layout pass per message change: when an OLDER batch is prepended
-  // (scroll-up) hold the reader's position; otherwise, if parked at the bottom,
+  // (scroll-up) hold the reader's position; otherwise, while still pinned,
   // follow the stream. The two never fight — a prepend means we're up top.
   const prevFirstTurn = useRef<number | undefined>(undefined);
   const prevLen = useRef(0);
@@ -46,11 +51,16 @@ export function MessageList({
       first !== undefined &&
       prevFirstTurn.current !== undefined &&
       first < prevFirstTurn.current;
+    // A new turn appended below (a send, or the initial load) re-arms auto-follow.
+    // Streaming deltas patch the existing message in place, so the count is
+    // unchanged and a mid-turn scroll-up stays latched off.
+    if (messages.length > prevLen.current && !grewAtTop) pinned.current = true;
     if (grewAtTop) {
       el.scrollTop += el.scrollHeight - prevHeight.current; // keep the same content under the viewport
     } else if (pinned.current) {
       el.scrollTop = el.scrollHeight; // instant, no smooth re-centering
     }
+    lastTop.current = el.scrollTop; // our own move is the new baseline, never an "upward" nudge
     prevFirstTurn.current = first;
     prevLen.current = messages.length;
     prevHeight.current = el.scrollHeight;
