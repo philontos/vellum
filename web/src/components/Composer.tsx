@@ -8,7 +8,15 @@ const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 const SEND_KEY = IS_MAC ? "⌘+Enter" : "Ctrl+Enter";
 
-export function Composer({ onSend, disabled }: { onSend: (t: string) => void; disabled: boolean }) {
+export function Composer({
+  onSend,
+  onStop,
+  streaming,
+}: {
+  onSend: (t: string) => void;
+  onStop: () => void;
+  streaming: boolean;
+}) {
   const { t: tr } = useT();
   const [text, setText] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -24,7 +32,7 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
 
   function submit() {
     const t = text.trim();
-    if (disabled || !t) return;
+    if (streaming || !t) return;
     onSend(t);
     setText("");
   }
@@ -52,13 +60,22 @@ export function Composer({ onSend, disabled }: { onSend: (t: string) => void; di
             <span className="select-none pl-1 text-[11px] text-muted">
               {tr("composer.hint", { key: SEND_KEY })}
             </span>
-            <button
-              className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-fg shadow-[0_5px_16px_rgba(208,102,63,0.18)] transition-colors hover:bg-accent-ink disabled:opacity-40"
-              onClick={submit}
-              disabled={disabled || !text.trim()}
-            >
-              {tr("composer.send")}
-            </button>
+            {streaming ? (
+              <button
+                className="rounded-xl border border-line bg-surface px-5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-accent/40 hover:text-ink"
+                onClick={onStop}
+              >
+                {tr("composer.stop")}
+              </button>
+            ) : (
+              <button
+                className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-fg shadow-[0_5px_16px_rgba(208,102,63,0.18)] transition-colors hover:bg-accent-ink disabled:opacity-40"
+                onClick={submit}
+                disabled={!text.trim()}
+              >
+                {tr("composer.send")}
+              </button>
+            )}
           </div>
         </div>
       </div>

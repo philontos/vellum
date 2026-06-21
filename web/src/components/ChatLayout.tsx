@@ -14,6 +14,8 @@ export function ChatLayout({
   messages,
   streaming,
   onSend,
+  onStop,
+  onRetry,
   railData,
   canLoadEarlier,
   cappedEarlier,
@@ -23,6 +25,8 @@ export function ChatLayout({
   messages: Message[];
   streaming: boolean;
   onSend: (text: string) => void;
+  onStop: () => void;
+  onRetry: (turn: number) => void;
   railData?: ModelView | null; // omit for the live fetch; inject in the demo
   canLoadEarlier?: boolean;
   cappedEarlier?: boolean;
@@ -35,12 +39,13 @@ export function ChatLayout({
         <MessageList
           messages={messages}
           streaming={streaming}
+          onRetry={onRetry}
           canLoadEarlier={canLoadEarlier}
           cappedEarlier={cappedEarlier}
           onLoadEarlier={onLoadEarlier}
           onOpenDiary={onOpenDiary}
         />
-        <Composer onSend={onSend} disabled={streaming} />
+        <Composer onSend={onSend} onStop={onStop} streaming={streaming} />
       </div>
       <ContextRail
         turns={messages.length}
