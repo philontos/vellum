@@ -1,120 +1,155 @@
-"""Facts job. Two steps per turn:
+"""Facts job — a board of DURABLE facts about the user, kept converged.
 
-  extract     — pull durable, pinnable facts from the new span (pure; the eval
-                calls extract_facts directly to measure recall).
-  reconcile   — for EACH new fact, one focused LLM call judges it against the full
-                active board plus the conversation it came from, and decides:
-                  add        — genuinely new
-                  duplicate  — already on the board; change nothing
-                  update     — contradicts/supersedes/refines existing fact(s):
-                               store the best replacement, retire the old id(s)
+Every turn, one board-aware LLM call absorbs the new conversation span into the
+whole active board at once (`integrate`): seeing what we already know AND the new
+span (anchored to its real date), the model returns a changeset —
 
-Reconciling one fact at a time (with the raw span and the whole board in view)
-keeps each decision accurate — the model isn't splitting attention across many
-facts, and nothing is hidden by retrieval. This is what keeps the board converged
-and contradiction-free instead of growing without bound. Each fact is best-effort
-and isolated: one failure never blocks the others.
+  add     — genuinely new facts
+  update  — an existing fact restated richer/more precise, or corrected because
+            the conversation contradicts/supersedes it (store the replacement,
+            retire the old id)
+  retire  — a fact that no longer holds and has no replacement
 
-reconcile only acts on the new fact in hand, so it can't reach residual
-old-vs-old redundancy that no new fact happens to touch. So every X turns (gated
+Doing perception and integration as a SINGLE board-aware step is what keeps the
+board from fragmenting: the model never re-adds a fact it can already see, and it
+merges the several facets of one thing said in a conversation into one statement
+instead of emitting near-duplicates. Anchoring the span to a real date is what
+stops it inventing a year/age for relative time ("今年", "年底").
+
+integrate only reasons about the span in hand, so it can't reach residual
+old-vs-old redundancy that no new span happens to touch. So every X turns (gated
 on the turn number, no extra runner) run() also runs a whole-board `compact` pass
-— the downward force that lets the active set actually shrink, not only grow.
-
-Facts are DURABLE anchors (allergies, names, locations, identity). Convergence is
-by redundancy/contradiction, never by age — those anchors are never dropped."""
+— the gentle downward force that lets the active set actually shrink, not only
+grow. Both steps share ONE definition of a good fact (durable, self-contained,
+grounded). Convergence is by redundancy/contradiction, never by age — durable
+anchors (allergies, names, locations, identity) stay forever."""
 from app import config
 from app.llm.client import chat_json
-from app.model_loop._span import span_text
+from app.model_loop._span import span_asof_date, span_text
 from app.store import model
 
-_PROMPT = (
-    "Extract DURABLE, pinnable facts about the user from the conversation span "
-    "below — things worth always remembering: allergies, names of people close to "
-    "them, location, ongoing projects, hard preferences, identity anchors. Do NOT "
-    "extract transient states, opinions in flux, or one-off events. Respond as "
-    "strict JSON: {\"facts\": [\"<short factual statement>\", ...]} (empty list if "
-    "none). Match the user's language.\n\n## Conversation span\n"
+# One shared definition of a good fact, reused by both integration and compaction
+# so "what belongs on the board" can never drift between the two paths.
+_FACT_DEF = (
+    "A good durable fact is:\n"
+    "- DURABLE: allergies, names of close people, location, ongoing projects, hard "
+    "preferences, values, identity anchors — and high-order behavioral observations "
+    "(e.g. 'tends to internalize unresolved value conflicts as self-doubt'). Keep "
+    "these inferred observations; never flatten an insightful one into something "
+    "blander.\n"
+    "- SELF-CONTAINED: when a fact is bound to a time or situation, write that "
+    "premise into the statement itself ('when leaving Foxconn in 2020, interviews "
+    "went poorly at first') — never freeze a time-limited state as a standing fact.\n"
+    "- GROUNDED: record only specifics (dates, ages, numbers, names) actually stated "
+    "in the conversation. Resolve relative time ('this year', 'year-end') against the "
+    "given date. NEVER invent or guess a year or age you were not told.\n"
 )
 
-_RECONCILE_PROMPT = (
-    "You maintain a board of DURABLE facts about a user. A NEW fact was just "
-    "observed. Decide how it reconciles with the existing board, treating the NEW "
-    "fact (and the conversation it came from) as the latest truth.\n\n"
-    "Choose ONE action:\n"
-    "- \"add\": genuinely new — not already represented on the board.\n"
-    "- \"duplicate\": the board already states this; change nothing.\n"
-    "- \"update\": it contradicts, supersedes, or refines one or more existing "
-    "facts (the user moved, changed jobs, reversed a preference, ...). Give the "
-    "single best replacement statement and list the id(s) it retires.\n\n"
-    "Rules: NEVER retire a fact that is still unique and uncontradicted. Do not "
-    "retire by age — durable anchors (allergies, names, locations, identity) stay "
-    "forever. Keep the board concise (ideally <= {target} facts) by preferring "
-    "'update'/merge over piling on near-duplicates, but never drop a unique, "
-    "uncontradicted fact just to hit a number.\n\n"
-    "Respond as strict JSON: {{\"action\": \"add|duplicate|update\", \"text\": "
-    "\"<statement to store; omit for duplicate>\", \"retire\": [<id>, ...]}}. "
+_INTEGRATE_PROMPT = (
+    "You maintain a board of DURABLE facts about a user. Below is the current board "
+    "(each line is 'id. text') and a NEW conversation, as of {date}. Absorb what the "
+    "conversation newly tells you, treating it as the latest truth.\n\n"
+    + _FACT_DEF +
+    "\nReturn a changeset with three lists:\n"
+    "- \"update\": something the board ALREADY represents but that you can now state "
+    "more richly/precisely, OR that the conversation contradicts or supersedes (the "
+    "user moved, changed jobs, reversed a preference). Give {{\"id\": <existing id>, "
+    "\"text\": \"<the single best replacement statement>\"}}. Prefer update over "
+    "adding a near-duplicate.\n"
+    "- \"retire\": ids that are simply no longer true and need no replacement.\n"
+    "- \"add\": genuinely new facts not yet represented on the board.\n\n"
+    "Rules:\n"
+    "- Merge the several facets of the SAME thing seen in this conversation into ONE "
+    "statement — do NOT emit multiple near-duplicate adds.\n"
+    "- Keep DISTINCT facts distinct: different people or different topics never merge "
+    "(a strong-willed mother is not the same fact as a wife firm about parenting).\n"
+    "- Leave untouched any fact the conversation does not bear on. When unsure "
+    "whether something is durable, leave it out of 'add'.\n\n"
+    "Respond as strict JSON: {{\"update\": [{{\"id\": <id>, \"text\": \"...\"}}], "
+    "\"retire\": [<id>, ...], \"add\": [\"...\", ...]}} (use [] for any empty list). "
     "Match the user's language.\n\n"
-    "## New fact\n{fact}\n\n## From this conversation\n{span}\n\n## Existing board\n{board}"
+    "## Board\n{board}\n\n## New conversation (as of {date})\n{span}"
 )
 
 _COMPACT_PROMPT = (
-    "Here is the full board of DURABLE facts about a user. Compact it WITHOUT "
-    "losing information:\n"
-    "- MERGE facts that say the same thing, or where one subsumes another, into a "
-    "single clear statement.\n"
+    "Here is the full board of DURABLE facts about a user. Compact it WITHOUT losing "
+    "information.\n\n"
+    + _FACT_DEF +
+    "\n- MERGE facts that say the same thing, or where one subsumes another, into a "
+    "single clear statement that preserves every distinct detail.\n"
     "- RETIRE a fact only when another fact contradicts or supersedes it.\n"
-    "- NEVER drop a fact that is still unique and uncontradicted. Do NOT retire by "
-    "age — durable anchors (allergies, names, locations, identity) stay forever.\n"
-    "Aim to keep the board under ~{target} facts by merging, but never drop a "
-    "unique, uncontradicted fact just to hit a number. When unsure, leave it.\n\n"
+    "- NEVER drop a fact that is still unique and uncontradicted. Keep DISTINCT facts "
+    "distinct: different people or different topics never merge.\n\n"
     "Respond as strict JSON: {{\"merge\": [{{\"ids\": [<id>, <id>, ...], \"text\": "
     "\"<merged statement>\"}}], \"retire\": [<id>, ...]}} (use [] when nothing "
     "applies; every merge group needs >=2 ids). Match the user's language.\n\n"
-    "## Facts\n{board}"
+    "## Board\n{board}"
 )
 
 
-async def extract_facts(span: str) -> list[str]:
-    """Extract durable facts from a span. Pure compute — NO DB write. The eval
-    calls this directly and measures recall; production `run()` reconciles + persists."""
-    result = await chat_json(system_prompt=_PROMPT + span, user_prompt="", stage="facts")
-    return [f.strip() for f in (result.get("facts") or []) if isinstance(f, str) and f.strip()]
+def _render_board(active: list[dict]) -> str:
+    return "\n".join(f"{f['id']}. {f['text']}" for f in active) or "(empty)"
 
 
-def _apply_decision(decision: dict, active: list[dict], source_turn: int | None) -> None:
-    """Apply one reconcile decision to the active board. Deterministic and
-    defensive: 'duplicate' is a no-op; retire ids must exist; a new statement is
-    added only if non-empty and not an exact duplicate of a surviving fact."""
-    if (decision.get("action") or "").lower() == "duplicate":
-        return
-    valid = {f["id"] for f in active}
-    retire = [i for i in (decision.get("retire") or []) if i in valid]
-    for i in retire:
-        model.supersede_fact(i)
-    text = (decision.get("text") or "").strip()
-    if not text:
-        return
-    survivors = {f["text"].lower() for f in active if f["id"] not in set(retire)}
-    if text.lower() not in survivors:
-        model.add_fact(text, source_turn=source_turn)
+async def _integrate_plan(span: str, as_of_date: str | None, board: list[dict]) -> dict:
+    """The integration brain: one LLM call that sees the whole board AND the dated
+    span, returning an {update, retire, add} changeset. Pure compute — NO DB access
+    (the board is passed in), so the eval can drive it against an empty board."""
+    prompt = _INTEGRATE_PROMPT.format(
+        date=as_of_date or "unknown", board=_render_board(board), span=span)
+    return await chat_json(system_prompt=prompt, user_prompt="", stage="facts")
 
 
-async def reconcile_one(fact: str, span: str, source_turn: int | None) -> None:
-    """Reconcile a single new fact against the full active board. With nothing to
-    reconcile against, the fact is simply added (no LLM call needed)."""
+def _clean_texts(values) -> list[str]:
+    return [v.strip() for v in (values or []) if isinstance(v, str) and v.strip()]
+
+
+async def extract_facts(span: str, as_of_date: str | None = None) -> list[str]:
+    """Pure perception view of the integrator: run it against an EMPTY board, so
+    everything perceived lands as an add, and return that cleaned list. The eval
+    calls this to measure recall over a cold start; production uses `integrate`."""
+    plan = await _integrate_plan(span, as_of_date, [])
+    return _clean_texts(plan.get("add"))
+
+
+def _apply_changeset(plan: dict, active: list[dict], source_turn: int | None) -> None:
+    """Apply one integration changeset to the active board. Deterministic and
+    defensive: an update/retire id must exist and not already be retired; an update
+    needs non-empty text; merged/updated text becomes a fresh row (carrying
+    source_turn); an add is inserted only when it isn't an exact duplicate of a
+    fact that still stands."""
+    by_id = {f["id"]: f for f in active}
+    retired: set = set()
+    for upd in plan.get("update") or []:
+        fid = upd.get("id")
+        text = upd.get("text")
+        text = text.strip() if isinstance(text, str) else ""
+        if fid in by_id and fid not in retired and text:
+            model.supersede_fact(fid)
+            retired.add(fid)
+            model.add_fact(text, source_turn=source_turn)
+    for fid in plan.get("retire") or []:
+        if fid in by_id and fid not in retired:
+            model.supersede_fact(fid)
+            retired.add(fid)
+    survivors = {by_id[i]["text"].lower() for i in by_id if i not in retired}
+    for text in _clean_texts(plan.get("add")):
+        if text.lower() not in survivors:
+            model.add_fact(text, source_turn=source_turn)
+            survivors.add(text.lower())
+
+
+async def integrate(span: str, as_of_date: str | None, source_turn: int | None) -> None:
+    """Absorb one conversation span into the whole active board in a single
+    board-aware LLM call. Lets an LLM failure propagate so the runner leaves the
+    facts cursor put and retries the span next turn, rather than losing it."""
     active = model.active_facts()
-    if not active:
-        model.add_fact(fact, source_turn=source_turn)
-        return
-    board = "\n".join(f"{f['id']}. {f['text']}" for f in active)
-    prompt = _RECONCILE_PROMPT.format(
-        target=config.facts_target_count(), fact=fact, span=span, board=board)
-    decision = await chat_json(system_prompt=prompt, user_prompt="", stage="reconcile")
-    _apply_decision(decision, active, source_turn)
+    plan = await _integrate_plan(span, as_of_date, active)
+    _apply_changeset(plan, active, source_turn)
 
 
 def _apply_compaction(plan: dict, active: list[dict]) -> None:
-    """Apply a whole-board compaction plan. Same defensive shape as a reconcile
+    """Apply a whole-board compaction plan. Same defensive shape as a changeset
     merge: a merge needs >=2 known ids and non-empty text; merged facts become a
     fresh row (source_turn = latest contributing turn) and their originals retire."""
     by_id = {f["id"]: f for f in active}
@@ -138,9 +173,8 @@ async def compact() -> None:
     active = model.active_facts()
     if len(active) < 2:
         return
-    board = "\n".join(f"{f['id']}. {f['text']}" for f in active)
     plan = await chat_json(
-        system_prompt=_COMPACT_PROMPT.format(target=config.facts_target_count(), board=board),
+        system_prompt=_COMPACT_PROMPT.format(board=_render_board(active)),
         user_prompt="", stage="compact")
     _apply_compaction(plan, active)
 
@@ -158,13 +192,5 @@ async def _maybe_compact(end_turn: int) -> None:
 async def run(start_turn: int, end_turn: int) -> None:
     span = span_text(start_turn, end_turn)
     if span.strip():
-        try:
-            new_facts = await extract_facts(span)
-        except Exception:
-            new_facts = []
-        for fact in new_facts:
-            try:
-                await reconcile_one(fact, span, end_turn)
-            except Exception:
-                continue
+        await integrate(span, span_asof_date(start_turn, end_turn), end_turn)
     await _maybe_compact(end_turn)
