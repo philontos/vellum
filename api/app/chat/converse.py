@@ -1,21 +1,61 @@
 """One chat turn, collected into a string — the same brain as POST /chat
 (persist the user turn, assemble context with recall baked in, stream the reply
-through the tool loop, persist the assistant turn) for callers that cannot
-consume an SSE stream, such as the Feishu adapter."""
+through the tool loop, persist the assistant turn, record one diagnostic trace,
+kick off background modeling) for callers that cannot consume an SSE stream,
+such as the Feishu adapter."""
+import asyncio
+import json
+
 from app.chat import assemble, ingest, respond
+from app.llm.client import resolve_structured_llm_config
+from app.model_loop import runner
+from app.store import traces
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _track(task: asyncio.Task) -> None:
+    """Keep a strong ref so a fired-and-forgotten task isn't GC'd mid-flight, and
+    surface its failure instead of swallowing it (mirrors routes/chat.py)."""
+    _background_tasks.add(task)
+
+    def _done(t: asyncio.Task) -> None:
+        _background_tasks.discard(t)
+        if not t.cancelled() and t.exception() is not None:
+            import traceback
+            traceback.print_exception(t.exception())
+
+    task.add_done_callback(_done)
 
 
 async def reply(text: str) -> str:
     """Run `text` through the chat pipeline and return the assistant's reply.
-    Persists both turns so Feishu conversations share vellum's eternal stream
-    with the web UI."""
+    Persists both turns (so Feishu conversations share vellum's eternal stream
+    with the web UI), records one chat trace, and schedules background modeling —
+    the same observability + learning POST /chat performs, just without the SSE."""
     await ingest.persist_user(text)
     messages = await assemble.build_messages(query=text)
+    cfg = resolve_structured_llm_config()
 
     final = ""
+    reasoning = None
+    prompt_tokens = completion_tokens = duration_ms = None
     async for ev in respond.stream(messages):
         if ev["type"] == "final":
             final = ev["content"]
+            reasoning = ev.get("reasoning")
+            prompt_tokens = ev.get("prompt_tokens")
+            completion_tokens = ev.get("completion_tokens")
+            duration_ms = ev.get("duration_ms")
 
-    ingest.persist_assistant(final)
+    assistant = ingest.persist_assistant(final)
+    traces.record(
+        turn=assistant["turn"], stage="chat", model=cfg.get("model"),
+        params={"provider": cfg.get("provider")},
+        prompt=json.dumps(messages, ensure_ascii=False), output=final,
+        reasoning=reasoning,
+        prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+        duration_ms=duration_ms,
+    )
+    _track(asyncio.create_task(runner.run_pending()))  # background, non-blocking
     return final
