@@ -9,15 +9,17 @@ def test_registry_has_web_search_when_enabled(monkeypatch):
     assert "recall_memory" in names
 
 
-def test_registry_omits_web_search_when_disabled(monkeypatch):
+def test_registry_advertises_web_search_even_when_unconfigured(monkeypatch):
+    # Capability is decoupled from credentials: the tool is always offered to the
+    # model; execution fails gracefully when no provider/key is configured.
     monkeypatch.delenv("WEB_SEARCH_PROVIDER", raising=False)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     names = [t["function"]["name"] for t in respond._build_registry().schemas()]
-    assert "web_search" not in names
+    assert "web_search" in names
     assert "recall_memory" in names
 
 
-def test_max_hops_raised_when_web_search_enabled(monkeypatch):
+def test_max_hops_raised_when_web_search_configured(monkeypatch):
     for k in ("WEB_SEARCH_PROVIDER", "TAVILY_API_KEY",
               "VELLUM_RECALL_MAX_HOPS", "WEB_SEARCH_MAX_HOPS"):
         monkeypatch.delenv(k, raising=False)

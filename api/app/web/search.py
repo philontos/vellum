@@ -22,6 +22,13 @@ _DEFAULT_TIMEOUT = float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "20"))
 _TAVILY_URL = "https://api.tavily.com/search"
 
 
+class WebSearchNotConfigured(RuntimeError):
+    """No usable provider/credential. A *configuration* gap, not a runtime fault —
+    so the tool handler can answer the model gracefully ("search isn't available")
+    instead of surfacing a raw error. Genuine provider failures stay as plain
+    exceptions and bubble up to be wrapped as an ERROR result."""
+
+
 @dataclass
 class SearchResult:
     title: str
@@ -31,10 +38,13 @@ class SearchResult:
 
 
 async def search(query: str, *, max_results: int, depth: str) -> list[SearchResult]:
+    """Resolve the configured provider and run the search. Adding a backup
+    provider later is a single `elif` here (each raises WebSearchNotConfigured
+    when its own credential is missing, so callers handle the gap uniformly)."""
     provider = (os.getenv("WEB_SEARCH_PROVIDER") or "").strip().lower()
     if provider == "tavily":
         return await _tavily(query, max_results=max_results, depth=depth)
-    raise RuntimeError(
+    raise WebSearchNotConfigured(
         f"Web search not configured. Set WEB_SEARCH_PROVIDER (got {provider!r})."
     )
 
@@ -42,7 +52,8 @@ async def search(query: str, *, max_results: int, depth: str) -> list[SearchResu
 async def _tavily(query: str, *, max_results: int, depth: str) -> list[SearchResult]:
     api_key = (os.getenv("TAVILY_API_KEY") or "").strip()
     if not api_key:
-        raise RuntimeError("Tavily web search not configured. Set TAVILY_API_KEY.")
+        raise WebSearchNotConfigured(
+            "Tavily web search not configured. Set TAVILY_API_KEY.")
 
     payload = {
         "api_key": api_key,
