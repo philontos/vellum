@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
 import type { Trace } from "../../api/client";
 import { useT } from "../../i18n";
+import { copyText, downloadText } from "../../util/transfer";
 import { Tag } from "../ui/StatusChip";
 import { ReadingBlock } from "../ui/ReadingBlock";
+import { traceFilename, traceToJson } from "./export";
 
 // Stage → mark colour (echoes the chat ledger's page-edge marks).
 const STAGE_DOT: Record<string, string> = {
@@ -29,6 +31,14 @@ export function TraceRow({
 }) {
   const { t: tr } = useT();
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    if (await copyText(traceToJson(trace))) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  }
 
   return (
     <div className="text-sm">
@@ -49,6 +59,20 @@ export function TraceRow({
         </span>
         {trace.reasoning && <span title={tr("traces.hasReasoning")}>🧠</span>}
         <span className="ml-auto font-mono text-[11px] text-muted">{trace.created_at}</span>
+        <button
+          onClick={copy}
+          title={copied ? tr("traces.copied") : tr("traces.copy")}
+          className={copied ? "text-status-pass-fg" : "text-muted transition-colors hover:text-ink-soft"}
+        >
+          {copied ? "✓" : "📋"}
+        </button>
+        <button
+          onClick={() => downloadText(traceFilename(trace), traceToJson(trace))}
+          title={tr("traces.download")}
+          className="text-muted transition-colors hover:text-ink-soft"
+        >
+          ⬇
+        </button>
         <button
           className="text-accent transition-colors hover:text-accent-ink"
           onClick={() => setOpen(!open)}
