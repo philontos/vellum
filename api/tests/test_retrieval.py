@@ -92,3 +92,44 @@ async def test_window_merge_spans_overlapping_turns(migrated_db, monkeypatch):
     assert len(snippets) == 1
     assert "first message alpha" in snippets[0]["text"]
     assert "second message beta" in snippets[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_explained_surfaces_kept_and_near_miss(migrated_db, monkeypatch):
+    """The probe-facing variant keeps per-hit scores and surfaces below-threshold
+    near-misses (kept=False) that plain retrieve() silently drops."""
+    _seed(monkeypatch)
+    # on-topic offer turn (aligned with the "offer" query vector) at turn 0
+    u = memory.append_message("user", "should I take the offer")
+    VectorStore().add(memory.add_vector_ref("message", u["id"]), [1.0, 0.0, 0.0])
+    # off-topic weather turn (orthogonal -> sim ~0 -> below threshold) at turn 1
+    wm = memory.append_message("user", "what is the weather")
+    VectorStore().add(memory.add_vector_ref("message", wm["id"]), [0.0, 1.0, 0.0])
+
+    out = await retrieval.retrieve_explained(
+        "thinking about that offer", k=5, min_sim=0.35, w=0)
+
+    kept = [h for h in out["hits"] if h["kept"]]
+    missed = [h for h in out["hits"] if not h["kept"]]
+    assert len(kept) == 1 and len(missed) == 1
+    assert kept[0]["ref_type"] == "message"
+    assert kept[0]["anchor_turn"] == u["turn"]
+    assert kept[0]["window"] == [u["turn"], u["turn"]]
+    assert kept[0]["sim"] >= 0.35
+    assert missed[0]["sim"] < 0.35
+    # the near-miss is still informative (resolved ref), just not in the windows
+    assert missed[0]["ref_type"] == "message"
+    text = "\n".join(s["text"] for s in out["snippets"])
+    assert "offer" in text and "weather" not in text
+
+
+@pytest.mark.asyncio
+async def test_retrieve_equals_explained_snippets(migrated_db, monkeypatch):
+    """retrieve() is just the snippets of retrieve_explained() — same pipeline."""
+    _seed(monkeypatch)
+    u = memory.append_message("user", "should I take the offer")
+    VectorStore().add(memory.add_vector_ref("message", u["id"]), [1.0, 0.0, 0.0])
+
+    snips = await retrieval.retrieve("that offer", k=5, min_sim=0.0, w=1)
+    out = await retrieval.retrieve_explained("that offer", k=5, min_sim=0.0, w=1)
+    assert snips == out["snippets"]

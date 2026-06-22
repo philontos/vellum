@@ -43,6 +43,19 @@ def inspect_traces(limit: int = 100, stage: str | None = None):
     return {"traces": traces.list_recent(limit=limit, stage=stage)}
 
 
+@router.get("/inspect/probe")
+async def probe(q: str = ""):
+    """Read-only recall inspector. For a query, return the scored retrieval
+    breakdown (kept hits + below-threshold near-misses + snippets) plus the
+    always-in-context durable facts board. Persists nothing — purely diagnostic."""
+    from app.chat import retrieval
+    if q.strip():
+        result = await retrieval.retrieve_explained(q)
+    else:
+        result = {"params": None, "hits": [], "snippets": []}
+    return {"query": q, **result, "facts": model.active_facts()}
+
+
 class TracePatch(BaseModel):
     pinned: bool | None = None
     note: str | None = None

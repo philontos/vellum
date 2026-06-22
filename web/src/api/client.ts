@@ -203,6 +203,35 @@ export async function streamEvalRun(
   }
 }
 
+// --- probe (read-only recall inspector) ----------------------------------
+
+/** One vector hit for a probe query. `kept` = passed the similarity threshold
+ * (so it shaped a recalled window); below-threshold near-misses come back too,
+ * with kept=false, so you can see what *almost* surfaced. */
+export type ProbeHit = {
+  sim: number;
+  kept: boolean;
+  ref_type: "message" | "summary" | null;
+  anchor_turn: number | null;
+  window: [number, number] | null;
+};
+export type ProbeSnippet = { start: number; end: number; text: string };
+export type ProbeResult = {
+  query: string;
+  params: { k: number; min_sim: number; w: number } | null;
+  hits: ProbeHit[];
+  snippets: ProbeSnippet[];
+  facts: Fact[];
+};
+
+/** GET /inspect/probe — read-only: what the recall pipeline surfaces for `q`,
+ * plus the always-in-context durable facts. Persists nothing. */
+export async function probe(q: string): Promise<ProbeResult> {
+  const r = await fetch(`/inspect/probe?q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error(`probe failed: ${r.status}`);
+  return r.json();
+}
+
 export type StreamHandlers = {
   onDelta: (t: string) => void;
   onReasoning?: (t: string) => void;

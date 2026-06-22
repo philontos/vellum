@@ -4,6 +4,7 @@ import { DiaryPanel } from "./components/DiaryPanel";
 import { ModelPanel } from "./components/ModelPanel";
 import { TracesPanel } from "./components/TracesPanel";
 import { EvalPanel } from "./components/EvalPanel";
+import { ProbePanel } from "./components/ProbePanel";
 import { AppShell, type View } from "./components/ui/AppShell";
 import { useChat } from "./hooks/useChat";
 
@@ -30,6 +31,7 @@ export default function App() {
       {view === "diary" && <DiaryPanel />}
       {view === "model" && <ModelPanel />}
       {view === "traces" && <TracesPanel />}
+      {view === "probe" && <ProbePanel />}
       {view === "evals" && <EvalPanel />}
     </AppShell>
   );
