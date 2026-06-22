@@ -95,6 +95,22 @@ export const DICT = {
     "eval.tracesTitle": "Traces",
     "eval.tracePruned": "(no output)",
 
+    // probe — read-only recall inspector (ask a question, see what gets recalled)
+    "nav.probe": "Probe",
+    "probe.placeholder": "Ask anything — see what gets recalled…",
+    "probe.run": "Probe",
+    "probe.running": "Probing…",
+    "probe.empty": "Type a question above to see what your assistant would recall.",
+    "probe.error": "Probe failed.",
+    "probe.retrievedTitle": "Retrieved for this query",
+    "probe.noHits": "Nothing retrieved — no past turn was similar enough.",
+    "probe.belowThreshold": "below threshold",
+    "probe.window": "turns {start}–{end}",
+    "probe.alwaysTitle": "Always in context",
+    "probe.alwaysHint": "These durable facts go in every turn, whatever you ask — they aren't retrieved per question.",
+    "probe.factsFilter": "Filter facts…",
+    "probe.noFacts": "No durable facts on the board (matching the filter).",
+
     // privacy screen (shoulder-surfing mask, NOT encryption)
     "privacy.hidden": "Hidden",
     "privacy.shown": "Shown",
@@ -190,6 +206,22 @@ export const DICT = {
     "eval.casesTitle": "Case 明细",
     "eval.tracesTitle": "Trace",
     "eval.tracePruned": "（无输出）",
+
+    // probe —— 只读召回探查
+    "nav.probe": "探查",
+    "probe.placeholder": "随便问 —— 看会召回什么…",
+    "probe.run": "探查",
+    "probe.running": "探查中…",
+    "probe.empty": "在上面输入一个问题，看看你的助手会召回什么。",
+    "probe.error": "探查失败。",
+    "probe.retrievedTitle": "针对这个问题检索到的",
+    "probe.noHits": "没召回任何东西 —— 没有足够相似的历史。",
+    "probe.belowThreshold": "未过阈值",
+    "probe.window": "第 {start}–{end} 轮",
+    "probe.alwaysTitle": "总是在 context 里",
+    "probe.alwaysHint": "无论你问什么，这些 durable facts 每轮都会带上 —— 它们不按问题检索。",
+    "probe.factsFilter": "过滤 facts…",
+    "probe.noFacts": "看板上没有匹配的 durable facts。",
 
     // privacy screen (shoulder-surfing mask, NOT encryption)
     "privacy.hidden": "已隐藏",
