@@ -113,7 +113,7 @@ async def build_messages(query: str | None = None) -> list[dict]:
         query = last_user["content"] if last_user else ""
 
     sections = [persona.load(), _ALTITUDE]
-    if config.web_search_enabled():
+    if config.web_search_configured():
         sections.append(_RESEARCH_DISCIPLINE)
 
     dossier = model.get_dossier().strip()

@@ -43,11 +43,16 @@ async def _handler(args: dict) -> str:
     query = (args.get("query") or "").strip()
     if not query:
         return "No query provided."
-    results = await web.search(
-        query,
-        max_results=config.web_search_max_results(),
-        depth=config.web_search_depth(),
-    )
+    try:
+        results = await web.search(
+            query,
+            max_results=config.web_search_max_results(),
+            depth=config.web_search_depth(),
+        )
+    except web.WebSearchNotConfigured:
+        # The tool is always advertised; if no provider is wired up, tell the
+        # model plainly so it falls back to its own knowledge instead of stalling.
+        return "Web search is not configured on this deployment, so I couldn't look that up."
     if not results:
         return "No web results found."
     return _format(results)

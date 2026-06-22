@@ -13,16 +13,18 @@ from app.llm import client as llm
 def _build_registry() -> registry.ToolRegistry:
     reg = registry.ToolRegistry()
     recall.register_into(reg)
-    if config.web_search_enabled():
-        websearch.register_into(reg)
+    # web_search is a standing capability — always offered to the model. Whether a
+    # provider/key is actually wired up only affects execution (it fails gracefully
+    # when not) and the prompt/hop tuning below, never whether the tool exists.
+    websearch.register_into(reg)
     return reg
 
 
 def _max_hops() -> int:
     """Tool-loop ceiling. Web search needs more rounds to search → cross-check →
-    answer, so it lifts the recall-only default when enabled."""
+    answer, so it lifts the recall-only default when a provider is configured."""
     hops = config.recall_max_hops()
-    if config.web_search_enabled():
+    if config.web_search_configured():
         hops = max(hops, config.web_search_max_hops())
     return hops
 

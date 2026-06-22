@@ -39,6 +39,17 @@ async def test_web_search_blank_query_short_circuits():
 
 
 @pytest.mark.asyncio
+async def test_web_search_unconfigured_returns_graceful_message(monkeypatch):
+    # No provider configured: the tool is still advertised, but a call should come
+    # back as a clean "not configured" note — never a raw ERROR or an exception.
+    monkeypatch.delenv("WEB_SEARCH_PROVIDER", raising=False)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    out = await websearch._handler({"query": "anything"})
+    assert "ERROR" not in out
+    assert "not configured" in out.lower()
+
+
+@pytest.mark.asyncio
 async def test_web_search_truncates_long_content(monkeypatch):
     long_body = "x" * 5000
 

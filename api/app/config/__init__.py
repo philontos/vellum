@@ -60,9 +60,11 @@ def web_search_depth() -> str:       return (os.getenv("WEB_SEARCH_DEPTH") or "b
 def web_search_max_hops() -> int:    return _int("WEB_SEARCH_MAX_HOPS", 4)
 
 
-def web_search_enabled() -> bool:
-    """True only when a supported provider AND its credential are present, so an
-    unconfigured deployment behaves exactly as before (tool never advertised)."""
+def web_search_configured() -> bool:
+    """True only when a supported provider AND its credential are present. The
+    web_search tool is advertised regardless (capability is decoupled from
+    credentials); this gates execution-readiness — whether to actively encourage
+    search in the prompt and lift the tool-loop hop ceiling."""
     provider = web_search_provider()
     if provider == "tavily":
         return bool((os.getenv("TAVILY_API_KEY") or "").strip())
