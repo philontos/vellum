@@ -205,15 +205,23 @@ export async function streamEvalRun(
 
 // --- probe (read-only recall inspector) ----------------------------------
 
+/** One turn the recall pipeline would hydrate into context. */
+export type ProbeRow = { turn: number; role: "user" | "assistant"; content: string };
+
 /** One vector hit for a probe query. `kept` = passed the similarity threshold
  * (so it shaped a recalled window); below-threshold near-misses come back too,
- * with kept=false, so you can see what *almost* surfaced. */
+ * with kept=false, so you can see what *almost* surfaced. For kept hits, `rows`
+ * is the window this hit would pull (the anchor turn + its neighbours); a summary
+ * hit also carries its `digest` (the text production never re-emits — it recalls
+ * the marked range's raw turns instead). */
 export type ProbeHit = {
   sim: number;
   kept: boolean;
   ref_type: "message" | "summary" | null;
   anchor_turn: number | null;
   window: [number, number] | null;
+  digest: string | null;
+  rows: ProbeRow[];
 };
 export type ProbeSnippet = { start: number; end: number; text: string };
 export type ProbeResult = {
