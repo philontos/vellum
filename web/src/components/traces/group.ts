@@ -5,7 +5,9 @@
 import type { Trace } from "../../api/client";
 
 const ROUND_STAGES = new Set(["chat", "facts"]);
-const BG_STAGES = new Set(["trait", "summary", "dossier"]);
+// compact is a periodic whole-board fact compaction (facts.py, every N turns) —
+// it covers a turn *range* like the other passes, so it belongs in Background.
+const BG_STAGES = new Set(["trait", "summary", "dossier", "compact"]);
 
 /** One conversation round: its chat call plus the facts extraction(s) it triggered. */
 export type Round = { turn: number | null; chat: Trace | null; facts: Trace[] };
