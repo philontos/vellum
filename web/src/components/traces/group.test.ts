@@ -32,12 +32,13 @@ describe("groupRounds", () => {
     expect(rounds.map((r) => r.turn)).toEqual([3, 1]);
   });
 
-  it("ignores background stages (trait/summary/dossier)", () => {
+  it("ignores background stages (trait/summary/dossier/compact)", () => {
     const rounds = groupRounds([
       t({ id: 1, stage: "chat", turn: 1 }),
       t({ id: 2, stage: "trait", turn: 1 }),
       t({ id: 3, stage: "summary", turn: 1 }),
       t({ id: 4, stage: "dossier", turn: 1 }),
+      t({ id: 5, stage: "compact", turn: 1 }),
     ]);
     expect(rounds).toHaveLength(1);
     expect(rounds[0].chat?.id).toBe(1);
@@ -91,6 +92,18 @@ describe("backgroundPasses", () => {
       t({ id: 2, stage: "summary", params: "not json" }),
     ]);
     expect(passes.every((p) => p.from === null && p.to === null)).toBe(true);
+  });
+
+  it("includes compact (whole-board fact compaction) with its covered span", () => {
+    const passes = backgroundPasses([
+      t({ id: 1, stage: "chat", turn: 20 }),
+      t({ id: 2, stage: "facts", turn: 20 }),
+      t({ id: 3, stage: "compact", turn: 20, params: JSON.stringify({ from: 1, to: 20 }) }),
+    ]);
+    expect(passes).toHaveLength(1);
+    expect(passes[0].stage).toBe("compact");
+    expect(passes[0].from).toBe(1);
+    expect(passes[0].to).toBe(20);
   });
 });
 

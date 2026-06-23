@@ -10,6 +10,7 @@ import { traceFilename, traceToJson } from "./export";
 const STAGE_DOT: Record<string, string> = {
   chat: "bg-accent",
   facts: "bg-status-pass-fg",
+  compact: "bg-status-pass-fg", // facts-family green; never shares a tab with facts
   trait: "bg-status-info-fg",
   summary: "bg-gold",
   dossier: "bg-status-warn-fg",
