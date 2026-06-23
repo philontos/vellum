@@ -124,6 +124,47 @@ async def test_retrieve_explained_surfaces_kept_and_near_miss(migrated_db, monke
 
 
 @pytest.mark.asyncio
+async def test_explained_message_hit_carries_window_rows_with_anchor(migrated_db, monkeypatch):
+    """A kept message hit carries the hydrated neighbourhood it would recall —
+    {turn, role, content} rows — with anchor_turn pointing at the matched turn so
+    the probe can highlight it among its (un-highlighted) neighbours. No digest."""
+    _seed(monkeypatch)
+    u = memory.append_message("user", "should I take the offer")          # turn 0 (anchor)
+    memory.append_message("assistant", "build a financial floor first")   # turn 1 (neighbour)
+    VectorStore().add(memory.add_vector_ref("message", u["id"]), [1.0, 0.0, 0.0])
+
+    out = await retrieval.retrieve_explained("that offer", k=5, min_sim=0.0, w=1)
+    hit = next(h for h in out["hits"] if h["kept"])
+    assert hit["ref_type"] == "message" and hit["digest"] is None
+    assert hit["anchor_turn"] == u["turn"]
+    assert [(r["turn"], r["role"]) for r in hit["rows"]] == [(0, "user"), (1, "assistant")]
+    anchor_row = next(r for r in hit["rows"] if r["turn"] == hit["anchor_turn"])
+    assert "offer" in anchor_row["content"]
+
+
+@pytest.mark.asyncio
+async def test_explained_summary_hit_carries_digest_range_and_rows(migrated_db, monkeypatch):
+    """A kept summary hit carries its digest text (otherwise lost), its marked
+    turn range as the window, and the real turns it would hydrate. No anchor."""
+    async def fake_embed(text):
+        return [1.0, 0.0, 0.0]
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
+
+    memory.append_message("user", "alpha one")       # turn 0
+    memory.append_message("assistant", "beta two")   # turn 1
+    sid = memory.add_summary(0, 1, "digest of the span")
+    VectorStore().add(memory.add_vector_ref("summary", sid), [1.0, 0.0, 0.0])
+
+    out = await retrieval.retrieve_explained("anything", k=5, min_sim=0.0, w=3)
+    hit = next(h for h in out["hits"] if h["kept"])
+    assert hit["ref_type"] == "summary"
+    assert hit["anchor_turn"] is None
+    assert hit["digest"] == "digest of the span"
+    assert hit["window"] == [0, 1]
+    assert [(r["turn"], r["content"]) for r in hit["rows"]] == [(0, "alpha one"), (1, "beta two")]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_equals_explained_snippets(migrated_db, monkeypatch):
     """retrieve() is just the snippets of retrieve_explained() — same pipeline."""
     _seed(monkeypatch)

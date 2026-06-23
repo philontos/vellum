@@ -2,8 +2,8 @@
 
 Pipeline: embed(query) -> vector search (scored) -> threshold gate ->
 resolve labels to sources -> hydrate turn-neighbourhoods (message hits pull the
-surrounding window INCLUDING assistant turns; summary hits use the digest +
-optionally its range) -> dedup overlapping windows."""
+surrounding window INCLUDING assistant turns; summary hits pull the raw turns of
+their marked range, NOT the digest text) -> dedup overlapping windows."""
 from app import config
 from app.llm.embed import embed
 from app.store import memory
@@ -27,10 +27,13 @@ async def retrieve_explained(query: str, k: int | None = None,
 
     Same pipeline as retrieve(), but returns per-hit detail — including
     below-threshold near-misses (kept=False) that retrieve() silently drops —
-    alongside the final merged snippets. Shape:
+    alongside the final merged snippets. Each kept hit also carries the turns it
+    would hydrate (`rows`: {turn, role, content}) so the probe can show each hit's
+    own window before the merge; summary hits additionally carry their `digest`
+    (the text production never re-emits — it recalls the range's raw turns). Shape:
       {params: {k, min_sim, w},
-       hits: [{sim, kept, ref_type, anchor_turn, window}],   # nearest first
-       snippets: [{start, end, text}]}"""
+       hits: [{sim, kept, ref_type, anchor_turn, window, digest, rows}],  # nearest first
+       snippets: [{start, end, text}]}                                    # merged, deduped"""
     k = k if k is not None else config.recall_k()
     min_sim = min_sim if min_sim is not None else config.recall_min_sim()
     w = w if w is not None else config.neighborhood_w()
@@ -43,7 +46,7 @@ async def retrieve_explained(query: str, k: int | None = None,
         ref = memory.resolve_vector_ref(label)
         rec = {"sim": sim, "kept": kept,
                "ref_type": ref["ref_type"] if ref else None,
-               "anchor_turn": None, "window": None}
+               "anchor_turn": None, "window": None, "digest": None, "rows": []}
         if kept and ref:
             window, anchor_turn = _window_for(ref, w)
             if window is None:
@@ -51,6 +54,13 @@ async def retrieve_explained(query: str, k: int | None = None,
             else:
                 rec["window"] = list(window)
                 rec["anchor_turn"] = anchor_turn
+                rec["rows"] = [
+                    {"turn": r["turn"], "role": r["role"], "content": r["content"]}
+                    for r in memory.messages_in_turn_range(*window)
+                ]
+                if ref["ref_type"] == "summary":
+                    s = memory.get_summary(ref["ref_id"])
+                    rec["digest"] = s["content"] if s else None
                 windows.append(window)
         detail.append(rec)
 
