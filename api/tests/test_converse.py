@@ -78,6 +78,53 @@ async def test_reply_records_a_chat_trace(migrated_db, monkeypatch):
     assert rows[0]["reasoning"] == "greet the user"
 
 
+async def test_reply_records_tool_calls_in_trace(migrated_db, monkeypatch):
+    """A Feishu turn that calls a tool must persist the calls (name/args/result/
+    ok) on its trace — without this the trace shows no tool activity at all."""
+    import json
+
+    import app.chat.respond as respond
+    from app.chat import converse
+    from app.chat.tools import registry
+    from app.store.traces import get_conn
+
+    _stub_brain(monkeypatch)
+
+    async def tool_then_answer(messages, tools, **kw):
+        if not any(m.get("role") == "tool" for m in messages):
+            msg = {"role": "assistant", "content": None,
+                   "tool_calls": [{"id": "c1", "type": "function",
+                                   "function": {"name": "web_search",
+                                                "arguments": json.dumps({"query": "Q"})}}]}
+            yield {"type": "done", "finish_reason": "tool_calls", "message": msg,
+                   "usage": {}, "duration_ms": 1}
+        else:
+            yield {"type": "content_delta", "delta": "answer"}
+            yield {"type": "done", "finish_reason": "stop",
+                   "message": {"role": "assistant", "content": "answer"},
+                   "usage": {}, "duration_ms": 1}
+
+    def _reg():
+        reg = registry.ToolRegistry()
+        reg.register(
+            schema={"type": "function", "function": {"name": "web_search", "description": "d",
+                    "parameters": {"type": "object", "properties": {}}}},
+            handler=lambda a: "found it",
+        )
+        return reg
+
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", tool_then_answer)
+    monkeypatch.setattr(respond, "_build_registry", _reg)
+
+    await converse.reply("hello")
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT tool_calls FROM traces WHERE stage='chat'").fetchone()
+    assert json.loads(row["tool_calls"]) == [
+        {"name": "web_search", "args": {"query": "Q"}, "result": "found it", "ok": True},
+    ]
+
+
 async def test_reply_triggers_background_modeling(migrated_db, monkeypatch):
     """A Feishu turn must kick off the same background modeling (facts/trait/
     summary/dossier) that POST /chat schedules, so the model keeps learning from

@@ -103,6 +103,7 @@ export type Trace = {
   completion_tokens: number | null; duration_ms: number | null; pinned: number;
   note: string | null; created_at: string;
   params: string | null; // JSON blob; background passes carry {from,to} covered-span
+  tool_calls: string | null; // JSON [{name,args,result,ok}] for the turn; null when none ran or pruned
 };
 
 export async function getModel(): Promise<ModelView> {

@@ -5,10 +5,10 @@
 import type { Trace } from "../../api/client";
 
 /**
- * `prompt` and `params` are stored as JSON *strings*. Expand them into nested
- * structure so the dump reads as real JSON, not escaped-string-in-string. Only
- * objects/arrays are expanded — a plain-text prompt (or any scalar) is left as
- * the raw string, and an unparseable value never throws.
+ * `prompt`, `params` and `tool_calls` are stored as JSON *strings*. Expand them
+ * into nested structure so the dump reads as real JSON, not escaped-string-in-
+ * string. Only objects/arrays are expanded — a plain-text prompt (or any scalar)
+ * is left as the raw string, and an unparseable value never throws.
  */
 function expand(value: string | null): unknown {
   if (value === null) return null;
@@ -20,10 +20,15 @@ function expand(value: string | null): unknown {
   }
 }
 
-/** The whole trace object as pretty-printed JSON, with prompt/params expanded. */
+/** The whole trace object as pretty-printed JSON, with prompt/params/tool_calls expanded. */
 export function traceToJson(trace: Trace): string {
   return JSON.stringify(
-    { ...trace, prompt: expand(trace.prompt), params: expand(trace.params) },
+    {
+      ...trace,
+      prompt: expand(trace.prompt),
+      params: expand(trace.params),
+      tool_calls: expand(trace.tool_calls),
+    },
     null,
     2,
   );

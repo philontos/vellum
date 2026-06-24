@@ -39,11 +39,13 @@ async def reply(text: str) -> str:
 
     final = ""
     reasoning = None
+    tool_calls = None
     prompt_tokens = completion_tokens = duration_ms = None
     async for ev in respond.stream(messages):
         if ev["type"] == "final":
             final = ev["content"]
             reasoning = ev.get("reasoning")
+            tool_calls = ev.get("tool_calls")
             prompt_tokens = ev.get("prompt_tokens")
             completion_tokens = ev.get("completion_tokens")
             duration_ms = ev.get("duration_ms")
@@ -53,7 +55,7 @@ async def reply(text: str) -> str:
         turn=assistant["turn"], stage="chat", model=cfg.get("model"),
         params={"provider": cfg.get("provider")},
         prompt=json.dumps(messages, ensure_ascii=False), output=final,
-        reasoning=reasoning,
+        reasoning=reasoning, tool_calls=tool_calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
         duration_ms=duration_ms,
     )

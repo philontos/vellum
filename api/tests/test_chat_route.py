@@ -74,6 +74,53 @@ def test_chat_trace_is_tagged_with_the_assistant_turn(migrated_db, monkeypatch):
     assert rows[0]["turn"] == assistant_turn       # not None — anchored to the round
 
 
+def test_chat_route_records_tool_calls_in_trace(migrated_db, monkeypatch):
+    """A POST /chat turn that calls a tool must persist the calls on its trace,
+    mirroring the live tool_start/tool_end frames the client already sees."""
+    _setup(monkeypatch)
+    import app.chat.respond as respond
+    from app.chat.tools import registry
+    from app.main import app
+    from app.store.traces import get_conn
+
+    async def tool_then_answer(messages, tools, **kw):
+        if not any(m.get("role") == "tool" for m in messages):
+            msg = {"role": "assistant", "content": None,
+                   "tool_calls": [{"id": "c1", "type": "function",
+                                   "function": {"name": "web_search",
+                                                "arguments": json.dumps({"query": "Q"})}}]}
+            yield {"type": "done", "finish_reason": "tool_calls", "message": msg,
+                   "usage": {}, "duration_ms": 1}
+        else:
+            yield {"type": "content_delta", "delta": "answer"}
+            yield {"type": "done", "finish_reason": "stop",
+                   "message": {"role": "assistant", "content": "answer"},
+                   "usage": {}, "duration_ms": 1}
+
+    def _reg():
+        reg = registry.ToolRegistry()
+        reg.register(
+            schema={"type": "function", "function": {"name": "web_search", "description": "d",
+                    "parameters": {"type": "object", "properties": {}}}},
+            handler=lambda a: "found it",
+        )
+        return reg
+
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", tool_then_answer)
+    monkeypatch.setattr(respond, "_build_registry", _reg)
+
+    client = TestClient(app)
+    with client.stream("POST", "/chat", json={"message": "hello"}) as r:
+        assert r.status_code == 200
+        "".join(r.iter_text())
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT tool_calls FROM traces WHERE stage='chat'").fetchone()
+    assert json.loads(row["tool_calls"]) == [
+        {"name": "web_search", "args": {"query": "Q"}, "result": "found it", "ok": True},
+    ]
+
+
 def test_chat_stream_emits_error_frame_and_done_when_model_fails(migrated_db, monkeypatch):
     """If the model stream blows up mid-flight, the client must still get an
     error frame AND the [DONE] sentinel — otherwise the UI spins forever."""
