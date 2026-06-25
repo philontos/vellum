@@ -5,6 +5,7 @@ import { copyText, downloadText } from "../../util/transfer";
 import { Tag } from "../ui/StatusChip";
 import { ReadingBlock } from "../ui/ReadingBlock";
 import { traceFilename, traceToJson } from "./export";
+import { parseToolCalls } from "./toolcalls";
 
 // Stage → mark colour (echoes the chat ledger's page-edge marks).
 const STAGE_DOT: Record<string, string> = {
@@ -33,6 +34,7 @@ export function TraceRow({
   const { t: tr } = useT();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const toolCalls = parseToolCalls(trace.tool_calls);
 
   async function copy() {
     if (await copyText(traceToJson(trace))) {
@@ -59,6 +61,7 @@ export function TraceRow({
           {trace.prompt_tokens ?? "?"}→{trace.completion_tokens ?? "?"} tok · {trace.duration_ms ?? "?"}ms
         </span>
         {trace.reasoning && <span title={tr("traces.hasReasoning")}>🧠</span>}
+        {toolCalls.length > 0 && <span title={tr("traces.hasTools")}>🔧</span>}
         <span className="ml-auto font-mono text-[11px] text-muted">{trace.created_at}</span>
         <button
           onClick={copy}
@@ -96,6 +99,31 @@ export function TraceRow({
             <ReadingBlock label="REASONING" className={blur}>
               {trace.reasoning}
             </ReadingBlock>
+          )}
+          {toolCalls.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+                {tr("traces.toolCalls")}
+              </div>
+              {toolCalls.map((c, i) => (
+                <div key={i} className="space-y-1.5 border-l-2 border-line pl-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className={c.ok === false ? "text-status-fail-fg" : "text-status-pass-fg"}>
+                      {c.ok === false ? "✗" : "✓"}
+                    </span>
+                    <span className="font-mono text-ink-soft">{c.name}</span>
+                  </div>
+                  <ReadingBlock label="ARGS" className={blur}>
+                    {c.raw_args ?? JSON.stringify(c.args ?? {}, null, 2)}
+                  </ReadingBlock>
+                  {c.result != null && (
+                    <ReadingBlock label="RESULT" className={blur}>
+                      {c.result}
+                    </ReadingBlock>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
           <ReadingBlock label="OUTPUT" className={trace.output ? blur : ""}>
             {trace.output ?? <span className="text-muted">{tr("traces.pruned")}</span>}

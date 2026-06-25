@@ -8,6 +8,7 @@ function t(p: Partial<Trace> & { id: number; stage: string }): Trace {
     turn: null, model: "m", prompt: null, output: null, reasoning: null,
     prompt_tokens: null, completion_tokens: null, duration_ms: null,
     pinned: 0, note: null, created_at: "2026-06-20 10:00:00", params: null,
+    tool_calls: null,
     ...p,
   };
 }
@@ -29,6 +30,21 @@ describe("traceToJson", () => {
     const params = JSON.stringify({ from: 10, to: 12 });
     const out = JSON.parse(traceToJson(t({ id: 1, stage: "trait", params })));
     expect(out.params).toEqual({ from: 10, to: 12 });
+  });
+
+  it("expands the tool_calls blob into a nested array", () => {
+    const tool_calls = JSON.stringify([
+      { name: "web_search", args: { query: "X" }, result: "[1] R", ok: true },
+    ]);
+    const out = JSON.parse(traceToJson(t({ id: 1, stage: "chat", tool_calls })));
+    expect(out.tool_calls).toEqual([
+      { name: "web_search", args: { query: "X" }, result: "[1] R", ok: true },
+    ]);
+  });
+
+  it("keeps a pruned (null) tool_calls as null", () => {
+    const out = JSON.parse(traceToJson(t({ id: 1, stage: "chat", tool_calls: null })));
+    expect(out.tool_calls).toBeNull();
   });
 
   it("keeps a pruned (null) prompt/output as null", () => {

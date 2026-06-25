@@ -3,9 +3,11 @@
 decoupled from the personal-model data and can be retained/consumed independently.
 
 Schema is created lazily on first connect (CREATE TABLE IF NOT EXISTS) — there is
-no separate migration runner for this DB. The `traces` table lives here (the raw
-trace DAO in app.store.traces opens its connection through this module); eval_runs
-and eval_results are the panel's durable records."""
+no separate migration runner for this DB. Columns added to an existing table
+(CREATE IF NOT EXISTS can't grow one) are reconciled by `_ensure_columns` on the
+same first-connect path. The `traces` table lives here (the raw trace DAO in
+app.store.traces opens its connection through this module); eval_runs and
+eval_results are the panel's durable records."""
 import json
 from contextlib import contextmanager
 
@@ -31,6 +33,7 @@ CREATE TABLE IF NOT EXISTS traces (
   note               TEXT,
   eval_run_id        INTEGER,           -- FK -> eval_runs.id; chat traces are NULL
   eval_case          TEXT,              -- case name for eval traces; chat traces NULL
+  tool_calls         TEXT,              -- JSON [{name,args,result,ok}] for the turn; heavy, pruned
   created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_traces_created  ON traces(created_at);
@@ -66,6 +69,16 @@ CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(run_id);
 _initialized: set[str] = set()
 
 
+def _ensure_columns(conn) -> None:
+    """Add columns introduced after a DB was first created — CREATE TABLE IF NOT
+    EXISTS leaves an existing table untouched, and there is no migration runner.
+    Each ALTER is idempotent (gated on the live column set), so this is safe to
+    run on every first connect."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(traces)")}
+    if "tool_calls" not in cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN tool_calls TEXT")
+
+
 def _connect() -> _sqlite.Connection:
     p = observability_db_path()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +88,7 @@ def _connect() -> _sqlite.Connection:
     key = str(p)
     if key not in _initialized:
         conn.executescript(_SCHEMA)
+        _ensure_columns(conn)
         conn.commit()
         _initialized.add(key)
     return conn

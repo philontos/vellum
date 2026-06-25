@@ -35,6 +35,10 @@ async def stream(messages: list[dict]):
     convo = list(messages)
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
+    # Every executed tool call across all hops, for the whole-turn trace. The
+    # live stream only carries name/query/ok; here we keep the full args + result
+    # so the trace is a diagnostic record, not just a breadcrumb.
+    tool_calls: list[dict] = []
     # Accumulate usage/latency across tool-loop hops so the chat trace reflects
     # the whole turn (every round-trip), not just the last one.
     prompt_tokens = completion_tokens = duration_ms = 0
@@ -69,16 +73,22 @@ async def stream(messages: list[dict]):
         # tool_start/tool_end bracket each call so the UI can show the activity.
         for tc in assistant_msg.get("tool_calls") or []:
             fn = tc["function"]
+            raw_args = fn.get("arguments")
             try:
-                args = json.loads(fn.get("arguments") or "{}")
+                parsed = json.loads(raw_args or "{}")
             except json.JSONDecodeError:
-                args = {}
-            query = args.get("query") if isinstance(args, dict) else None
+                parsed = None
+            args = parsed if isinstance(parsed, dict) else {}
+            query = args.get("query")
             yield {"type": "tool_start", "name": fn["name"], "query": query or ""}
             result = await reg.adispatch(fn["name"], args)
             ok = not (isinstance(result, str) and result.startswith("ERROR"))
             yield {"type": "tool_end", "name": fn["name"], "ok": ok}
             convo.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+            rec = {"name": fn["name"], "args": args, "result": result, "ok": ok}
+            if not isinstance(parsed, dict):   # malformed/non-object args — keep the raw blob
+                rec["raw_args"] = raw_args
+            tool_calls.append(rec)
 
     # `or None` keeps "unknown" semantics for providers that don't report usage
     # (the trace card renders None as `?`); duration is always measured.
@@ -86,6 +96,7 @@ async def stream(messages: list[dict]):
         "type": "final",
         "content": "".join(content_parts),
         "reasoning": "\n\n".join(reasoning_parts) or None,
+        "tool_calls": tool_calls or None,
         "prompt_tokens": prompt_tokens or None,
         "completion_tokens": completion_tokens or None,
         "duration_ms": duration_ms or None,

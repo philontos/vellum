@@ -8,6 +8,7 @@ function t(p: Partial<Trace> & { id: number; stage: string }): Trace {
     turn: null, model: "m", prompt: null, output: null, reasoning: null,
     prompt_tokens: null, completion_tokens: null, duration_ms: null,
     pinned: 0, note: null, created_at: "2026-06-20 10:00:00", params: null,
+    tool_calls: null,
     ...p,
   };
 }
