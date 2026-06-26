@@ -13,6 +13,8 @@ import { ContextRail } from "./ContextRail";
 export function ChatLayout({
   messages,
   streaming,
+  persona,
+  onPersonaChange,
   onSend,
   onStop,
   onRetry,
@@ -25,6 +27,8 @@ export function ChatLayout({
 }: {
   messages: Message[];
   streaming: boolean;
+  persona?: string;
+  onPersonaChange?: (p: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
   onRetry: (turn: number) => void;
@@ -48,7 +52,13 @@ export function ChatLayout({
           onLoadEarlier={onLoadEarlier}
           onOpenDiary={onOpenDiary}
         />
-        <Composer onSend={onSend} onStop={onStop} streaming={streaming} />
+        <Composer
+          onSend={onSend}
+          onStop={onStop}
+          streaming={streaming}
+          persona={persona}
+          onPersonaChange={onPersonaChange}
+        />
       </div>
       <ContextRail
         turns={messages.length}

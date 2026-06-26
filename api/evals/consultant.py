@@ -46,7 +46,7 @@ async def _model_reply(messages: list[dict]) -> str:
 
 
 async def run_probe(probe: dict) -> dict:
-    system = persona.load()
+    system = persona.load().voice
     if probe.get("context"):
         system += "\n\n## Background on the user\n" + probe["context"]
     messages = [

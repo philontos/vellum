@@ -8,7 +8,8 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.chat import assemble, ingest, respond
+from app import config
+from app.chat import assemble, ingest, persona, respond
 from app.llm.client import resolve_structured_llm_config
 from app.model_loop import runner
 from app.store import traces
@@ -32,12 +33,16 @@ def _track(task: asyncio.Task) -> None:
 
 class ChatIn(BaseModel):
     message: str
+    persona: str | None = None  # prompt-side mode; unknown/None falls back to the default
 
 
 @router.post("/chat")
 async def chat(body: ChatIn):
+    # Validate against the known modes; an unknown value quietly uses the default
+    # so a stale client can never wedge the chat on a missing persona.
+    pname = body.persona if body.persona in persona.available() else config.persona_name()
     await ingest.persist_user(body.message)
-    messages = await assemble.build_messages(query=body.message)
+    messages = await assemble.build_messages(query=body.message, persona_name=pname)
     cfg = resolve_structured_llm_config()
 
     async def gen():
@@ -67,7 +72,7 @@ async def chat(body: ChatIn):
             assistant = ingest.persist_assistant(final)
             traces.record(
                 turn=assistant["turn"], stage="chat", model=cfg.get("model"),
-                params={"provider": cfg.get("provider")},
+                params={"provider": cfg.get("provider"), "persona": pname},
                 prompt=json.dumps(messages, ensure_ascii=False), output=final,
                 reasoning=reasoning, tool_calls=tool_calls,
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,

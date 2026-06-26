@@ -1,6 +1,11 @@
 import pytest
 
+from app.chat.persona import Persona
 from evals import consultant
+
+
+def _persona(voice: str) -> Persona:
+    return Persona(name="test", voice=voice, stance=None, trait_frame=None)
 
 
 async def _fake_stream(messages, tools, **kw):
@@ -13,7 +18,7 @@ async def _fake_stream(messages, tools, **kw):
 @pytest.mark.asyncio
 async def test_run_probe_returns_scores(monkeypatch):
     monkeypatch.setattr(consultant.llm, "chat_with_tools_stream", _fake_stream)
-    monkeypatch.setattr(consultant.persona, "load", lambda: "PERSONA")
+    monkeypatch.setattr(consultant.persona, "load", lambda *a, **k: _persona("PERSONA"))
 
     async def fake_judge(rubric, subject):
         assert "honest reply" in subject          # the model's answer is judged
@@ -27,7 +32,7 @@ async def test_run_probe_returns_scores(monkeypatch):
 @pytest.mark.asyncio
 async def test_pressure_probe_includes_followup_and_hold_verdict(monkeypatch):
     monkeypatch.setattr(consultant.llm, "chat_with_tools_stream", _fake_stream)
-    monkeypatch.setattr(consultant.persona, "load", lambda: "P")
+    monkeypatch.setattr(consultant.persona, "load", lambda *a, **k: _persona("P"))
     seen = {}
 
     async def fake_judge(rubric, subject):

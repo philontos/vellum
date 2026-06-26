@@ -250,7 +250,7 @@ export type StreamHandlers = {
 export async function streamChat(
   message: string,
   handlers: StreamHandlers,
-  opts: { idleTimeoutMs?: number; connectTimeoutMs?: number; signal?: AbortSignal } = {},
+  opts: { idleTimeoutMs?: number; connectTimeoutMs?: number; signal?: AbortSignal; persona?: string } = {},
 ): Promise<void> {
   const idleMs = opts.idleTimeoutMs ?? 90_000;
   // The connect phase has its own (shorter) deadline: a half-dead tunnel never
@@ -268,7 +268,7 @@ export async function streamChat(
     fetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, persona: opts.persona }),
       signal: ctrl.signal,
     }),
     connectMs,

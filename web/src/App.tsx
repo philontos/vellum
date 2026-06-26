@@ -10,7 +10,7 @@ import { useChat } from "./hooks/useChat";
 
 export default function App() {
   const [view, setView] = useState<View>("chat");
-  const { messages, streaming, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier } = useChat();
+  const { messages, streaming, persona, setPersona, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier } = useChat();
 
   return (
     <AppShell view={view} onChange={setView}>
@@ -18,6 +18,8 @@ export default function App() {
         <ChatLayout
           messages={messages}
           streaming={streaming}
+          persona={persona}
+          onPersonaChange={setPersona}
           onSend={send}
           onStop={stop}
           onRetry={retry}
