@@ -22,6 +22,21 @@ async def test_build_messages_has_altitude_persona_and_tail(migrated_db, monkeyp
     assert msgs[-1] == {"role": "user", "content": "hello there"}   # tail tail
 
 
+@pytest.mark.asyncio
+async def test_counseling_persona_swaps_voice_stance_and_trait_frame(migrated_db, monkeypatch):
+    async def fake_retrieve(q, **kw):
+        return []
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    model.set_trait("ocean", {"O": {"score": 75}}, sample_count=5)
+    memory.append_message("user", "i feel stuck")
+    system = (await assemble.build_messages(persona_name="freud"))[0]["content"]
+    assert "psychoanalyst" in system.lower()                 # freud voice in play
+    assert "evenly-suspended attention" in system.lower()    # freud stance replaced the default altitude
+    assert assemble._ALTITUDE not in system                  # default altitude gone for this mode
+    assert assemble._TRAIT_FRAME not in system               # default trait frame replaced too
+    assert "silent formulation" in system.lower()            # freud's clinical-lens trait frame in its place
+
+
 def test_trait_summary_renders_named_bands_with_scores(migrated_db):
     model.set_trait("ocean", {
         "O": {"score": 75}, "C": {"score": 71}, "E": {"score": 55},

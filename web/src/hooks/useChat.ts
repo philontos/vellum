@@ -10,9 +10,18 @@ const INITIAL_LOAD = 30;
 const PAGE = 30;
 const CAP = 100;
 
+// Prompt-side mode, chosen in the composer and sent with each turn. Persisted so a
+// reload keeps the selected mode. Must match a persona folder name on the backend.
+const PERSONA_KEY = "vellum.persona";
+const DEFAULT_PERSONA = "neutral";
+
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [persona, setPersonaState] = useState<string>(
+    () => localStorage.getItem(PERSONA_KEY) || DEFAULT_PERSONA,
+  );
+  const personaRef = useRef(persona);
   const [canLoadEarlier, setCanLoadEarlier] = useState(false);
   const [cappedEarlier, setCappedEarlier] = useState(false);
   const streamingRef = useRef(false);
@@ -28,6 +37,18 @@ export function useChat() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Mirror persona into a ref so the in-flight stream reads the live value, and
+  // persist it so a reload restores the chosen mode.
+  const setPersona = useCallback((p: string) => {
+    setPersonaState(p);
+    personaRef.current = p;
+    try {
+      localStorage.setItem(PERSONA_KEY, p);
+    } catch {
+      // private mode / storage disabled — selection just won't survive reload
+    }
+  }, []);
 
   useEffect(() => {
     getHistory({ limit: INITIAL_LOAD })
@@ -90,7 +111,7 @@ export function useChat() {
           onReasoning: (r) => patch((msg) => ({ ...msg, reasoning: (msg.reasoning ?? "") + r })),
           onTool: (ev) => patch((msg) => ({ ...msg, activity: applyTool(msg.activity, ev) })),
         },
-        { signal: ctrl.signal },
+        { signal: ctrl.signal, persona: personaRef.current },
       );
     } catch (e) {
       if ((e as Error)?.name === "AbortError") return; // manual stop — keep partial reply, no error
@@ -153,5 +174,5 @@ export function useChat() {
     }
   }, []);
 
-  return { messages, streaming, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier };
+  return { messages, streaming, persona, setPersona, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier };
 }

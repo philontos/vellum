@@ -8,14 +8,22 @@ const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
 const SEND_KEY = IS_MAC ? "⌘+Enter" : "Ctrl+Enter";
 
+// Prompt-side modes offered in the footer switch. Each value must match a persona
+// folder name on the backend; the label is an i18n key under `composer.mode.*`.
+const MODES = ["neutral", "freud"] as const;
+
 export function Composer({
   onSend,
   onStop,
   streaming,
+  persona,
+  onPersonaChange,
 }: {
   onSend: (t: string) => void;
   onStop: () => void;
   streaming: boolean;
+  persona?: string;
+  onPersonaChange?: (p: string) => void;
 }) {
   const { t: tr } = useT();
   const [text, setText] = useState("");
@@ -57,9 +65,37 @@ export function Composer({
             }}
           />
           <div className="flex items-center justify-between gap-3 px-3 pb-2.5">
-            <span className="select-none pl-1 text-[11px] text-muted">
-              {tr("composer.hint", { key: SEND_KEY })}
-            </span>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {onPersonaChange && (
+                <div
+                  role="radiogroup"
+                  aria-label={tr("composer.mode.label")}
+                  className="inline-flex shrink-0 rounded-lg border border-line bg-base p-0.5 text-[11px] font-medium"
+                >
+                  {MODES.map((m) => {
+                    const active = (persona ?? "neutral") === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => onPersonaChange(m)}
+                        className={
+                          "rounded-md px-2.5 py-1 transition-colors " +
+                          (active ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")
+                        }
+                      >
+                        {tr(`composer.mode.${m}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <span className="hidden select-none truncate text-[11px] text-muted sm:inline">
+                {tr("composer.hint", { key: SEND_KEY })}
+              </span>
+            </div>
             {streaming ? (
               <button
                 className="rounded-xl border border-line bg-surface px-5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-accent/40 hover:text-ink"

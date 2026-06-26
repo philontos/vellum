@@ -18,6 +18,9 @@ export const DICT = {
     "composer.send": "Send",
     "composer.stop": "Stop",
     "composer.hint": "{key} to send · Enter for a new line",
+    "composer.mode.label": "Mode",
+    "composer.mode.neutral": "Default",
+    "composer.mode.freud": "Counseling",
 
     // chat
     "chat.error": "⚠️ Couldn't reach the backend",
@@ -156,6 +159,9 @@ export const DICT = {
     "composer.send": "发送",
     "composer.stop": "停止",
     "composer.hint": "{key} 发送 · Enter 换行",
+    "composer.mode.label": "模式",
+    "composer.mode.neutral": "默认",
+    "composer.mode.freud": "心理咨询",
 
     "chat.error": "⚠️ 连不上后端",
     "chat.retry": "重试",

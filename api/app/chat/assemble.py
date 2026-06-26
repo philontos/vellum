@@ -8,6 +8,9 @@ from app.config.dimensions_loader import dimension_meta
 from app.store import memory, model
 from app.store.db import get_conn
 
+# Default altitude framing for the thinking-partner mode. A persona can replace it
+# wholesale by shipping its own stance.txt (e.g. the counseling mode), in which case
+# `persona.stance` is used here instead — see build_messages.
 _ALTITUDE = (
     "Answer the user's CURRENT question directly and well. Everything below is "
     "BACKGROUND REFERENCE about the user — draw on it when it genuinely helps the "
@@ -104,15 +107,18 @@ def _trait_summary() -> str:
     return "\n".join(lines)
 
 
-async def build_messages(query: str | None = None) -> list[dict]:
+async def build_messages(query: str | None = None,
+                         persona_name: str | None = None) -> list[dict]:
     """Assemble system + recent tail. `query` for retrieval defaults to the last
-    user message in the tail."""
+    user message in the tail. `persona_name` selects the prompt-side mode (voice +
+    stance); None falls back to VELLUM_PERSONA."""
     tail = memory.recent_tail(config.tail_size())
     if query is None:
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)
         query = last_user["content"] if last_user else ""
 
-    sections = [persona.load(), _ALTITUDE]
+    p = persona.load(persona_name)
+    sections = [p.voice, p.stance or _ALTITUDE]
     if config.web_search_configured():
         sections.append(_RESEARCH_DISCIPLINE)
 
@@ -126,7 +132,8 @@ async def build_messages(query: str | None = None) -> list[dict]:
 
     traits = _trait_summary()
     if traits:
-        sections.append("## How the user tends to be\n" + _TRAIT_FRAME + "\n\n" + traits)
+        sections.append("## How the user tends to be\n" +
+                        (p.trait_frame or _TRAIT_FRAME) + "\n\n" + traits)
 
     if query:
         snips = await retrieval.retrieve(query)
