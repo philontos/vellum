@@ -66,12 +66,39 @@ async def _run_concern(concern: str, job, gap_threshold: int, max_turn: int) -> 
         _flush_traces(calls, max_turn, start_turn=cursor + 1, batch=batch)
 
 
+async def _run_summary_streams(span_s: int, max_turn: int) -> None:
+    """Summary is per-stream: each stream digests only its own turns, on its own
+    cursor, so a card never blends modes and recall stays isolated. Triggers when a
+    stream has accumulated >= span_s new (live) turns since its cursor; the digest
+    covers [first, last] of that backlog, scoped to the stream."""
+    for stream in memory.distinct_streams():
+        cursor = memory.get_summary_cursor(stream)
+        backlog = memory.stream_turns_after(stream, cursor)
+        if len(backlog) < span_s:
+            continue
+        start, end = backlog[0], backlog[-1]
+        batch = f"summary:{stream}:{max_turn}:{uuid.uuid4().hex[:8]}"
+        calls: list[dict] = []
+        try:
+            with capture_llm_calls(calls):
+                await summary.run(start, end, stream=stream)
+            memory.advance_summary_cursor(stream, end)
+        except Exception as exc:
+            import traceback
+            print(f"[model_loop] summary[{stream}] job failed: {exc!r}", flush=True)
+            traceback.print_exc()
+        finally:
+            _flush_traces(calls, end, start_turn=start, batch=batch)
+
+
 async def run_pending() -> None:
     max_turn = memory.max_turn()
     if max_turn < 0:
         return
+    # The user model (facts/trait/dossier) is GLOBAL — co-built from every stream.
     # facts: eager (threshold 1 = run whenever there's anything new)
     await _run_concern("facts", facts.run, 1, max_turn)
     await _run_concern("trait", traits.run, config.trait_batch_k(), max_turn)
-    await _run_concern("summary", summary.run, config.summary_span_s(), max_turn)
     await _run_concern("dossier", dossier.run, config.dossier_batch_m(), max_turn)
+    # summary: per-stream (the recall handle + diary card for each mode).
+    await _run_summary_streams(config.summary_span_s(), max_turn)

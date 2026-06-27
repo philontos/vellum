@@ -75,7 +75,7 @@ async def test_final_usage_none_when_provider_omits(monkeypatch):
 async def test_tool_loop_runs_handler_and_continues(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_with_tool)
     monkeypatch.setattr(respond, "_build_registry",
-                        lambda: _stub_registry(monkeypatch))
+                        lambda *a: _stub_registry(monkeypatch))
     out, final = [], {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "delta":

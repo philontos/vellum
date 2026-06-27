@@ -8,6 +8,11 @@ import { MessageBubble } from "./MessageBubble";
 
 const PAGE = 20;
 
+// The diary is split per mode (matches the composer's stream switch). It opens on
+// whichever mode the chat last used; the toggle scopes the timeline to that stream.
+const MODES = ["neutral", "freud"] as const;
+const PERSONA_KEY = "vellum.persona";
+
 /**
  * The diary: the conversation's background summaries laid out as a timeline of
  * cards, grouped by day. Each card is one span's one-paragraph digest; open it to
@@ -22,9 +27,14 @@ export function DiaryPanel() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<Record<number, Message[]>>({});
 
+  const [stream, setStream] = useState<string>(
+    () => localStorage.getItem(PERSONA_KEY) || "neutral",
+  );
+
   const loadingRef = useRef(false);
   const atEndRef = useRef(false);
   const cardsRef = useRef<DiaryCard[]>([]);
+  const streamRef = useRef(stream);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -35,11 +45,15 @@ export function DiaryPanel() {
     if (loadingRef.current || atEndRef.current) return;
     loadingRef.current = true;
     setLoading(true);
+    const s = streamRef.current;
     try {
       const seen = cardsRef.current;
       const before = seen.length ? seen[seen.length - 1].id : undefined;
-      const page = await getDiary(before, PAGE);
-      setCards((c) => [...c, ...page]);
+      const page = await getDiary(before, PAGE, s);
+      if (streamRef.current !== s) return; // mode switched mid-flight — drop stale page
+      // before===undefined is a fresh load: replace (so a mode switch can't append
+      // the new stream's first page onto the old stream's lingering cards).
+      setCards((c) => (before === undefined ? page : [...c, ...page]));
       if (page.length < PAGE) {
         atEndRef.current = true;
         setAtEnd(true);
@@ -52,10 +66,18 @@ export function DiaryPanel() {
     }
   }
 
+  // Load on mount and whenever the mode changes — reset the timeline for the new stream.
   useEffect(() => {
+    streamRef.current = stream;
+    cardsRef.current = [];
+    loadingRef.current = false;
+    atEndRef.current = false;
+    setCards([]);
+    setAtEnd(false);
+    setOpenId(null);
     loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [stream]);
 
   // Page further back when the bottom sentinel scrolls into view.
   useEffect(() => {
@@ -93,7 +115,33 @@ export function DiaryPanel() {
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="border-b border-line px-5 py-3 text-sm text-muted">{t("diary.sub")}</div>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+        <span className="text-sm text-muted">{t("diary.sub")}</span>
+        <div
+          role="radiogroup"
+          aria-label={t("composer.mode.label")}
+          className="inline-flex shrink-0 rounded-lg border border-line bg-base p-0.5 text-[11px] font-medium"
+        >
+          {MODES.map((m) => {
+            const active = stream === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setStream(m)}
+                className={
+                  "rounded-md px-2.5 py-1 transition-colors " +
+                  (active ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")
+                }
+              >
+                {t(`composer.mode.${m}`)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-[52rem] flex-col gap-5 px-5 py-8">
           {days.map((d) => (

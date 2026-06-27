@@ -77,17 +77,18 @@ afterEach(() => {
 });
 
 describe("getHistory", () => {
-  it("loads the recent tail by default", async () => {
-    const urls = stubJson({ messages: [{ turn: 0, role: "user", content: "hi" }] });
-    const msgs = await getHistory();
+  it("loads the recent tail by default and returns the global next_turn", async () => {
+    const urls = stubJson({ messages: [{ turn: 0, role: "user", content: "hi" }], next_turn: 1 });
+    const res = await getHistory();
     expect(urls[0]).toBe("/history?limit=200");
-    expect(msgs).toEqual([{ turn: 0, role: "user", content: "hi" }]);
+    expect(res.messages).toEqual([{ turn: 0, role: "user", content: "hi" }]);
+    expect(res.nextTurn).toBe(1);
   });
 
-  it("passes before= for scroll-up paging", async () => {
-    const urls = stubJson({ messages: [] });
-    await getHistory({ before: 12, limit: 30 });
-    expect(urls[0]).toBe("/history?limit=30&before=12");
+  it("passes before= and stream= for scroll-up paging", async () => {
+    const urls = stubJson({ messages: [], next_turn: 5 });
+    await getHistory({ before: 12, limit: 30, stream: "freud" });
+    expect(urls[0]).toBe("/history?limit=30&before=12&stream=freud");
   });
 });
 

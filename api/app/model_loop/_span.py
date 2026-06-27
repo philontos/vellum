@@ -1,12 +1,14 @@
 from app.store import memory
 
 
-def span_text(start_turn: int, end_turn: int, roles=None) -> str:
+def span_text(start_turn: int, end_turn: int, roles=None, stream: str | None = None) -> str:
     """Render a turn span as `role: content` lines. `roles` (e.g. ("user",))
     filters to specific roles — trait extraction passes user-only so the AI's own
     replies don't get scored as the user's personality; summary/dossier/facts keep
-    both sides (they summarize the conversation, which needs assistant turns)."""
-    rows = memory.messages_in_turn_range(start_turn, end_turn)
+    both sides (they summarize the conversation, which needs assistant turns).
+    `stream` None spans all streams (global modeling co-builds from every stream);
+    a value scopes to one stream (per-stream summary digests)."""
+    rows = memory.messages_in_turn_range(start_turn, end_turn, stream=stream)
     if roles is not None:
         rows = [r for r in rows if r["role"] in roles]
     return "\n".join(f"{r['role']}: {r['content']}" for r in rows)

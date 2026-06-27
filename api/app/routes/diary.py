@@ -13,8 +13,12 @@ router = APIRouter()
 def diary(
     limit: int = Query(default=20, ge=1, le=200),
     before: int | None = Query(default=None),
+    stream: str | None = Query(default=None),
 ):
-    return {"cards": memory.list_summaries(limit=limit, before_id=before)}
+    # stream None merges every mode into one timeline; a value scopes the diary to
+    # that mode. Each card carries its own `stream` regardless, so a merged view can
+    # label or segment it later for free.
+    return {"cards": memory.list_summaries(limit=limit, before_id=before, stream=stream)}
 
 
 @router.get("/diary/{summary_id}")

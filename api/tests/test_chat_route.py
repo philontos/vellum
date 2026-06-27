@@ -97,7 +97,7 @@ def test_chat_route_records_tool_calls_in_trace(migrated_db, monkeypatch):
                    "message": {"role": "assistant", "content": "answer"},
                    "usage": {}, "duration_ms": 1}
 
-    def _reg():
+    def _reg(*_a):
         reg = registry.ToolRegistry()
         reg.register(
             schema={"type": "function", "function": {"name": "web_search", "description": "d",

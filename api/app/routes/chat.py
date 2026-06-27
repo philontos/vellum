@@ -39,9 +39,10 @@ class ChatIn(BaseModel):
 @router.post("/chat")
 async def chat(body: ChatIn):
     # Validate against the known modes; an unknown value quietly uses the default
-    # so a stale client can never wedge the chat on a missing persona.
+    # so a stale client can never wedge the chat on a missing persona. The mode name
+    # is also the context stream — the live tail + recall are partitioned by it.
     pname = body.persona if body.persona in persona.available() else config.persona_name()
-    await ingest.persist_user(body.message)
+    await ingest.persist_user(body.message, stream=pname)
     messages = await assemble.build_messages(query=body.message, persona_name=pname)
     cfg = resolve_structured_llm_config()
 
@@ -51,7 +52,7 @@ async def chat(body: ChatIn):
         tool_calls = None
         prompt_tokens = completion_tokens = duration_ms = None
         try:
-            async for ev in respond.stream(messages):
+            async for ev in respond.stream(messages, stream=pname):
                 if ev["type"] == "delta":
                     yield f"data: {json.dumps({'delta': ev['text']}, ensure_ascii=False)}\n\n"
                 elif ev["type"] == "reasoning":
@@ -69,7 +70,7 @@ async def chat(body: ChatIn):
                     prompt_tokens = ev.get("prompt_tokens")
                     completion_tokens = ev.get("completion_tokens")
                     duration_ms = ev.get("duration_ms")
-            assistant = ingest.persist_assistant(final)
+            assistant = ingest.persist_assistant(final, stream=pname)
             traces.record(
                 turn=assistant["turn"], stage="chat", model=cfg.get("model"),
                 params={"provider": cfg.get("provider"), "persona": pname},

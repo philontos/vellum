@@ -31,6 +31,34 @@ async def test_retrieve_hydrates_neighborhood_including_assistant(migrated_db, m
 
 
 @pytest.mark.asyncio
+async def test_recall_message_hit_is_scoped_to_its_stream(migrated_db, monkeypatch):
+    _seed(monkeypatch)
+    # the same vector lives in the freud stream; querying neutral must not surface it
+    u = memory.append_message("user", "should I take the offer", stream="freud")
+    memory.append_message("assistant", "build a financial floor", stream="freud")
+    VectorStore().add(memory.add_vector_ref("message", u["id"]), [1.0, 0.0, 0.0])
+
+    assert await retrieval.retrieve("that offer again", stream="neutral", k=5) == []
+    got = await retrieval.retrieve("that offer again", stream="freud", k=5)
+    text = "\n".join(s["text"] for s in got)
+    assert "offer" in text and "financial floor" in text
+
+
+@pytest.mark.asyncio
+async def test_recall_summary_hit_scoped_and_hydrates_same_stream(migrated_db, monkeypatch):
+    _seed(monkeypatch)
+    memory.append_message("user", "should I take the offer", stream="freud")      # 0
+    memory.append_message("assistant", "build a financial floor", stream="freud")  # 1
+    sid = memory.add_summary(0, 1, "a talk about the offer", stream="freud")
+    VectorStore().add(memory.add_vector_ref("summary", sid), [1.0, 0.0, 0.0])
+
+    assert await retrieval.retrieve("offer", stream="neutral", k=5) == []   # summary in another stream
+    got = await retrieval.retrieve("offer", stream="freud", k=5)
+    text = "\n".join(s["text"] for s in got)
+    assert "financial floor" in text   # emits the span's raw same-stream turns, not the digest
+
+
+@pytest.mark.asyncio
 async def test_soft_deleted_anchor_is_not_retrieved(migrated_db, monkeypatch):
     _seed(monkeypatch)
     u = memory.append_message("user", "should I take the offer")

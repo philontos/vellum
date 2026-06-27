@@ -10,6 +10,35 @@ def test_append_message_assigns_monotonic_turns(migrated_db):
     assert (a["turn"], b["turn"], c["turn"]) == (0, 1, 2)
 
 
+def test_streams_partition_tail_and_range_but_share_turn_space(migrated_db):
+    memory.append_message("user", "daily one", stream="neutral")        # turn 0
+    memory.append_message("user", "counsel one", stream="freud")        # turn 1
+    memory.append_message("assistant", "daily two", stream="neutral")   # turn 2
+    assert [m["content"] for m in memory.recent_tail(10, stream="neutral")] == ["daily one", "daily two"]
+    assert [m["content"] for m in memory.recent_tail(10, stream="freud")] == ["counsel one"]
+    # turn is globally monotonic across streams (unique ids), but range reads scope
+    assert [m["content"] for m in memory.messages_in_turn_range(0, 2, stream="freud")] == ["counsel one"]
+    assert len(memory.messages_in_turn_range(0, 2)) == 3   # stream=None spans all
+    assert set(memory.distinct_streams()) == {"neutral", "freud"}
+    assert memory.stream_turns_after("neutral", -1) == [0, 2]
+
+
+def test_summary_cursor_is_per_stream(migrated_db):
+    assert memory.get_summary_cursor("freud") == -1            # missing → -1
+    memory.advance_summary_cursor("freud", 5)
+    assert memory.get_summary_cursor("freud") == 5
+    assert memory.get_summary_cursor("neutral") == -1         # independent of freud
+    memory.advance_summary_cursor("freud", 9)                 # upsert update
+    assert memory.get_summary_cursor("freud") == 9
+
+
+def test_diary_list_merges_or_scopes_by_stream(migrated_db):
+    memory.add_summary(0, 1, "daily card", stream="neutral")
+    memory.add_summary(2, 3, "counsel card", stream="freud")
+    assert {c["content"] for c in memory.list_summaries(10)} == {"daily card", "counsel card"}
+    assert [c["content"] for c in memory.list_summaries(10, stream="freud")] == ["counsel card"]
+
+
 def test_recent_tail_returns_last_n_in_order(migrated_db):
     for i in range(5):
         memory.append_message("user", f"m{i}")

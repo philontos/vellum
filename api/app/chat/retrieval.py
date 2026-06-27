@@ -14,13 +14,14 @@ def _format_window(rows: list[dict]) -> str:
     return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
 
 
-async def retrieve(query: str, k: int | None = None, min_sim: float | None = None,
-                   w: int | None = None) -> list[dict]:
-    """Return reference snippets for `query`. Each snippet: {start, end, text}."""
-    return (await retrieve_explained(query, k=k, min_sim=min_sim, w=w))["snippets"]
+async def retrieve(query: str, stream: str = "neutral", k: int | None = None,
+                   min_sim: float | None = None, w: int | None = None) -> list[dict]:
+    """Return reference snippets for `query`, scoped to `stream`. Each snippet:
+    {start, end, text}."""
+    return (await retrieve_explained(query, stream=stream, k=k, min_sim=min_sim, w=w))["snippets"]
 
 
-async def retrieve_explained(query: str, k: int | None = None,
+async def retrieve_explained(query: str, stream: str = "neutral", k: int | None = None,
                              min_sim: float | None = None,
                              w: int | None = None) -> dict:
     """Read-only retrieval with the scoring kept visible (for the probe panel).
@@ -48,15 +49,15 @@ async def retrieve_explained(query: str, k: int | None = None,
                "ref_type": ref["ref_type"] if ref else None,
                "anchor_turn": None, "window": None, "digest": None, "rows": []}
         if kept and ref:
-            window, anchor_turn = _window_for(ref, w)
+            window, anchor_turn = _window_for(ref, w, stream)
             if window is None:
-                rec["kept"] = False      # anchor gone (soft-deleted) — can't recall
+                rec["kept"] = False      # anchor gone, or in another stream — can't recall
             else:
                 rec["window"] = list(window)
                 rec["anchor_turn"] = anchor_turn
                 rec["rows"] = [
                     {"turn": r["turn"], "role": r["role"], "content": r["content"]}
-                    for r in memory.messages_in_turn_range(*window)
+                    for r in memory.messages_in_turn_range(*window, stream=stream)
                 ]
                 if ref["ref_type"] == "summary":
                     s = memory.get_summary(ref["ref_id"])
@@ -67,24 +68,26 @@ async def retrieve_explained(query: str, k: int | None = None,
     snippets = [
         {"start": start, "end": end, "text": _format_window(rows)}
         for start, end in _merge_windows(windows)
-        if (rows := memory.messages_in_turn_range(start, end))
+        if (rows := memory.messages_in_turn_range(start, end, stream=stream))
     ]
     return {"params": {"k": k, "min_sim": min_sim, "w": w},
             "hits": detail, "snippets": snippets}
 
 
-def _window_for(ref: dict, w: int) -> tuple[tuple[int, int] | None, int | None]:
-    """Resolve a vector ref to (turn window, anchor turn). The window is None if
-    the anchor is gone (soft-deleted); anchor turn is None for summary refs."""
+def _window_for(ref: dict, w: int, stream: str) -> tuple[tuple[int, int] | None, int | None]:
+    """Resolve a vector ref to (turn window, anchor turn), scoped to `stream`. The
+    window is None if the anchor is gone (soft-deleted) OR belongs to another stream
+    — so a hit from a different mode's transcript never bleeds into this one. Anchor
+    turn is None for summary refs."""
     if ref["ref_type"] == "message":
         anchor = memory.get_message(ref["ref_id"])
-        if anchor is None:
+        if anchor is None or anchor["stream"] != stream:
             return None, None
         t = anchor["turn"]
         return (max(0, t - w), t + w), t
     if ref["ref_type"] == "summary":
         s = memory.get_summary(ref["ref_id"])
-        if s:
+        if s and s["stream"] == stream:
             return (s["start_turn"], s["end_turn"]), None
     return None, None
 

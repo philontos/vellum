@@ -6,12 +6,12 @@ from app.store import memory
 from app.store.vectors import VectorStore
 
 
-async def persist_user(content: str) -> dict:
-    msg = memory.append_message("user", content)
+async def persist_user(content: str, stream: str = "neutral") -> dict:
+    msg = memory.append_message("user", content, stream=stream)
     label = memory.add_vector_ref("message", msg["id"])
     VectorStore().add(label, await embed(content))
     return msg
 
 
-def persist_assistant(content: str) -> dict:
-    return memory.append_message("assistant", content)  # no embed
+def persist_assistant(content: str, stream: str = "neutral") -> dict:
+    return memory.append_message("assistant", content, stream=stream)  # no embed
