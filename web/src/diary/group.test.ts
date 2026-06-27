@@ -8,6 +8,7 @@ const card = (id: number, created_at: string): DiaryCard => ({
   end_turn: 1,
   content: `c${id}`,
   created_at,
+  stream: "neutral",
 });
 
 describe("groupByDay", () => {

@@ -10,9 +10,9 @@ from app.chat.tools import recall, registry, websearch
 from app.llm import client as llm
 
 
-def _build_registry() -> registry.ToolRegistry:
+def _build_registry(stream: str) -> registry.ToolRegistry:
     reg = registry.ToolRegistry()
-    recall.register_into(reg)
+    recall.register_into(reg, stream)   # recall is scoped to the active mode's stream
     # web_search is a standing capability — always offered to the model. Whether a
     # provider/key is actually wired up only affects execution (it fails gracefully
     # when not) and the prompt/hop tuning below, never whether the tool exists.
@@ -29,8 +29,8 @@ def _max_hops() -> int:
     return hops
 
 
-async def stream(messages: list[dict]):
-    reg = _build_registry()
+async def stream(messages: list[dict], stream: str = "neutral"):
+    reg = _build_registry(stream)
     tools = reg.schemas()
     convo = list(messages)
     content_parts: list[str] = []

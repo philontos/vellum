@@ -50,18 +50,26 @@ export function useChat() {
     }
   }, []);
 
+  // Load the active mode's stream on mount and whenever the mode changes — each
+  // mode is its own conversation, so switching swaps the visible history. Paging
+  // flags reset so scroll-up starts fresh for the new stream.
   useEffect(() => {
-    getHistory({ limit: INITIAL_LOAD })
-      .then((m) => {
+    atStart.current = false;
+    atCap.current = false;
+    setCappedEarlier(false);
+    getHistory({ limit: INITIAL_LOAD, stream: persona })
+      .then(({ messages: m, nextTurn: next }) => {
         if (streamingRef.current) return; // don't clobber an in-flight stream
         setMessages(m);
         oldestTurn.current = m.length ? m[0].turn : null;
-        nextTurn.current = m.length ? m[m.length - 1].turn + 1 : 0;
+        // Seed from the server's GLOBAL counter, not this stream's last turn — a
+        // sparse/empty stream must still hand out correct global turn ids.
+        nextTurn.current = next;
         atStart.current = m.length < INITIAL_LOAD;
         setCanLoadEarlier(!atStart.current);
       })
       .catch((e) => console.error("history load failed", e));
-  }, []);
+  }, [persona]);
 
   const loadEarlier = useCallback(async () => {
     if (loadingEarlier.current || atCap.current || atStart.current) return;
@@ -73,7 +81,7 @@ export function useChat() {
     }
     loadingEarlier.current = true;
     try {
-      const older = await getHistory({ before, limit: PAGE });
+      const { messages: older } = await getHistory({ before, limit: PAGE, stream: personaRef.current });
       if (older.length === 0) {
         atStart.current = true;
         setCanLoadEarlier(false);

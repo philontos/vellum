@@ -4,7 +4,7 @@ import app.chat.respond as respond
 def test_registry_has_web_search_when_enabled(monkeypatch):
     monkeypatch.setenv("WEB_SEARCH_PROVIDER", "tavily")
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-x")
-    names = [t["function"]["name"] for t in respond._build_registry().schemas()]
+    names = [t["function"]["name"] for t in respond._build_registry("neutral").schemas()]
     assert "web_search" in names
     assert "recall_memory" in names
 
@@ -14,7 +14,7 @@ def test_registry_advertises_web_search_even_when_unconfigured(monkeypatch):
     # model; execution fails gracefully when no provider/key is configured.
     monkeypatch.delenv("WEB_SEARCH_PROVIDER", raising=False)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
-    names = [t["function"]["name"] for t in respond._build_registry().schemas()]
+    names = [t["function"]["name"] for t in respond._build_registry("neutral").schemas()]
     assert "web_search" in names
     assert "recall_memory" in names
 

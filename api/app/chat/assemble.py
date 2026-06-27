@@ -112,12 +112,16 @@ async def build_messages(query: str | None = None,
     """Assemble system + recent tail. `query` for retrieval defaults to the last
     user message in the tail. `persona_name` selects the prompt-side mode (voice +
     stance); None falls back to VELLUM_PERSONA."""
-    tail = memory.recent_tail(config.tail_size())
+    # The mode's name is also its context stream: the live tail + recall are scoped
+    # to it, so switching modes never drags another mode's transcript in. The user
+    # model below (dossier/facts/traits) stays global, co-built from every stream.
+    p = persona.load(persona_name)
+    stream = p.name
+    tail = memory.recent_tail(config.tail_size(), stream=stream)
     if query is None:
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)
         query = last_user["content"] if last_user else ""
 
-    p = persona.load(persona_name)
     sections = [p.voice, p.stance or _ALTITUDE]
     if config.web_search_configured():
         sections.append(_RESEARCH_DISCIPLINE)
@@ -136,7 +140,7 @@ async def build_messages(query: str | None = None,
                         (p.trait_frame or _TRAIT_FRAME) + "\n\n" + traits)
 
     if query:
-        snips = await retrieval.retrieve(query)
+        snips = await retrieval.retrieve(query, stream=stream)
         if snips:
             sections.append("## Possibly relevant past\n" +
                             "\n---\n".join(s["text"] for s in snips))

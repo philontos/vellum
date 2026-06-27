@@ -36,7 +36,7 @@ def _registry(handler):
 @pytest.mark.asyncio
 async def test_stream_emits_reasoning_events(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_reason_tool_answer)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "[1] R\nhttp://x\nb"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "[1] R\nhttp://x\nb"))
     reasoning = []
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "reasoning":
@@ -47,7 +47,7 @@ async def test_stream_emits_reasoning_events(monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_emits_tool_start_and_end(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_reason_tool_answer)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "[1] R\nhttp://x\nb"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "[1] R\nhttp://x\nb"))
     starts, ends = [], []
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "tool_start":
@@ -64,7 +64,7 @@ async def test_stream_emits_tool_start_and_end(monkeypatch):
 async def test_tool_end_flags_error_result(monkeypatch):
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_reason_tool_answer)
     monkeypatch.setattr(respond, "_build_registry",
-                        lambda: _registry(lambda a: "ERROR running web_search: boom"))
+                        lambda *a: _registry(lambda a: "ERROR running web_search: boom"))
     ends = [ev async for ev in respond.stream([{"role": "system", "content": "s"}])
             if ev["type"] == "tool_end"]
     assert ends and ends[0]["ok"] is False
@@ -89,7 +89,7 @@ async def _fake_bad_args_tool(messages, tools, **kw):
 async def test_final_carries_tool_calls_for_the_trace(monkeypatch):
     # The whole-turn trace needs each executed call: name + args + result + ok.
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_reason_tool_answer)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "[1] R\nhttp://x\nb"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "[1] R\nhttp://x\nb"))
     final = {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "final":
@@ -109,7 +109,7 @@ async def test_final_tool_calls_none_when_no_tools_run(monkeypatch):
         yield {"type": "done", "finish_reason": "stop",
                "message": {"role": "assistant", "content": "hi"}, "usage": {}, "duration_ms": 1}
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _plain)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "x"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "x"))
     final = {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "final":
@@ -121,7 +121,7 @@ async def test_final_tool_calls_none_when_no_tools_run(monkeypatch):
 async def test_final_keeps_raw_args_when_arguments_malformed(monkeypatch):
     # 2B: an un-parseable arguments blob is preserved verbatim for debugging.
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_bad_args_tool)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "ok"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "ok"))
     final = {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "final":
@@ -135,7 +135,7 @@ async def test_final_keeps_raw_args_when_arguments_malformed(monkeypatch):
 async def test_final_answer_still_streams(monkeypatch):
     # New process events must not disturb the existing delta/final contract.
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_reason_tool_answer)
-    monkeypatch.setattr(respond, "_build_registry", lambda: _registry(lambda a: "[1] R\nhttp://x\nb"))
+    monkeypatch.setattr(respond, "_build_registry", lambda *a: _registry(lambda a: "[1] R\nhttp://x\nb"))
     deltas, final = [], {}
     async for ev in respond.stream([{"role": "system", "content": "s"}]):
         if ev["type"] == "delta":

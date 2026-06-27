@@ -23,6 +23,25 @@ async def test_build_messages_has_altitude_persona_and_tail(migrated_db, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_tail_and_recall_are_scoped_to_the_mode_stream(migrated_db, monkeypatch):
+    seen = {}
+    async def fake_retrieve(q, stream="neutral", **kw):
+        seen["stream"] = stream
+        return []
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    memory.append_message("user", "daily message", stream="neutral")
+    memory.append_message("user", "counseling message", stream="freud")
+
+    neutral = await assemble.build_messages(persona_name="neutral")
+    assert neutral[-1]["content"] == "daily message"      # only the neutral stream's tail
+    assert seen["stream"] == "neutral"                     # recall scoped to the mode
+
+    freud = await assemble.build_messages(persona_name="freud")
+    assert freud[-1]["content"] == "counseling message"   # only the freud stream's tail
+    assert seen["stream"] == "freud"
+
+
+@pytest.mark.asyncio
 async def test_counseling_persona_swaps_voice_stance_and_trait_frame(migrated_db, monkeypatch):
     async def fake_retrieve(q, **kw):
         return []

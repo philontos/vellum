@@ -14,8 +14,11 @@ _PROMPT = (
 )
 
 
-async def run(start_turn: int, end_turn: int) -> None:
-    span = span_text(start_turn, end_turn)
+async def run(start_turn: int, end_turn: int, stream: str = "neutral") -> None:
+    """Digest `stream`'s turns within [start, end] into one searchable card. The
+    span is scoped to the stream so a counseling card never contains daily turns
+    (and vice versa); recall stays per-stream off the resulting vector."""
+    span = span_text(start_turn, end_turn, stream=stream)
     if not span.strip():
         return
     try:
@@ -25,6 +28,6 @@ async def run(start_turn: int, end_turn: int) -> None:
     text = (result.get("summary") or "").strip()
     if not text:
         return
-    sid = memory.add_summary(start_turn, end_turn, text)
+    sid = memory.add_summary(start_turn, end_turn, text, stream=stream)
     label = memory.add_vector_ref("summary", sid)
     VectorStore().add(label, await embed(text))

@@ -33,12 +33,18 @@ export type Message = {
  * with `before` it returns the window of messages immediately older than that
  * turn — the chat view's scroll-up page.
  */
-export async function getHistory(opts: { limit?: number; before?: number } = {}): Promise<Message[]> {
+export async function getHistory(
+  opts: { limit?: number; before?: number; stream?: string } = {},
+): Promise<{ messages: Message[]; nextTurn: number }> {
   const q = new URLSearchParams({ limit: String(opts.limit ?? 200) });
   if (opts.before !== undefined) q.set("before", String(opts.before));
+  if (opts.stream) q.set("stream", opts.stream);
   const r = await fetch(`/history?${q}`);
   if (!r.ok) throw new Error(`history failed: ${r.status}`);
-  return (await r.json()).messages;
+  const data = await r.json();
+  // next_turn is the server's global turn counter — the client seeds its optimistic
+  // turn ids from it so a turn sent in a sparse stream still maps to the right row.
+  return { messages: data.messages as Message[], nextTurn: data.next_turn as number };
 }
 
 /**
@@ -58,12 +64,15 @@ export type DiaryCard = {
   end_turn: number;
   content: string;
   created_at: string;
+  stream: string;
 };
 
-/** List diary cards newest-first. `before` is a card id (keyset paging). */
-export async function getDiary(before?: number, limit = 20): Promise<DiaryCard[]> {
+/** List diary cards newest-first. `before` is a card id (keyset paging). `stream`
+ * scopes the timeline to one mode; omit it for a merged, cross-mode timeline. */
+export async function getDiary(before?: number, limit = 20, stream?: string): Promise<DiaryCard[]> {
   const q = new URLSearchParams({ limit: String(limit) });
   if (before !== undefined) q.set("before", String(before));
+  if (stream) q.set("stream", stream);
   const r = await fetch(`/diary?${q}`);
   if (!r.ok) throw new Error(`diary failed: ${r.status}`);
   return (await r.json()).cards;
