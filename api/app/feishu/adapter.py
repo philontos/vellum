@@ -5,6 +5,10 @@ answers with vellum's brain (`chat.converse.reply`). Runs as a background task i
 the API process — deliberately in-process, since that process is the single owner
 of the SQLite store and vector index; a second process would contend on both.
 
+A leading-slash message is a control command, not chat: it switches the active
+prompt-side mode (`/freud`, `/neutral`, `/mode <name>`) or reports status
+(`/mode`) — the mobile equivalent of the web's mode picker. See `feishu.commands`.
+
 Why the indirection: Feishu's long-connection callback is **synchronous and must
 return within ~3 seconds**, else the platform retries and the user gets duplicate
 answers. An LLM turn takes far longer, so the callback only acks — it hands the
@@ -12,9 +16,9 @@ slow work to the app's event loop and returns immediately. The reply is then
 pushed back as a *new* message via the send API, not as the callback's return.
 
 This module is SDK glue; its logic seams (`parse.extract_text` / `text_content`,
-`converse.reply`) are unit-tested, but the lark-oapi wiring is verified by a live
-smoke test against a real Feishu app — see the Feishu setup steps in
-api/.env.example.
+`commands.handle`, `converse.reply`, and `_handle`'s dispatch) are unit-tested,
+but the lark-oapi wiring is verified by a live smoke test against a real Feishu
+app — see the Feishu setup steps in api/.env.example.
 """
 import asyncio
 import traceback
@@ -23,10 +27,26 @@ import lark_oapi as lark
 from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
 from app import config
-from app.chat import converse
+from app.chat import converse, persona
+from app.feishu import commands
 from app.feishu.parse import extract_text, text_content
 
 _send_client: lark.Client | None = None
+
+# Active prompt-side mode for Feishu, switched in-chat via slash commands. Held in
+# memory only (single-owner process): an API restart resets it to the default, and
+# a re-issued /<mode> brings it back. All Feishu private chats share vellum's one
+# eternal stream, so a single module-level mode matches that shared-stream design.
+_mode: str | None = None
+
+
+def _current() -> str:
+    return _mode or config.persona_name()
+
+
+def _set_mode(name: str) -> None:
+    global _mode
+    _mode = name
 
 
 def _client() -> lark.Client:
@@ -63,8 +83,19 @@ async def _handle(message_type: str, content: str, chat_id: str) -> None:
     text = extract_text(message_type, content)
     if not text:
         return
+    # A leading-slash message controls the mode instead of being chatted with —
+    # the mobile equivalent of the web's mode picker. Ordinary text falls through
+    # to the brain under whatever mode is currently active.
+    cmd = commands.handle(text, current=_current(),
+                          available=persona.available(),
+                          default=config.persona_name())
+    if cmd is not None:
+        if cmd.new_mode is not None:
+            _set_mode(cmd.new_mode)
+        await asyncio.to_thread(_send, chat_id, cmd.reply)
+        return
     try:
-        answer = await converse.reply(text)
+        answer = await converse.reply(text, persona_name=_current())
     except Exception as exc:
         traceback.print_exc()
         answer = f"⚠️ {exc.__class__.__name__}: {exc}"
