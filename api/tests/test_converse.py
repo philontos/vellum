@@ -125,6 +125,50 @@ async def test_reply_records_tool_calls_in_trace(migrated_db, monkeypatch):
     ]
 
 
+async def test_reply_routes_to_selected_persona_stream(migrated_db, monkeypatch):
+    """Mobile mode-switch: passing persona_name persists both turns into that
+    mode's stream (mirroring POST /chat), so a Feishu user on /freud gets the same
+    per-mode context partitioning the web has — and the default stream stays empty."""
+    _stub_brain(monkeypatch)
+    from app.chat import converse
+    from app.store import memory
+
+    await converse.reply("hello", persona_name="freud")
+
+    assert memory.recent_tail(2, stream="neutral") == []        # default untouched
+    tail = memory.recent_tail(2, stream="freud")
+    assert [m["role"] for m in tail] == ["user", "assistant"]
+    assert tail[0]["content"] == "hello" and tail[1]["content"] == "hi there"
+
+
+async def test_reply_stamps_persona_on_trace(migrated_db, monkeypatch):
+    """The chat trace must record which mode answered, so the Traces panel can
+    tell a Feishu freud turn from a neutral one (POST /chat stamps it too)."""
+    import json
+
+    _stub_brain(monkeypatch)
+    from app.chat import converse
+    from app.store.traces import get_conn
+
+    await converse.reply("hello", persona_name="freud")
+
+    with get_conn() as conn:
+        row = conn.execute("SELECT params FROM traces WHERE stage='chat'").fetchone()
+    assert json.loads(row["params"])["persona"] == "freud"
+
+
+async def test_reply_unknown_persona_falls_back_to_default_stream(migrated_db, monkeypatch):
+    """An unknown mode name must not wedge the turn on a missing persona — it
+    quietly answers in the default stream (same guard POST /chat applies)."""
+    _stub_brain(monkeypatch)
+    from app.chat import converse
+    from app.store import memory
+
+    await converse.reply("hello", persona_name="does-not-exist")
+
+    assert len(memory.recent_tail(2, stream="neutral")) == 2
+
+
 async def test_reply_triggers_background_modeling(migrated_db, monkeypatch):
     """A Feishu turn must kick off the same background modeling (facts/trait/
     summary/dossier) that POST /chat schedules, so the model keeps learning from

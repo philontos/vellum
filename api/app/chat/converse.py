@@ -6,7 +6,8 @@ such as the Feishu adapter."""
 import asyncio
 import json
 
-from app.chat import assemble, ingest, respond
+from app import config
+from app.chat import assemble, ingest, persona, respond
 from app.llm.client import resolve_structured_llm_config
 from app.model_loop import runner
 from app.store import traces
@@ -28,20 +29,24 @@ def _track(task: asyncio.Task) -> None:
     task.add_done_callback(_done)
 
 
-async def reply(text: str) -> str:
+async def reply(text: str, persona_name: str | None = None) -> str:
     """Run `text` through the chat pipeline and return the assistant's reply.
-    Persists both turns (so Feishu conversations share vellum's eternal stream
-    with the web UI), records one chat trace, and schedules background modeling —
-    the same observability + learning POST /chat performs, just without the SSE."""
-    await ingest.persist_user(text)
-    messages = await assemble.build_messages(query=text)
+    `persona_name` selects the prompt-side mode (the Feishu adapter passes the
+    mode the user picked via a slash command); unknown/None falls back to the
+    default, mirroring POST /chat. The mode name is also the context stream, so
+    both turns persist into it — switching modes on mobile keeps the same per-mode
+    partitioning the web has. Records one chat trace and schedules background
+    modeling — the same observability + learning POST /chat performs, sans SSE."""
+    pname = persona_name if persona_name in persona.available() else config.persona_name()
+    await ingest.persist_user(text, stream=pname)
+    messages = await assemble.build_messages(query=text, persona_name=pname)
     cfg = resolve_structured_llm_config()
 
     final = ""
     reasoning = None
     tool_calls = None
     prompt_tokens = completion_tokens = duration_ms = None
-    async for ev in respond.stream(messages):
+    async for ev in respond.stream(messages, stream=pname):
         if ev["type"] == "final":
             final = ev["content"]
             reasoning = ev.get("reasoning")
@@ -50,10 +55,10 @@ async def reply(text: str) -> str:
             completion_tokens = ev.get("completion_tokens")
             duration_ms = ev.get("duration_ms")
 
-    assistant = ingest.persist_assistant(final)
+    assistant = ingest.persist_assistant(final, stream=pname)
     traces.record(
         turn=assistant["turn"], stage="chat", model=cfg.get("model"),
-        params={"provider": cfg.get("provider")},
+        params={"provider": cfg.get("provider"), "persona": pname},
         prompt=json.dumps(messages, ensure_ascii=False), output=final,
         reasoning=reasoning, tool_calls=tool_calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
