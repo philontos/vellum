@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useT } from "../../i18n";
 import { NavItem } from "./NavItem";
 import { PrivacyToggle } from "../PrivacyToggle";
+import type { AuthUser } from "../../auth/client";
 
 export type View = "chat" | "diary" | "model" | "traces" | "probe" | "evals";
 
@@ -9,10 +10,14 @@ export type View = "chat" | "diary" | "model" | "traces" | "probe" | "evals";
 export function AppShell({
   view,
   onChange,
+  user,
+  onLogout,
   children,
 }: {
   view: View;
   onChange: (v: View) => void;
+  user: AuthUser | null;
+  onLogout?: () => Promise<void>;
   children: ReactNode;
 }) {
   const { t, lang, setLang } = useT();
@@ -22,7 +27,7 @@ export function AppShell({
     { key: "model", label: t("nav.you") },
     { key: "traces", label: t("nav.traces") },
     { key: "probe", label: t("nav.probe") },
-    { key: "evals", label: t("nav.evals") },
+    ...(user?.role === "member" ? [] : [{ key: "evals" as const, label: t("nav.evals") }]),
   ];
 
   return (
@@ -38,6 +43,21 @@ export function AppShell({
         ))}
         <div className="mt-auto flex flex-col gap-2 border-t border-line px-2.5 pt-3 text-xs text-muted">
           <PrivacyToggle />
+          {user && (
+            <div className="flex items-center justify-between gap-2 border-t border-line pt-2">
+              <span className="min-w-0 truncate text-ink-soft" title={user.username}>
+                {user.display_name}
+              </span>
+              {onLogout && (
+                <button
+                  onClick={() => void onLogout()}
+                  className="shrink-0 text-muted transition-colors hover:text-ink"
+                >
+                  {t("auth.logout")}
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span>{lang === "en" ? "EN" : "中文"}</span>
             <button

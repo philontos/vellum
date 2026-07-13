@@ -19,38 +19,43 @@ export interface PinStorage {
 
 export type PrivacyState = { hidden: boolean; hasPin: boolean };
 
-const PIN_KEY = "vellum.privacy.pin";
-
-/** localStorage-backed PinStorage. Per-browser, per-profile; never synced. */
-export const localPinStorage: PinStorage = {
-  read() {
-    try {
-      const raw = localStorage.getItem(PIN_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as Partial<PinRecord>;
-      if (typeof parsed?.salt === "string" && typeof parsed?.hash === "string") {
-        return { salt: parsed.salt, hash: parsed.hash };
+/** localStorage-backed PinStorage. Per-browser, per-profile, and per account. */
+export function createLocalPinStorage(namespace = "legacy"): PinStorage {
+  const pinKey = namespace === "legacy"
+    ? "vellum.privacy.pin"
+    : `vellum.user.${encodeURIComponent(namespace)}.privacy.pin`;
+  return {
+    read() {
+      try {
+        const raw = localStorage.getItem(pinKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<PinRecord>;
+        if (typeof parsed?.salt === "string" && typeof parsed?.hash === "string") {
+          return { salt: parsed.salt, hash: parsed.hash };
+        }
+        return null;
+      } catch {
+        return null; // unavailable / corrupt — treat as no pin
       }
-      return null;
-    } catch {
-      return null; // unavailable / corrupt — treat as no pin
-    }
-  },
-  write(rec) {
-    try {
-      localStorage.setItem(PIN_KEY, JSON.stringify(rec));
-    } catch {
-      /* ignore persistence failure (private mode, etc.) */
-    }
-  },
-  clear() {
-    try {
-      localStorage.removeItem(PIN_KEY);
-    } catch {
-      /* ignore */
-    }
-  },
-};
+    },
+    write(rec) {
+      try {
+        localStorage.setItem(pinKey, JSON.stringify(rec));
+      } catch {
+        /* ignore persistence failure (private mode, etc.) */
+      }
+    },
+    clear() {
+      try {
+        localStorage.removeItem(pinKey);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+export const localPinStorage = createLocalPinStorage();
 
 export type PrivacyStore = {
   getSnapshot(): PrivacyState;

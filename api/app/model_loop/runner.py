@@ -6,12 +6,28 @@ own cursor and cadence, decoupled from window eviction (spec §8):
   dossier — when (max_turn - cursor) >= M
 Each job is isolated (one failure doesn't block others); a cursor advances only
 after its job succeeds, so a re-run is idempotent."""
+import asyncio
 import uuid
+from weakref import WeakKeyDictionary
 
 from app import config
+from app.data_scope import current_user_id
 from app.llm.client import capture_llm_calls
 from app.model_loop import dossier, facts, summary, traits
 from app.store import memory, traces
+
+
+# Same-user turns may finish close together and spawn overlapping runners. One
+# lock per user and event loop makes cursor checks + writes serial without making
+# different family members wait for each other's background modeling.
+_locks: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _user_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    per_user = _locks.setdefault(loop, {})
+    key = current_user_id() or "__legacy__"
+    return per_user.setdefault(key, asyncio.Lock())
 
 
 def _flush_traces(calls: list[dict], turn: int, start_turn: int | None = None,
@@ -91,7 +107,7 @@ async def _run_summary_streams(span_s: int, max_turn: int) -> None:
             _flush_traces(calls, end, start_turn=start, batch=batch)
 
 
-async def run_pending() -> None:
+async def _run_pending_unlocked() -> None:
     max_turn = memory.max_turn()
     if max_turn < 0:
         return
@@ -102,3 +118,8 @@ async def run_pending() -> None:
     await _run_concern("dossier", dossier.run, config.dossier_batch_m(), max_turn)
     # summary: per-stream (the recall handle + diary card for each mode).
     await _run_summary_streams(config.summary_span_s(), max_turn)
+
+
+async def run_pending() -> None:
+    async with _user_lock():
+        await _run_pending_unlocked()

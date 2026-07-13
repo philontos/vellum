@@ -1,6 +1,6 @@
 # Vellum — VPS deploy runbook
 
-Single-user backend + built web. It is **localhost-only by default** and can
+Private-family backend + built web. It is **localhost-only by default** and can
 instead bind to an explicit private interface such as WireGuard. It never needs
 to bind the public interface, use a domain, or require ICP filing.
 
@@ -45,6 +45,34 @@ Fill `api/.env`: `LLM_*`, `EMBED_*`, `VELLUM_DB_KEY`, and (for backups)
 `VELLUM_SYNC_REMOTE`. You own this file — `start.sh` never creates or edits it; it
 only refuses to deploy if it's missing.
 
+### 1.1 Enable family login
+
+There is no public signup. Provision accounts from the VPS. For an upgrade from
+the original single-user deployment, pull/setup the new code while auth is still
+off, then stop the service so the legacy database cannot change during its copy:
+
+```bash
+cd /opt/vellum/api
+sudo systemctl stop vellum
+set -a && source .env && set +a
+.venv/bin/python -m app.auth.cli create \
+  --username owner --display-name "Owner" --role owner --adopt-legacy
+```
+
+The password is entered twice without echo. `--adopt-legacy` checkpoints and
+copies root `vellum.db` plus `observability.db` into this owner's opaque user
+directory; it refuses to overwrite non-empty user data and leaves the root files
+untouched for rollback. Then set `VELLUM_AUTH_ENABLED=1` in `api/.env` and deploy
+normally. Add family members without `--adopt-legacy`:
+
+```bash
+.venv/bin/python -m app.auth.cli create \
+  --username family --display-name "Family" --role member
+.venv/bin/python -m app.auth.cli list
+```
+
+Password reset (`passwd`) and `disable` both revoke that account's sessions.
+
 That's the whole one-time part. From here on, **§2 is every deploy**.
 
 ## 2. Deploy / redeploy (every time)
@@ -87,6 +115,10 @@ journalctl -u vellum -f          # live logs (Ctrl-C to stop)
   (If your provider has a cloud security group, do not add the Vellum TCP port;
   only the public WireGuard UDP port needs to reach `wg0`.)
 - Optional tighter ACL: restrict SSH source to your usual IP ranges.
+- Family authentication is defense in depth, not permission to expose the TCP
+  port publicly. Sessions use HttpOnly, SameSite=Strict cookies. The current HTTP
+  cookie deliberately has `Secure=0` because WireGuard/SSH provides the encrypted
+  transport; set `VELLUM_AUTH_COOKIE_SECURE=1` only behind HTTPS.
 
 ## 4. Access from each PC
 
@@ -109,16 +141,17 @@ port-forwarding works too — forward the VPS port and open the localhost link.)
   ```cron
   30 3 * * * /opt/vellum/deploy/backup.sh >> /tmp/vellum-backup.log 2>&1
   ```
-  (`backup.sh` checkpoints + pushes the ciphertext db; override its location with
+  (`backup.sh` checkpoints + pushes encrypted `auth.db` and every user's
+  `vellum.db`; override its location with
   `VELLUM_API_DIR=` if you didn't deploy to `/opt/vellum`.)
 - Confirm the remote only ever holds ciphertext.
 
 ## 6. Verification checklist
 - [ ] `sudo reboot` → service comes back (`systemctl status vellum`).
 - [ ] `sudo systemctl kill vellum` (or kill the uvicorn PID) → systemd restarts it.
-- [ ] Each intended WireGuard peer (or second PC via SSH tunnel): chat works and
-      history loads.
+- [ ] Owner and member can each log in; their chat/history/model data are distinct.
+- [ ] A member receives 403 for `/inspect/evals`; the owner can use it.
 - [ ] From outside WireGuard: `curl http://<VPS_PUBLIC_IP>:<VELLUM_PORT>/health`
       is refused/times out (app is **not** public).
-- [ ] `deploy/backup.sh` runs clean; the remote repo shows only the encrypted
-      `vellum.db`.
+- [ ] `deploy/backup.sh` runs clean; the remote repo shows encrypted `auth.db` and
+      `users/<id>/vellum.db`, with no observability DBs or key material.

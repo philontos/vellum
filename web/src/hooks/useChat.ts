@@ -3,6 +3,7 @@ import { getHistory, streamChat, deleteMessage, type Message } from "../api/clie
 import { applyTool } from "../api/activity";
 import { prependEarlier } from "../chat/scrollback";
 import { removeTurn } from "../chat/remove";
+import { userStorageKey } from "../auth/storage";
 
 // The chat view is a bounded scroll-back: a small first page, more loaded as you
 // scroll up, until CAP — past that, the diary is the way further back.
@@ -12,14 +13,14 @@ const CAP = 100;
 
 // Prompt-side mode, chosen in the composer and sent with each turn. Persisted so a
 // reload keeps the selected mode. Must match a persona folder name on the backend.
-const PERSONA_KEY = "vellum.persona";
 const DEFAULT_PERSONA = "neutral";
 
-export function useChat() {
+export function useChat(userId?: string) {
+  const personaKey = userStorageKey(userId, "persona");
   const [messages, setMessages] = useState<Message[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [persona, setPersonaState] = useState<string>(
-    () => localStorage.getItem(PERSONA_KEY) || DEFAULT_PERSONA,
+    () => localStorage.getItem(personaKey) || DEFAULT_PERSONA,
   );
   const personaRef = useRef(persona);
   const [canLoadEarlier, setCanLoadEarlier] = useState(false);
@@ -44,11 +45,11 @@ export function useChat() {
     setPersonaState(p);
     personaRef.current = p;
     try {
-      localStorage.setItem(PERSONA_KEY, p);
+      localStorage.setItem(personaKey, p);
     } catch {
       // private mode / storage disabled — selection just won't survive reload
     }
-  }, []);
+  }, [personaKey]);
 
   // Load the active mode's stream on mount and whenever the mode changes — each
   // mode is its own conversation, so switching swaps the visible history. Paging

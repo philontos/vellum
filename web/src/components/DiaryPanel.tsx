@@ -5,21 +5,22 @@ import { useT } from "../i18n";
 import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { dayLabel } from "../util/day";
 import { MessageBubble } from "./MessageBubble";
+import { userStorageKey } from "../auth/storage";
 
 const PAGE = 20;
 
 // The diary is split per mode (matches the composer's stream switch). It opens on
 // whichever mode the chat last used; the toggle scopes the timeline to that stream.
 const MODES = ["neutral", "freud"] as const;
-const PERSONA_KEY = "vellum.persona";
 
 /**
  * The diary: the conversation's background summaries laid out as a timeline of
  * cards, grouped by day. Each card is one span's one-paragraph digest; open it to
  * load and read the full messages of that span. Scrolls down to page further back.
  */
-export function DiaryPanel() {
+export function DiaryPanel({ userId }: { userId?: string }) {
   const { t, lang } = useT();
+  const personaKey = userStorageKey(userId, "persona");
   const blur = usePrivacyBlur();
   const [cards, setCards] = useState<DiaryCard[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ export function DiaryPanel() {
   const [detail, setDetail] = useState<Record<number, Message[]>>({});
 
   const [stream, setStream] = useState<string>(
-    () => localStorage.getItem(PERSONA_KEY) || "neutral",
+    () => localStorage.getItem(personaKey) || "neutral",
   );
 
   const loadingRef = useRef(false);

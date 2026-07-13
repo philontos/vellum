@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from app.model_loop import runner
 from app.store import memory
@@ -89,3 +90,26 @@ async def test_one_failing_job_does_not_block_others(migrated_db, monkeypatch):
     await runner.run_pending()                       # must not raise
     assert memory.get_cursor("trait") == -1          # failed → not advanced
     assert memory.get_summary_cursor("neutral") == 0  # ok → per-stream cursor advanced
+
+
+@pytest.mark.asyncio
+async def test_same_user_modeling_runs_are_serialized(migrated_db, monkeypatch):
+    calls = 0
+
+    async def facts_job(start_turn, end_turn):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.01)
+
+    async def noop(start_turn, end_turn, stream=None):
+        pass
+
+    monkeypatch.setattr(runner.facts, "run", facts_job)
+    monkeypatch.setattr(runner.traits, "run", noop)
+    monkeypatch.setattr(runner.summary, "run", noop)
+    monkeypatch.setattr(runner.dossier, "run", noop)
+    memory.append_message("user", "one turn")
+
+    await asyncio.gather(runner.run_pending(), runner.run_pending())
+
+    assert calls == 1

@@ -1,7 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { I18nProvider } from "./i18n";
+import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { LoginScreen } from "./auth/LoginScreen";
+import { I18nProvider, useT } from "./i18n";
 import { PrivacyProvider } from "./privacy/PrivacyProvider";
 // Self-hosted fonts (offline-safe) — Newsreader (serif voice) + Inter (UI/text)
 import "@fontsource/newsreader/400.css";
@@ -12,12 +14,36 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "./index.css";
 
+function Root() {
+  const auth = useAuth();
+  const { t } = useT();
+  if (auth.loading) {
+    return <div className="v-canvas flex h-full items-center justify-center text-sm text-muted">Vellum…</div>;
+  }
+  if (auth.error) {
+    return (
+      <div className="v-canvas flex h-full flex-col items-center justify-center gap-3 text-sm text-muted">
+        <span>{t("auth.unavailable")}</span>
+        <button className="rounded-lg border border-line px-3 py-1.5 text-ink-soft" onClick={() => void auth.refresh()}>
+          {t("auth.retry")}
+        </button>
+      </div>
+    );
+  }
+  if (auth.enabled && !auth.user) return <LoginScreen />;
+  return (
+    <PrivacyProvider namespace={auth.user?.id ?? "legacy"}>
+      <App user={auth.user} onLogout={auth.enabled ? auth.logout : undefined} />
+    </PrivacyProvider>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <I18nProvider>
-      <PrivacyProvider>
-        <App />
-      </PrivacyProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

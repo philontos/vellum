@@ -28,6 +28,7 @@ from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody
 
 from app import config
 from app.chat import converse, persona
+from app.data_scope import user_scope
 from app.feishu import commands
 from app.feishu.parse import extract_text, text_content
 
@@ -102,29 +103,43 @@ async def _handle(message_type: str, content: str, chat_id: str) -> None:
     await asyncio.to_thread(_send, chat_id, answer or "…")
 
 
-def _make_handler(loop: asyncio.AbstractEventLoop) -> lark.EventDispatcherHandler:
+async def _handle_scoped(
+    user_id: str, message_type: str, content: str, chat_id: str
+) -> None:
+    """Bind SDK-thread callbacks explicitly to the family's owner account."""
+    with user_scope(user_id):
+        await _handle(message_type, content, chat_id)
+
+
+def _make_handler(
+    loop: asyncio.AbstractEventLoop, user_id: str | None = None
+) -> lark.EventDispatcherHandler:
     def on_message(data: lark.im.v1.P2ImMessageReceiveV1) -> None:
         # Runs on the SDK's thread and MUST return within ~3s. Ack fast: schedule
         # the slow turn on the app loop and return; the reply is pushed later.
         msg = data.event.message
         if getattr(msg, "chat_type", "p2p") != "p2p":
             return  # private chats only — no group replies (privacy + no spam)
-        asyncio.run_coroutine_threadsafe(
-            _handle(msg.message_type, msg.content, msg.chat_id), loop)
+        turn = (
+            _handle_scoped(user_id, msg.message_type, msg.content, msg.chat_id)
+            if user_id is not None
+            else _handle(msg.message_type, msg.content, msg.chat_id)
+        )
+        asyncio.run_coroutine_threadsafe(turn, loop)
 
     return (lark.EventDispatcherHandler.builder("", "")
             .register_p2_im_message_receive_v1(on_message)
             .build())
 
 
-async def run() -> None:
+async def run(user_id: str | None = None) -> None:
     """Open the long connection and serve until cancelled. Launched as a
     background task from the app lifespan when `config.feishu_enabled()`."""
     loop = asyncio.get_running_loop()
     cli = lark.ws.Client(
         config.feishu_app_id(),
         config.feishu_app_secret(),
-        event_handler=_make_handler(loop),
+        event_handler=_make_handler(loop, user_id=user_id),
         log_level=lark.LogLevel.INFO,
     )
     # cli.start() runs its own blocking connection loop — keep it off the event

@@ -69,6 +69,11 @@ CREATE INDEX IF NOT EXISTS idx_eval_results_run ON eval_results(run_id);
 _initialized: set[str] = set()
 
 
+def discard_path(path) -> None:
+    """Re-run schema reconciliation after an out-of-band DB replacement."""
+    _initialized.discard(str(path))
+
+
 def _ensure_columns(conn) -> None:
     """Add columns introduced after a DB was first created — CREATE TABLE IF NOT
     EXISTS leaves an existing table untouched, and there is no migration runner.

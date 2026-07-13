@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { createPrivacyStore, type PinRecord, type PinStorage } from "./store";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createLocalPinStorage, createPrivacyStore, type PinRecord, type PinStorage } from "./store";
+
+afterEach(() => vi.unstubAllGlobals());
 
 // In-memory stand-in for the localStorage-backed PinStorage, so the store logic
 // can be tested in the node env (no jsdom, no real localStorage).
@@ -17,6 +19,23 @@ function fakeStorage(seed: PinRecord | null = null): PinStorage {
 }
 
 describe("privacy store", () => {
+  it("namespaces browser PINs by authenticated user", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    });
+    const alice = createLocalPinStorage("alice-id");
+    const bob = createLocalPinStorage("bob-id");
+
+    alice.write({ salt: "a", hash: "alice-hash" });
+    bob.write({ salt: "b", hash: "bob-hash" });
+
+    expect(alice.read()?.hash).toBe("alice-hash");
+    expect(bob.read()?.hash).toBe("bob-hash");
+  });
+
   it("starts hidden with no pin set", () => {
     const s = createPrivacyStore(fakeStorage());
     expect(s.getSnapshot()).toEqual({ hidden: true, hasPin: false });

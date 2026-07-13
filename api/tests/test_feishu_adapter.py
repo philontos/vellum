@@ -4,6 +4,8 @@ to `converse.reply` under whatever mode is currently active. (The lark-oapi wiri
 around this is covered by the live smoke test, not here.)"""
 import json
 
+from app.data_scope import current_user_id
+
 
 def _text(s: str) -> str:
     return json.dumps({"text": s})
@@ -80,3 +82,21 @@ async def test_switch_then_chat_uses_the_switched_mode(monkeypatch):
     await adapter._handle("text", _text("继续聊"), "chat1")
 
     assert seen["persona"] == "freud"
+
+
+async def test_family_mode_feishu_turn_runs_in_owner_scope(monkeypatch):
+    from app.feishu import adapter
+
+    seen = {}
+
+    async def fake_handle(message_type, content, chat_id):
+        seen["user_id"] = current_user_id()
+
+    monkeypatch.setattr(adapter, "_handle", fake_handle)
+
+    await adapter._handle_scoped(
+        "owner-user-id", "text", _text("hello"), "chat1"
+    )
+
+    assert seen["user_id"] == "owner-user-id"
+    assert current_user_id() is None

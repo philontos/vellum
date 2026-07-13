@@ -4,29 +4,44 @@
     VELLUM_SYNC_REMOTE=...                                  python -m app.sync pull
     python -m app.sync status
 
-Model: the data dir IS a git repo whose only tracked file is the encrypted
-vellum.db; the remote holds the single canonical copy. Treat it as a baton —
-one active device at a time. `pull` refuses to clobber un-pushed local changes,
-so you can't silently lose work by editing on two devices.
+Model: the deployment data root IS a git repo. Legacy mode tracks vellum.db;
+family mode tracks encrypted auth.db plus each users/<id>/vellum.db. Treat it as
+a baton — one active device at a time. `pull` refuses to clobber un-pushed local
+changes, so you can't silently lose work by editing on two devices.
 
-Only vellum.db is synced; observability.db (traces/evals) stays per-device.
-The key is NEVER stored here — it lives outside the data dir and is supplied via
-VELLUM_DB_KEY, so the git remote only ever sees ciphertext.
+Observability DBs (traces/evals) stay per-device. The key is NEVER stored here —
+it lives outside the data dir and is supplied via VELLUM_DB_KEY, so an encrypted
+deployment's git remote only ever sees ciphertext.
 """
 import os
 import subprocess
 import sys
 from pathlib import Path
 
-from app.config import data_dir, db_path
+from app import config
 from app.store import crypto
 
-SYNCED = ["vellum.db"]
 BRANCH = "main"
 
 
 class SyncConflict(Exception):
     """Local and remote diverged — the user must reconcile (pull/push) by hand."""
+
+
+def _repo_dir() -> Path:
+    return config.base_data_dir() if config.auth_enabled() else config.data_dir()
+
+
+def _synced_paths() -> list[Path]:
+    if not config.auth_enabled():
+        return [Path("vellum.db")]
+    root = config.base_data_dir()
+    paths = [Path("auth.db")]
+    paths.extend(
+        path.relative_to(root)
+        for path in sorted((root / "users").glob("*/vellum.db"))
+    )
+    return paths
 
 
 def _remote() -> str:
@@ -51,8 +66,11 @@ def _ensure_repo(repo: Path) -> None:
         _git(repo, "init", "-b", BRANCH)
         _git(repo, "config", "user.name", os.getenv("VELLUM_DEVICE_ID", "vellum"))
         _git(repo, "config", "user.email", "vellum@local")
-    # Track only the synced dbs; ignore everything else (vectors/, observability.db, ...)
-    want = "*\n!.gitignore\n" + "".join(f"!{n}\n" for n in SYNCED)
+    # Track only canonical DBs; observability/traces stay local to the VPS.
+    if config.auth_enabled():
+        want = "*\n!.gitignore\n!auth.db\n!users/\n!users/*/\n!users/*/vellum.db\n"
+    else:
+        want = "*\n!.gitignore\n!vellum.db\n"
     gi = repo / ".gitignore"
     if (gi.read_text() if gi.exists() else None) != want:
         gi.write_text(want)
@@ -66,26 +84,34 @@ def _ensure_repo(repo: Path) -> None:
 def _checkpoint() -> None:
     """Fold a WAL sidecar into the main file so we sync a complete db. No-op in
     the default rollback-journal mode (no -wal file); best-effort if it errors."""
-    p = db_path()
-    if not (p.parent / (p.name + "-wal")).exists():
-        return
-    try:
-        conn = crypto.sqlite_module().connect(str(p))
-        crypto.apply_key(conn)
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        conn.close()
-    except Exception:
-        pass
+    repo = _repo_dir()
+    for relative in _synced_paths():
+        p = repo / relative
+        if not p.exists() or not (p.parent / (p.name + "-wal")).exists():
+            continue
+        try:
+            conn = crypto.sqlite_module().connect(str(p))
+            crypto.apply_key(conn)
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            conn.close()
+        except Exception:
+            pass
 
 
 def commit_local() -> bool:
     """Stage + commit the synced db(s) locally. Returns True if a commit was made."""
-    repo = data_dir()
+    repo = _repo_dir()
     _ensure_repo(repo)
     _git(repo, "add", ".gitignore")
-    for n in SYNCED:
-        if (repo / n).exists():
-            _git(repo, "add", n)
+    synced = _synced_paths()
+    allowed = {".gitignore", *(str(path) for path in synced)}
+    tracked = _git(repo, "ls-files", check=False).stdout.splitlines()
+    stale = [path for path in tracked if path not in allowed]
+    if stale:
+        _git(repo, "rm", "--cached", "--ignore-unmatch", "--", *stale)
+    for path in synced:
+        if (repo / path).exists():
+            _git(repo, "add", str(path))
     if _git(repo, "diff", "--cached", "--quiet", check=False).returncode == 0:
         return False
     _git(repo, "commit", "-m", "vellum sync snapshot")
@@ -95,7 +121,7 @@ def commit_local() -> bool:
 def push() -> None:
     _remote()  # validate before doing any work
     _checkpoint()
-    repo = data_dir()
+    repo = _repo_dir()
     made = commit_local()
     _git(repo, "fetch", "origin", BRANCH, check=False)
     res = _git(repo, "push", "origin", BRANCH, check=False)
@@ -109,7 +135,7 @@ def push() -> None:
 
 def pull() -> None:
     _remote()
-    repo = data_dir()
+    repo = _repo_dir()
     _ensure_repo(repo)
     _git(repo, "fetch", "origin", BRANCH, check=False)
     if _git(repo, "rev-parse", "--verify", f"origin/{BRANCH}", check=False).returncode != 0:
@@ -128,7 +154,7 @@ def pull() -> None:
 
 def status() -> dict:
     _remote()
-    repo = data_dir()
+    repo = _repo_dir()
     _ensure_repo(repo)
     _git(repo, "fetch", "origin", BRANCH, check=False)
     has_head = _git(repo, "rev-parse", "--verify", "HEAD", check=False).returncode == 0

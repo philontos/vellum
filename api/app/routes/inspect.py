@@ -7,10 +7,12 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app import config
+from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
 from app.llm.client import resolve_structured_llm_config
 from app.store import model, observability as obs, traces
@@ -74,13 +76,13 @@ def patch_trace(trace_id: int, body: TracePatch):
 # --- eval panel ------------------------------------------------------------
 
 @router.get("/inspect/evals")
-def list_eval_runs(limit: int = 50):
+def list_eval_runs(limit: int = 50, _owner: dict | None = Depends(require_owner)):
     suites = [{"key": k, "needs_eval_gen": s.needs_eval_gen} for k, s in SUITES.items()]
     return {"runs": obs.list_runs(limit=limit), "suites": suites}
 
 
 @router.get("/inspect/evals/{run_id}")
-def get_eval_run(run_id: int):
+def get_eval_run(run_id: int, _owner: dict | None = Depends(require_owner)):
     run = obs.get_run(run_id)
     if run is None:
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -93,6 +95,12 @@ async def _stream_lines(suite: str):
     lines. The subprocess isolates the in-memory scratch (process-global conn swap)
     from the server; the parent here does all durable observability.db writes."""
     env = {**os.environ, "PYTHONPATH": str(_API_DIR)}
+    if config.auth_enabled():
+        # The child process cannot inherit a ContextVar. Point it at the already
+        # scoped owner directory and run it in legacy-path mode; eval scratch then
+        # remains isolated without ever falling back to the deployment root DB.
+        env["VELLUM_DATA_DIR"] = str(config.data_dir())
+        env["VELLUM_AUTH_ENABLED"] = "0"
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "evals.stream", suite,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
@@ -112,7 +120,7 @@ def _sse(obj: dict) -> str:
 
 
 @router.post("/inspect/evals/run")
-async def run_eval(suite: str):
+async def run_eval(suite: str, _owner: dict | None = Depends(require_owner)):
     if suite not in SUITES:
         return JSONResponse(
             {"error": f"unknown suite {suite!r}; choose from {', '.join(SUITES)}"},

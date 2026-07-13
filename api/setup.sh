@@ -99,7 +99,9 @@ echo "==> creating/upgrading the encrypted database"
 export VELLUM_DB_KEY="$(grep -E '^[[:space:]]*VELLUM_DB_KEY=' .env | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
 DATA_DIR="$(grep -E '^[[:space:]]*VELLUM_DATA_DIR=' .env | tail -1 | cut -d= -f2- | xargs || true)"
 [ -n "${DATA_DIR:-}" ] && export VELLUM_DATA_DIR="$DATA_DIR"
-"$PY" -c "from app.store import db; db.run_migrations()"
+AUTH_ENABLED="$(grep -E '^[[:space:]]*VELLUM_AUTH_ENABLED=' .env | tail -1 | cut -d= -f2- | xargs || true)"
+[ -n "${AUTH_ENABLED:-}" ] && export VELLUM_AUTH_ENABLED="$AUTH_ENABLED"
+"$PY" -m app.bootstrap
 
 echo ""
 echo "==> done. Fill in your LLM/embedding keys in api/.env, then start the backend:"

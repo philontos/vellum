@@ -3,9 +3,40 @@ VELLUM_DATA_DIR per-test without import-order pain."""
 import os
 from pathlib import Path
 
+from app.data_scope import MissingUserScopeError, current_user_id
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def auth_enabled() -> bool:
+    return _bool("VELLUM_AUTH_ENABLED")
+
+
+def base_data_dir() -> Path:
+    """Deployment-wide state: auth.db plus the users/ directory."""
+    return Path(os.getenv("VELLUM_DATA_DIR", "./data"))
+
 
 def data_dir() -> Path:
-    return Path(os.getenv("VELLUM_DATA_DIR", "./data"))
+    """The active user's private directory (or the legacy single-user root)."""
+    user_id = current_user_id()
+    if user_id is not None:
+        return base_data_dir() / "users" / user_id
+    if auth_enabled():
+        raise MissingUserScopeError(
+            "user-owned data was accessed without an authenticated user scope"
+        )
+    return base_data_dir()
+
+
+def auth_db_path() -> Path:
+    """Global identities/sessions DB; never follows the current user scope."""
+    return base_data_dir() / "auth.db"
 
 
 def db_path() -> Path:
@@ -21,6 +52,18 @@ def observability_db_path() -> Path:
 
 def vector_dir() -> Path:
     return data_dir() / "vectors"
+
+
+def auth_cookie_name() -> str:
+    return os.getenv("VELLUM_AUTH_COOKIE", "vellum_session")
+
+
+def auth_cookie_secure() -> bool:
+    return _bool("VELLUM_AUTH_COOKIE_SECURE")
+
+
+def auth_session_days() -> int:
+    return _int("VELLUM_AUTH_SESSION_DAYS", 30)
 
 
 def _int(name: str, default: int) -> int:

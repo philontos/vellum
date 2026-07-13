@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RENDERER = ROOT / "deploy" / "render-service-unit.sh"
+SETUP = ROOT / "api" / "setup.sh"
 
 
 def _render_unit(host: str | None = None) -> str:
@@ -61,3 +62,8 @@ def test_service_unit_rejects_wildcard_bind():
 
     assert result.returncode != 0
     assert "wildcard" in result.stderr.lower()
+
+
+def test_setup_uses_auth_aware_bootstrap_migrations():
+    script = SETUP.read_text()
+    assert "app.bootstrap" in script

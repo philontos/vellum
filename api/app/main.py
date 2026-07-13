@@ -3,15 +3,19 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app import config
+from app import bootstrap
+from app.auth import accounts
+from app.auth.dependencies import require_user
+from app.auth.middleware import AuthContextMiddleware
+from app.auth import routes as auth_routes
 from app.routes import chat as chat_routes
 from app.routes import diary as diary_routes
 from app.routes import history as history_routes
 from app.routes import inspect as inspect_routes
-from app.store import crypto, db
 
 
 @asynccontextmanager
@@ -19,16 +23,21 @@ async def lifespan(app: FastAPI):
     # Refuse to start (with a clear message) if the db is encrypted but no key
     # is configured, then ensure the schema is present. The vector index is
     # rebuilt lazily from the db on first use.
-    crypto.assert_db_accessible()
-    db.run_migrations()
+    bootstrap.migrate_all()
 
     # Bridge Feishu private chats to vellum, in-process, only when configured.
     # Imported lazily so a deployment without lark-oapi/credentials boots
     # exactly as before and the test suite never starts the connection.
     feishu_task = None
-    if config.feishu_enabled():
+    if config.feishu_enabled() and not config.auth_enabled():
         from app.feishu import adapter as feishu_adapter
         feishu_task = asyncio.create_task(feishu_adapter.run())
+    elif config.feishu_enabled():
+        # The first version keeps the existing Feishu identity owner-only.
+        owner = accounts.active_owner()
+        if owner is not None:
+            from app.feishu import adapter as feishu_adapter
+            feishu_task = asyncio.create_task(feishu_adapter.run(user_id=owner["id"]))
 
     try:
         yield
@@ -47,10 +56,13 @@ def _web_dist_dir() -> Path:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Vellum", lifespan=lifespan)
-    app.include_router(chat_routes.router)
-    app.include_router(history_routes.router)
-    app.include_router(diary_routes.router)
-    app.include_router(inspect_routes.router)
+    app.add_middleware(AuthContextMiddleware)
+    protected = [Depends(require_user)]
+    app.include_router(auth_routes.router)
+    app.include_router(chat_routes.router, dependencies=protected)
+    app.include_router(history_routes.router, dependencies=protected)
+    app.include_router(diary_routes.router, dependencies=protected)
+    app.include_router(inspect_routes.router, dependencies=protected)
 
     @app.get("/health")
     def health():

@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { createPrivacyStore, type PrivacyStore } from "./store";
+import { createLocalPinStorage, createPrivacyStore, type PrivacyStore } from "./store";
 
 type PrivacyValue = {
   hidden: boolean;
@@ -22,11 +22,16 @@ const PrivacyCtx = createContext<PrivacyValue | null>(null);
 export function PrivacyProvider({
   children,
   store,
+  namespace = "legacy",
 }: {
   children: ReactNode;
   store?: PrivacyStore; // injectable for tests / storybook
+  namespace?: string;
 }) {
-  const s = useMemo(() => store ?? createPrivacyStore(), [store]);
+  const s = useMemo(
+    () => store ?? createPrivacyStore(createLocalPinStorage(namespace)),
+    [store, namespace],
+  );
   const state = useSyncExternalStore(s.subscribe, s.getSnapshot, s.getSnapshot);
   const value = useMemo<PrivacyValue>(
     () => ({

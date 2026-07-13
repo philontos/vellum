@@ -13,6 +13,18 @@ export const DICT = {
     "nav.you": "You",
     "nav.traces": "Traces",
 
+    // private family authentication
+    "auth.subtitle": "Your private family space",
+    "auth.username": "Username",
+    "auth.password": "Password",
+    "auth.invalid": "The username or password is incorrect.",
+    "auth.signIn": "Sign in",
+    "auth.signingIn": "Signing in…",
+    "auth.privateFamily": "Private · no public signup",
+    "auth.logout": "Sign out",
+    "auth.unavailable": "Vellum is unavailable.",
+    "auth.retry": "Retry",
+
     // composer
     "composer.placeholder": "Say something to it…",
     "composer.send": "Send",
@@ -154,6 +166,17 @@ export const DICT = {
     "nav.diary": "日记",
     "nav.you": "你是谁",
     "nav.traces": "Traces",
+
+    "auth.subtitle": "你的家庭私密空间",
+    "auth.username": "用户名",
+    "auth.password": "密码",
+    "auth.invalid": "用户名或密码不正确。",
+    "auth.signIn": "登录",
+    "auth.signingIn": "登录中…",
+    "auth.privateFamily": "仅供家人 · 不开放注册",
+    "auth.logout": "退出",
+    "auth.unavailable": "暂时无法连接 Vellum。",
+    "auth.retry": "重试",
 
     "composer.placeholder": "跟它聊点什么…",
     "composer.send": "发送",

@@ -7,13 +7,20 @@ import { EvalPanel } from "./components/EvalPanel";
 import { ProbePanel } from "./components/ProbePanel";
 import { AppShell, type View } from "./components/ui/AppShell";
 import { useChat } from "./hooks/useChat";
+import type { AuthUser } from "./auth/client";
 
-export default function App() {
+export default function App({
+  user,
+  onLogout,
+}: {
+  user: AuthUser | null;
+  onLogout?: () => Promise<void>;
+}) {
   const [view, setView] = useState<View>("chat");
-  const { messages, streaming, persona, setPersona, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier } = useChat();
+  const { messages, streaming, persona, setPersona, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier } = useChat(user?.id);
 
   return (
-    <AppShell view={view} onChange={setView}>
+    <AppShell view={view} onChange={setView} user={user} onLogout={onLogout}>
       {view === "chat" && (
         <ChatLayout
           messages={messages}
@@ -30,7 +37,7 @@ export default function App() {
           onOpenDiary={() => setView("diary")}
         />
       )}
-      {view === "diary" && <DiaryPanel />}
+      {view === "diary" && <DiaryPanel userId={user?.id} />}
       {view === "model" && <ModelPanel />}
       {view === "traces" && <TracesPanel />}
       {view === "probe" && <ProbePanel />}

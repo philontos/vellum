@@ -100,3 +100,64 @@ def test_push_requires_remote(tmp_path, monkeypatch):
     monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path / "d"))
     with pytest.raises(SystemExit):
         sync.push()
+
+
+def test_family_backup_tracks_auth_db_and_each_private_user_db(tmp_path, monkeypatch, remote):
+    from app import sync
+    from app.auth import accounts
+    from app.data_scope import user_scope
+    from app.store import memory
+
+    data = tmp_path / "family"
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(data))
+    monkeypatch.setenv("VELLUM_AUTH_ENABLED", "1")
+    monkeypatch.setenv("VELLUM_SYNC_REMOTE", remote)
+    monkeypatch.delenv("VELLUM_DB_KEY", raising=False)
+    alice = accounts.create_user("alice", "Alice", "a sufficiently long password")
+    bob = accounts.create_user("bob", "Bob", "another sufficiently long password")
+    with user_scope(alice["id"]):
+        memory.append_message("user", "alice data")
+    with user_scope(bob["id"]):
+        memory.append_message("user", "bob data")
+
+    sync.push()
+
+    tree = subprocess.run(
+        ["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert "auth.db" in tree
+    assert f"users/{alice['id']}/vellum.db" in tree
+    assert f"users/{bob['id']}/vellum.db" in tree
+    assert all(not path.endswith("observability.db") for path in tree)
+
+
+def test_switching_backup_to_family_mode_stops_tracking_stale_legacy_db(
+    tmp_path, monkeypatch, remote
+):
+    from app import sync
+    from app.auth import accounts
+    from app.store import db
+
+    data = tmp_path / "upgrade"
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(data))
+    monkeypatch.setenv("VELLUM_SYNC_REMOTE", remote)
+    monkeypatch.delenv("VELLUM_AUTH_ENABLED", raising=False)
+    db.run_migrations()
+    sync.push()
+
+    monkeypatch.setenv("VELLUM_AUTH_ENABLED", "1")
+    user = accounts.create_user("owner", "Owner", "a sufficiently long password", role="owner")
+    sync.push()
+
+    tree = subprocess.run(
+        ["git", "--git-dir", remote, "ls-tree", "-r", "--name-only", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert "vellum.db" not in tree
+    assert "auth.db" in tree
+    assert f"users/{user['id']}/vellum.db" in tree

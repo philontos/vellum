@@ -1,10 +1,9 @@
 # Vellum
 
-A single-user, local **cognitive mirror**: one eternal chat stream with long-term
-memory, plus a background loop that silently models *you* — a prose **dossier**,
-structured **trait dimensions** (OCEAN / MBTI / Schwartz / regulatory focus,
-Bayesian-smoothed), and a **facts** pin-board. The model is fed back as quiet
-background reference, never a lens — the current question stays the figure.
+A private, self-hosted **cognitive mirror** for one person or a small family. Each
+account gets its own conversation, long-term memory, prose **dossier**, structured
+**trait dimensions** (OCEAN / MBTI / Schwartz / regulatory focus), facts board,
+vectors, and traces. There is no public signup or SaaS control plane.
 
 Any OpenAI-compatible chat model plugs in. Every LLM call (chat *and* background
 modeling) is captured as an inspectable trace.
@@ -60,6 +59,19 @@ regenerates an existing key. The schema is also created/upgraded automatically o
 every startup, so there's no separate migration step. Prefer plaintext / no
 encryption? See the end of *Encryption*. Leave this terminal running.
 
+Family login is opt-in. To enable it for a new data directory, load `.env`, create
+an owner at the password prompt, then set `VELLUM_AUTH_ENABLED=1` in `.env`:
+
+```bash
+set -a && source .env && set +a
+.venv/bin/python -m app.auth.cli create \
+  --username owner --display-name "Owner" --role owner
+```
+
+For an existing `data/vellum.db`, stop the running service and add
+`--adopt-legacy`. The command copies the old main and observability databases into
+the owner's private directory and keeps the originals in place for rollback.
+
 ### 2. Web UI (port 5173)
 
 In a second terminal:
@@ -72,8 +84,8 @@ pnpm dev
 
 ### 3. Open it
 
-Go to **http://localhost:5173** and start chatting. The dev server proxies `/chat`,
-`/history`, `/inspect`, `/health` to the backend on `:18080`.
+Go to **http://localhost:5173** and start chatting. The dev server proxies `/auth`,
+`/chat`, `/history`, `/inspect`, `/health` to the backend on `:18080`.
 
 Backend-only sanity check: `curl http://localhost:18080/health` → `{"status":"ok"}`.
 
@@ -87,7 +99,8 @@ Copy `api/.env.example` to `api/.env` and fill it in.
 |---|---|---|
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | yes | The chat model — any OpenAI-compatible `/chat/completions` endpoint. |
 | `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` | yes* | The embedding model (`/embeddings`). *Falls back to `LLM_*` if unset — but set it explicitly when your chat provider has no embeddings. |
-| `VELLUM_DATA_DIR` | no | Where the SQLite db + vector index live. Default `./data`. |
+| `VELLUM_DATA_DIR` | no | Data root. Family mode stores `auth.db` plus `users/<id>/vellum.db`. Default `./data`. |
+| `VELLUM_AUTH_ENABLED` | no | `1` enables private family login and per-account stores; default `0` keeps legacy mode. |
 | `EVAL_GEN_BASE_URL` / `EVAL_GEN_API_KEY` / `EVAL_GEN_MODEL` | no | External evaluator model — only needed to *run* evals. |
 
 Useful optional knobs (no `.env.example` entry, sane defaults):
@@ -99,6 +112,8 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `LLM_TIMEOUT_SECONDS` | `60` | Per-request timeout. |
 | `VELLUM_PERSONA` | `neutral` | Persona file under `api/app/config/persona/`. |
 | `VELLUM_DB_KEY` / `VELLUM_DB_KEY_FILE` | _(unset)_ | 256-bit hex key enabling SQLCipher at-rest encryption. Unset = plaintext. See *Encryption* below. |
+| `VELLUM_AUTH_COOKIE_SECURE` | `0` | Keep `0` for HTTP over WireGuard/SSH; set `1` only when the site is served through HTTPS. |
+| `VELLUM_AUTH_SESSION_DAYS` | `30` | Login session lifetime. Password changes and account disable revoke existing sessions. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
 ---
@@ -139,9 +154,10 @@ What it does (all idempotent — safe to re-run):
 
 ### Multi-device sync (optional)
 
-Your data dir (`api/data/`) is itself a tiny git repo whose only tracked file is the
-encrypted `vellum.db`; the sync commands manage it for you and push it to a remote
-that only ever sees ciphertext. Treat it as a baton: one active device at a time.
+Your data root (`api/data/`) is itself a tiny git repo. Legacy mode tracks the
+encrypted `vellum.db`; family mode tracks encrypted `auth.db` and every
+`users/<id>/vellum.db`. The sync commands push only ciphertext. Treat it as a
+baton: one active device at a time.
 
 **One-time setup:** create an empty **private** repo (e.g. on GitHub, named
 `vellum-data` — do *not* add a README/.gitignore, leave it empty). Then on your
@@ -152,7 +168,7 @@ cd api && source .venv/bin/activate
 echo 'VELLUM_SYNC_REMOTE=git@github.com:you/vellum-data.git' >> .env
 
 set -a && source .env && set +a          # sync reads the process env, not .env
-python -m app.sync push                  # checkpoint -> commit vellum.db -> push
+python -m app.sync push                  # checkpoint -> commit canonical DBs -> push
 python -m app.sync status                # ahead / behind the remote
 ```
 
@@ -163,12 +179,12 @@ new one. Then point it at the same remote and pull:
 
 ```bash
 set -a && source .env && set +a
-python -m app.sync pull                  # hard-resets local vellum.db to the remote;
+python -m app.sync pull                  # hard-resets canonical DBs to the remote;
                                          # refuses if you have un-pushed local changes
 ```
 
-Only `vellum.db` is synced (the canonical state); `observability.db` (traces/evals)
-stays per-device. The key never goes in the repo — carry it out-of-band.
+Per-user `observability.db` files (traces/evals) stay per-device. The key never
+goes in the repo — carry it out-of-band.
 
 ### Prefer plaintext (no encryption)?
 
@@ -186,8 +202,8 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
 
 - **Migrations run automatically on app startup** (FastAPI lifespan) and are
   forward-only and idempotent. For CLI-only flows you can still run them by hand:
-  `python -c "from app.store import db; db.run_migrations()"` (from `api/`, with
-  `VELLUM_DATA_DIR` matching your `.env`). Never edit a committed migration — add a new one.
+  `python -m app.bootstrap` (from `api/`, after exporting `.env`). Never edit a
+  committed migration — add a new one.
 - **`.env` is not auto-loaded by the app.** Pass it via `uvicorn --env-file .env`
   (shown above) or export it into your shell. Tests and evals read the process
   environment directly.
@@ -196,9 +212,11 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   Volcengine ARK, etc. **Changing the embedding model invalidates stored
   embeddings** (different dimension) — clear the `embeddings` table (or delete
   `api/data/` to reset) so they rebuild as you chat.
-- **Single-user, local only.** No auth, no accounts. All text and embeddings live
-  in SQLite (`api/data/vellum.db`); the HNSW vector graph is rebuilt in memory from
-  it on demand. To reset everything, delete `api/data/`.
+- **Private family accounts.** There is no web signup: the machine owner provisions,
+  lists, disables, and resets accounts with `python -m app.auth.cli`. Passwords use
+  Argon2id; opaque session tokens are stored only as SHA-256 digests. Each account's
+  text, embeddings, model, and traces live in its own SQLite files. HNSW graphs are
+  rebuilt into separate per-user memory caches.
 - **Reasoning models:** chain-of-thought (`reasoning_content` / `reasoning`) is
   captured into traces for inspection, but never streamed into the chat answer.
 - **Tests:** backend `pytest` (from `api/`); web `pnpm test` (from `web/`).
