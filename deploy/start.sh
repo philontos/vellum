@@ -56,9 +56,10 @@ $SUDO systemctl enable vellum >/dev/null 2>&1 || true
 $SUDO systemctl restart vellum
 
 # 5. health check
-sleep 2
 echo "==> health:"
-curl -fsS "http://$HOST:$PORT/health" && echo "  ✓ running on $HOST:$PORT"
+HEALTH="$(bash "$REPO/deploy/wait-for-health.sh" "http://$HOST:$PORT/health")"
+printf '%s\n' "$HEALTH"
+echo "  ✓ running on $HOST:$PORT"
 echo
 if [ "$HOST" = "127.0.0.1" ]; then
   echo "Reach it from a laptop (VS Code: forward port $PORT — or on the laptop run):"
