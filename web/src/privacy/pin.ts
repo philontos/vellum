@@ -5,6 +5,8 @@
 // still in memory and the DOM. Real data security is the SQLCipher at-rest
 // encryption with the user-held key. This only deters a casual glance / click.
 
+import { sha256 } from "./sha256";
+
 const enc = new TextEncoder();
 
 function toHex(bytes: Uint8Array): string {
@@ -20,8 +22,13 @@ export function randomSalt(): string {
 
 /** SHA-256 of `salt:pin`, hex-encoded. */
 export async function hashPin(pin: string, salt: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", enc.encode(`${salt}:${pin}`));
-  return toHex(new Uint8Array(digest));
+  const input = enc.encode(`${salt}:${pin}`);
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest("SHA-256", input);
+    return toHex(new Uint8Array(digest));
+  }
+  return toHex(sha256(input));
 }
 
 export async function verifyPin(pin: string, salt: string, hash: string): Promise<boolean> {

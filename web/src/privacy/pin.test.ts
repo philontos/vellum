@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashPin, randomSalt, verifyPin } from "./pin";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("pin hashing", () => {
   it("is deterministic for the same (pin, salt)", async () => {
@@ -21,6 +23,24 @@ describe("pin hashing", () => {
     const hash = await hashPin("hunter2", salt);
     expect(await verifyPin("hunter2", salt, hash)).toBe(true);
     expect(await verifyPin("nope", salt, hash)).toBe(false);
+  });
+
+  it("keeps working when SubtleCrypto is unavailable on an HTTP origin", async () => {
+    const cases = [
+      { pin: "1234", salt: "abc123" },
+      { pin: "密碼", salt: "盐" },
+      { pin: "x".repeat(100), salt: "s".repeat(80) },
+    ];
+    const expected = await Promise.all(cases.map(({ pin, salt }) => hashPin(pin, salt)));
+    vi.stubGlobal("crypto", {
+      getRandomValues: crypto.getRandomValues.bind(crypto),
+    });
+
+    await Promise.all(
+      cases.map(async ({ pin, salt }, index) => {
+        expect(await hashPin(pin, salt)).toBe(expected[index]);
+      }),
+    );
   });
 });
 
