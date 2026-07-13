@@ -2,8 +2,9 @@
 # The ONE command to (re)deploy Vellum on this box. Run it after every code change
 # — you pull the code yourself, this script does the rest:
 #
-#   ./deploy/start.sh                     # default port 18080
-#   VELLUM_PORT=18090 ./deploy/start.sh   # if 18080 is taken (e.g. another app)
+#   ./deploy/start.sh                                          # localhost:18080
+#   VELLUM_PORT=18090 ./deploy/start.sh                        # alternate port
+#   VELLUM_HOST=10.10.0.1 VELLUM_PORT=18090 ./deploy/start.sh # WireGuard only
 #
 # It refreshes the backend (venv + Python deps + sqlcipher driver + schema, via
 # api/setup.sh — so a pull that adds requirements is picked up automatically),
@@ -15,17 +16,26 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+HOST="${VELLUM_HOST:-127.0.0.1}"
 PORT="${VELLUM_PORT:-18080}"
-VENV="$REPO/api/.venv"
 RUN_USER="$(id -un)"
 SUDO=""; [ "$(id -u)" -ne 0 ] && SUDO=sudo
 
-echo "==> repo=$REPO  port=$PORT  user=$RUN_USER"
+echo "==> repo=$REPO  host=$HOST  port=$PORT  user=$RUN_USER"
 
 # You configure api/.env yourself; this script won't create or edit it — it just
 # refuses to deploy without it (an unconfigured service is worse than a clear stop).
 [ -f "$REPO/api/.env" ] || { echo "ERROR: missing $REPO/api/.env — first time: (cd api && ./setup.sh) then fill it in" >&2; exit 1; }
 command -v pnpm >/dev/null || { echo "ERROR: pnpm not found — npm install -g pnpm" >&2; exit 1; }
+
+# Render and validate the unit before setup/build or touching the installed unit.
+SERVICE_UNIT="$(
+  VELLUM_REPO="$REPO" \
+  VELLUM_RUN_USER="$RUN_USER" \
+  VELLUM_HOST="$HOST" \
+  VELLUM_PORT="$PORT" \
+    bash "$REPO/deploy/render-service-unit.sh"
+)"
 
 # 1. backend bootstrap — venv, Python deps, sqlcipher driver, schema. Idempotent;
 #    this is what picks up new requirements.txt deps after a pull. Migrations also
@@ -35,27 +45,10 @@ command -v pnpm >/dev/null || { echo "ERROR: pnpm not found — npm install -g p
 # 2. web — the backend serves it same-origin (one process, one port)
 ( cd "$REPO/web" && pnpm install && pnpm build )
 
-# 3. install/refresh the systemd unit (127.0.0.1 only, auto-restart, boot-start, hardened)
-$SUDO tee /etc/systemd/system/vellum.service >/dev/null <<UNIT
-[Unit]
-Description=Vellum backend (FastAPI + web, localhost only)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=$RUN_USER
-WorkingDirectory=$REPO/api
-Environment=VELLUM_WEB_DIST=$REPO/web/dist
-Environment=VELLUM_PORT=$PORT
-ExecStart=$VENV/bin/uvicorn app.main:app --host 127.0.0.1 --port \${VELLUM_PORT} --env-file .env
-Restart=on-failure
-RestartSec=3
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-UNIT
+# 3. install/refresh the systemd unit (localhost by default; explicit private
+# interface binding is supported via VELLUM_HOST)
+printf '%s\n' "$SERVICE_UNIT" \
+  | $SUDO tee /etc/systemd/system/vellum.service >/dev/null
 
 # 4. (re)start, picking up the fresh build + unit; startup applies new migrations
 $SUDO systemctl daemon-reload
@@ -65,7 +58,11 @@ $SUDO systemctl restart vellum
 # 5. health check
 sleep 2
 echo "==> health:"
-curl -fsS "http://127.0.0.1:$PORT/health" && echo "  ✓ running on 127.0.0.1:$PORT"
+curl -fsS "http://$HOST:$PORT/health" && echo "  ✓ running on $HOST:$PORT"
 echo
-echo "Reach it from a laptop (VS Code: forward port $PORT — or on the laptop run):"
-echo "  ssh -N -L 18888:127.0.0.1:$PORT $RUN_USER@<VPS_IP>   # then open http://localhost:18888"
+if [ "$HOST" = "127.0.0.1" ]; then
+  echo "Reach it from a laptop (VS Code: forward port $PORT — or on the laptop run):"
+  echo "  ssh -N -L 18888:127.0.0.1:$PORT $RUN_USER@<VPS_IP>   # then open http://localhost:18888"
+else
+  echo "Open http://$HOST:$PORT from a device that can route to that address."
+fi

@@ -1,13 +1,16 @@
 # Vellum — VPS deploy runbook
 
-Single-user, **localhost-only** backend + built web, reached over an **SSH
-tunnel**. No public exposure, no domain, no ICP filing. Mainland-to-mainland.
+Single-user backend + built web. It is **localhost-only by default** and can
+instead bind to an explicit private interface such as WireGuard. It never needs
+to bind the public interface, use a domain, or require ICP filing.
 
 > **Every deploy is one command.** After the one-time setup (§1), you pull the
 > code yourself and run:
 > ```bash
 > git pull --ff-only
 > VELLUM_PORT=18090 ./deploy/start.sh   # drop VELLUM_PORT= to use the default 18080
+> # WireGuard-only alternative:
+> VELLUM_HOST=10.10.0.1 VELLUM_PORT=18090 ./deploy/start.sh
 > ```
 > `start.sh` refreshes the backend (venv + Python deps + sqlcipher + schema, via
 > `api/setup.sh` — so a pull that adds requirements is picked up automatically),
@@ -50,12 +53,16 @@ free one — `start.sh` bakes it into the unit, so use the same port in the tunn
 ```bash
 cd /opt/vellum && git pull --ff-only
 VELLUM_PORT=18090 ./deploy/start.sh
+# Or bind only the WireGuard interface:
+VELLUM_HOST=10.10.0.1 VELLUM_PORT=18090 ./deploy/start.sh
 ```
 `start.sh` re-runs `api/setup.sh` (picking up any new Python deps), rebuilds the
-web (`pnpm install && pnpm build`), writes `/etc/systemd/system/vellum.service`
-(bound to `127.0.0.1`, auto-restart, boot-start, hardened), `daemon-reload`s,
-enables, and restarts the service — then curls `/health`. The restart applies any
-new DB migrations via the app's startup. Data in `api/data/` is never touched.
+web (`pnpm install && pnpm build`), writes `/etc/systemd/system/vellum.service`,
+`daemon-reload`s, enables, and restarts the service — then curls `/health` on the
+configured host. `VELLUM_HOST` defaults to `127.0.0.1`; set it to the exact
+private-interface address, never `0.0.0.0`, for direct private-network access.
+The restart applies any new DB migrations via the app's startup. Data in
+`api/data/` is never touched.
 
 Lower-level controls when you don't need a full redeploy:
 ```bash
@@ -65,18 +72,29 @@ journalctl -u vellum -f          # live logs (Ctrl-C to stop)
 ```
 
 ## 3. Lock down the network (the "ACL")
-- The app binds `127.0.0.1` only (the unit enforces `--host 127.0.0.1`) — it is
-  not reachable on the public IP.
-- Firewall: allow inbound **SSH only**.
+- The default binds `127.0.0.1` and is reached through an SSH tunnel.
+- For WireGuard-only access, bind the exact interface address, for example
+  `VELLUM_HOST=10.10.0.1`. Do not use `0.0.0.0`.
+- After direct WireGuard access is verified, restrict the application port by
+  ingress interface. Adapt the interface, addresses, and ports to the host:
   ```bash
   sudo ufw default deny incoming
   sudo ufw allow 22/tcp
+  sudo ufw allow 51820/udp
+  sudo ufw allow in on wg0 to 10.10.0.1 port 18090 proto tcp
   sudo ufw enable
   ```
-  (If your provider has a cloud security group, mirror it: only 22 inbound.)
+  (If your provider has a cloud security group, do not add the Vellum TCP port;
+  only the public WireGuard UDP port needs to reach `wg0`.)
 - Optional tighter ACL: restrict SSH source to your usual IP ranges.
 
-## 4. Access from each PC (SSH tunnel)
+## 4. Access from each PC
+
+With WireGuard active on the PC and Vellum bound to `10.10.0.1`, open
+<http://10.10.0.1:18090> directly.
+
+For the default localhost-only deployment, use an SSH tunnel:
+
 ```bash
 # local 18888  ->  VPS 127.0.0.1:<VELLUM_PORT>   (remote = the port you deployed with)
 ssh -N -L 18888:127.0.0.1:18090 <user>@<VPS_IP>
@@ -98,8 +116,9 @@ port-forwarding works too — forward the VPS port and open the localhost link.)
 ## 6. Verification checklist
 - [ ] `sudo reboot` → service comes back (`systemctl status vellum`).
 - [ ] `sudo systemctl kill vellum` (or kill the uvicorn PID) → systemd restarts it.
-- [ ] Second PC via the tunnel: chat works, history loads.
-- [ ] From another host: `curl http://<VPS_IP>:18080/health` is refused/times
-      out (app is **not** public).
+- [ ] Each intended WireGuard peer (or second PC via SSH tunnel): chat works and
+      history loads.
+- [ ] From outside WireGuard: `curl http://<VPS_PUBLIC_IP>:<VELLUM_PORT>/health`
+      is refused/times out (app is **not** public).
 - [ ] `deploy/backup.sh` runs clean; the remote repo shows only the encrypted
       `vellum.db`.
