@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
 
 const MAX_H = 240; // ~10 lines, then the area scrolls internally
@@ -11,6 +11,7 @@ const SEND_KEY = IS_MAC ? "⌘+Enter" : "Ctrl+Enter";
 // Prompt-side modes offered in the footer switch. Each value must match a persona
 // folder name on the backend; the label is an i18n key under `composer.mode.*`.
 const MODES = ["neutral", "freud"] as const;
+const useClientLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function Composer({
   onSend,
@@ -30,7 +31,7 @@ export function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
 
   // Grow the area to fit its content, capped — min-height keeps it a block when empty.
-  useLayoutEffect(() => {
+  useClientLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
@@ -46,12 +47,12 @@ export function Composer({
   }
 
   return (
-    <div className="border-t border-line bg-gradient-to-b from-transparent to-base">
-      <div className="mx-auto w-full max-w-[58rem] px-5 py-4 sm:px-8 2xl:max-w-[60rem]">
+    <div className="flex-none border-t border-line bg-gradient-to-b from-transparent to-base">
+      <div className="v-safe-bottom mx-auto w-full max-w-[58rem] px-3 pt-3 sm:px-8 sm:pt-4 2xl:max-w-[60rem]">
         <div className="rounded-2xl border border-line bg-surface shadow-card transition-colors focus-within:border-accent/40 focus-within:ring-2 focus-within:ring-accent/15">
           <textarea
             ref={ref}
-            className="block max-h-60 min-h-[84px] w-full resize-none bg-transparent px-4 pb-1.5 pt-3.5 text-sm leading-relaxed text-ink placeholder:text-muted focus:outline-none"
+            className="block max-h-60 min-h-[72px] w-full resize-none bg-transparent px-4 pb-1.5 pt-3.5 text-base sm:text-sm leading-relaxed text-ink placeholder:text-muted focus:outline-none sm:min-h-[84px]"
             rows={3}
             value={text}
             aria-label="Message"
@@ -82,7 +83,7 @@ export function Composer({
                         aria-checked={active}
                         onClick={() => onPersonaChange(m)}
                         className={
-                          "rounded-md px-2.5 py-1 transition-colors " +
+                          "min-h-9 rounded-md px-2.5 py-1 transition-colors " +
                           (active ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")
                         }
                       >
@@ -98,14 +99,14 @@ export function Composer({
             </div>
             {streaming ? (
               <button
-                className="rounded-xl border border-line bg-surface px-5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-accent/40 hover:text-ink"
+                className="min-h-11 rounded-xl border border-line bg-surface px-5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-accent/40 hover:text-ink"
                 onClick={onStop}
               >
                 {tr("composer.stop")}
               </button>
             ) : (
               <button
-                className="rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-fg shadow-[0_5px_16px_rgba(208,102,63,0.18)] transition-colors hover:bg-accent-ink disabled:opacity-40"
+                className="min-h-11 rounded-xl bg-accent px-5 py-2 text-sm font-semibold text-accent-fg shadow-[0_5px_16px_rgba(208,102,63,0.18)] transition-colors hover:bg-accent-ink disabled:opacity-40"
                 onClick={submit}
                 disabled={!text.trim()}
               >

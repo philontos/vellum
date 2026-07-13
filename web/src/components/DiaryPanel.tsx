@@ -116,7 +116,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
         <span className="text-sm text-muted">{t("diary.sub")}</span>
         <div
           role="radiogroup"
@@ -144,7 +144,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
         </div>
       </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[52rem] flex-col gap-5 px-5 py-8">
+        <div className="mx-auto flex w-full max-w-[52rem] flex-col gap-5 px-4 py-6 sm:px-5 sm:py-8">
           {days.map((d) => (
             <div key={d.day} className="flex flex-col gap-3">
               <div className="v-timebreak" aria-hidden>
@@ -181,7 +181,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
               ))}
             </div>
           ))}
-          {cards.length === 0 && !loading && <div className="p-8 text-muted">{t("diary.empty")}</div>}
+          {cards.length === 0 && !loading && <div className="p-4 text-muted sm:p-8">{t("diary.empty")}</div>}
           <div ref={bottomRef} aria-hidden className="h-px" />
           {loading && <div className="py-4 text-center text-xs text-muted">{t("diary.loading")}</div>}
           {atEnd && cards.length > 0 && (

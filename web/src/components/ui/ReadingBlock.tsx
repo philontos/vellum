@@ -17,7 +17,7 @@ export function ReadingBlock({
     <div>
       <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted">{label}</div>
       <pre
-        className={`max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-line bg-well p-3 font-mono text-[11px] leading-relaxed text-ink-soft ${className}`}
+        className={`max-h-64 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border border-line bg-well p-3 font-mono text-[11px] leading-relaxed text-ink-soft ${className}`}
       >
         {children}
       </pre>

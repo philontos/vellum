@@ -62,7 +62,7 @@ export function TraceRow({
         </span>
         {trace.reasoning && <span title={tr("traces.hasReasoning")}>🧠</span>}
         {toolCalls.length > 0 && <span title={tr("traces.hasTools")}>🔧</span>}
-        <span className="ml-auto font-mono text-[11px] text-muted">{trace.created_at}</span>
+        <span className="w-full font-mono text-[11px] text-muted sm:ml-auto sm:w-auto">{trace.created_at}</span>
         <button
           onClick={copy}
           title={copied ? tr("traces.copied") : tr("traces.copy")}
@@ -89,7 +89,7 @@ export function TraceRow({
           <input
             defaultValue={trace.note ?? ""}
             placeholder={tr("traces.notePh")}
-            className={`w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 ${blur}`}
+            className={`min-h-11 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-base sm:text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 ${blur}`}
             onBlur={(e) => onNote(trace, e.target.value)}
           />
           <ReadingBlock label="PROMPT" className={trace.prompt ? blur : ""}>

@@ -12,7 +12,7 @@ export function NavItem({
     <button
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={`flex items-center gap-2.5 rounded-lg border-l-2 px-3 py-2 text-left text-sm transition-colors ${
+      className={`flex min-h-11 items-center gap-2.5 rounded-lg border-l-2 px-3 py-2 text-left text-sm transition-colors md:min-h-0 ${
         active
           ? "border-accent bg-accent/10 text-ink"
           : "border-transparent text-muted hover:bg-white/5 hover:text-ink-soft"

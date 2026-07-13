@@ -57,12 +57,12 @@ export function ProcessBlock({
       {open && (
         <div className="v-gloss mt-1.5 flex flex-col gap-1">
           {items.map((it, i) => (
-            <div key={i} className="flex items-baseline gap-1.5 text-ink-soft/70">
+            <div key={i} className="flex min-w-0 flex-wrap items-baseline gap-1.5 text-ink-soft/70">
               <span aria-hidden className="text-[10px] opacity-70">
                 {icon(it.status)}
               </span>
               <span className="font-mono text-[11px] opacity-80">{it.name}</span>
-              {it.query ? <span className="italic opacity-70">“{it.query}”</span> : null}
+              {it.query ? <span className="min-w-0 break-words italic opacity-70">“{it.query}”</span> : null}
             </div>
           ))}
           {hasReasoning && (

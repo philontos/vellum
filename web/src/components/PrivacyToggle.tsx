@@ -60,7 +60,7 @@ export function PrivacyToggle() {
       </button>
 
       {open && hidden && (
-        <div className="absolute bottom-full left-0 z-10 mb-2 w-56 rounded-lg border border-line bg-surface p-3 shadow-float">
+        <div className="absolute bottom-full left-0 z-10 mb-2 w-[min(14rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-3 shadow-float">
           <div className="mb-2 text-xs font-medium text-ink-soft">
             {hasPin ? t("privacy.enterTitle") : t("privacy.setTitle")}
           </div>

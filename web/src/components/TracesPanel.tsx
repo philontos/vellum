@@ -34,7 +34,7 @@ export function TracesPanel() {
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3 text-sm sm:px-4">
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           <TabButton active={tab === "rounds"} onClick={() => setTab("rounds")}>
             {tr("traces.tabRounds")}
@@ -49,7 +49,7 @@ export function TracesPanel() {
         >
           {tr("traces.refresh")}
         </button>
-        <span className="ml-auto text-muted">
+        <span className="ml-auto text-xs text-muted sm:text-sm">
           {tab === "rounds"
             ? tr("traces.roundCount", { n: rounds.length })
             : tr("traces.passCount", { n: passes.length })}
@@ -63,11 +63,11 @@ export function TracesPanel() {
               <RoundCard key={r.turn ?? "ungrouped"} round={r} onPin={pin} onNote={note} blur={blur} />
             ))
           ) : (
-            <div className="p-8 text-muted">{tr("traces.empty")}</div>
+            <div className="p-4 text-muted sm:p-8">{tr("traces.empty")}</div>
           )
         ) : passes.length > 0 ? (
           passes.map((p) => (
-            <div key={p.id} className="border-b border-line/70 px-4 py-3">
+            <div key={p.id} className="border-b border-line/70 px-3 py-3 sm:px-4">
               <TraceRow
                 trace={p}
                 onPin={pin}
@@ -78,7 +78,7 @@ export function TracesPanel() {
             </div>
           ))
         ) : (
-          <div className="p-8 text-muted">{tr("traces.emptyBackground")}</div>
+          <div className="p-4 text-muted sm:p-8">{tr("traces.emptyBackground")}</div>
         )}
       </div>
     </div>

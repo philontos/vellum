@@ -2,14 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root { height: 100%; margin: 0; }
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
 
 body {
   background-color: theme("colors.base");
   color: theme("colors.ink");
   font-family: theme("fontFamily.sans");
+  overflow: hidden;
+  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
   text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* iOS zooms the page when a focused form control is smaller than 16px. */
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .v-msg-del {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 /* Quiet, warm scrollbars on the deep ground */
@@ -24,6 +51,18 @@ body {
   border: 3px solid theme("colors.base");
 }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* The phone shell uses the visual viewport and leaves room for notches/home bars. */
+.v-safe-top {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+.v-safe-bottom {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+.v-safe-y {
+  padding-top: calc(1rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
 
 @layer components {
   /* A single warm pool of light at the top of the canvas — keeps the dark from going flat. */
@@ -132,6 +171,7 @@ body {
     line-height: 1.72;
     color: theme("colors.ink");
     text-wrap: pretty;
+    overflow-wrap: anywhere;
   }
   .v-md > :first-child { margin-top: 0; }
   .v-md > :last-child { margin-bottom: 0; }
