@@ -40,24 +40,24 @@ export function ProbePanel() {
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
+      <div className="flex items-center gap-2 border-b border-line px-3 py-3 text-sm sm:px-4">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") run(); }}
           placeholder={t("probe.placeholder")}
-          className="flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-base sm:text-sm text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
         <button
           onClick={run}
           disabled={busy}
-          className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:opacity-60"
+          className="min-h-11 rounded-lg bg-accent px-3.5 py-1.5 font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:opacity-60"
         >
           {busy ? t("probe.running") : t("probe.run")}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 text-sm">
+      <div className="flex-1 overflow-y-auto px-3 py-4 text-sm sm:px-4">
         {err && <div className="text-status-warn-fg">{t("probe.error")} {err}</div>}
         {!res && !err && <div className="p-8 text-muted">{t("probe.empty")}</div>}
 
@@ -77,7 +77,7 @@ export function ProbePanel() {
                   ) : (
                     <div className="space-y-1">
                       {res.hits.map((h, i) => (
-                        <div key={i} className={`flex items-center gap-2 text-xs ${h.kept ? "" : "opacity-45"}`}>
+                        <div key={i} className={`flex flex-wrap items-center gap-2 text-xs ${h.kept ? "" : "opacity-45"}`}>
                           <span className="w-9 font-mono tabular-nums text-ink-soft">{h.sim.toFixed(2)}</span>
                           <span className="h-1.5 w-24 flex-none overflow-hidden rounded-full bg-well">
                             <span
@@ -144,7 +144,7 @@ export function ProbePanel() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 placeholder={t("probe.factsFilter")}
-                className="mb-2 w-full rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
+                className="mb-2 min-h-11 w-full rounded-lg border border-line bg-surface px-2.5 py-1 text-base sm:text-xs text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
               />
               {facts.length === 0 ? (
                 <div className="text-xs text-muted">{t("probe.noFacts")}</div>
@@ -179,7 +179,7 @@ function HitCard({ hit }: { hit: ProbeHit }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs"
+        className="flex min-h-11 w-full flex-wrap items-center gap-2 px-3 py-2 text-left text-xs"
       >
         <Caret open={open} />
         <span className="w-9 font-mono tabular-nums text-ink-soft">{hit.sim.toFixed(2)}</span>
@@ -235,7 +235,7 @@ function SummaryBody({ hit }: { hit: ProbeHit }) {
 function TurnRow({ row, anchor }: { row: ProbeRow; anchor: boolean }) {
   const { t } = useT();
   return (
-    <div className={`flex gap-2 rounded px-2 py-1 ${anchor ? "bg-accent/10 ring-1 ring-accent/30" : ""}`}>
+    <div className={`flex min-w-0 gap-2 rounded px-2 py-1 ${anchor ? "bg-accent/10 ring-1 ring-accent/30" : ""}`}>
       <span className="w-12 flex-none font-mono text-[10px] leading-relaxed text-muted">
         #{row.turn} {row.role === "user" ? "U" : "A"}
       </span>

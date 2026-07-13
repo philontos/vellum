@@ -56,12 +56,12 @@ export function EvalPanel() {
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3 text-sm sm:px-4">
         <select
           value={suite}
           onChange={(e) => setSuite(e.target.value)}
           disabled={!!live}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
+          className="min-h-11 max-w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-base sm:text-sm text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
         >
           {suites.map((s) => <option key={s.key} value={s.key}>{s.key}</option>)}
         </select>
@@ -73,11 +73,11 @@ export function EvalPanel() {
         <button
           onClick={run}
           disabled={!!live || !suite}
-          className="rounded-lg bg-accent px-3.5 py-1.5 font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:bg-surface disabled:text-muted disabled:opacity-60"
+          className="min-h-11 rounded-lg bg-accent px-3.5 py-1.5 font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:bg-surface disabled:text-muted disabled:opacity-60"
         >
           {live ? t("eval.runningBtn") : t("eval.run")}
         </button>
-        <span className="ml-auto text-muted">{t("eval.count", { n: runs.length })}</span>
+        <span className="w-full text-xs text-muted sm:ml-auto sm:w-auto sm:text-sm">{t("eval.count", { n: runs.length })}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -111,7 +111,7 @@ export function EvalPanel() {
                   ? t("eval.running", { done: r.completed, total: r.total })
                   : summarize(r.aggregate)}
               </span>
-              <span className="ml-auto font-mono text-[11px] text-muted">{r.started_at}</span>
+              <span className="w-full font-mono text-[11px] text-muted sm:ml-auto sm:w-auto">{r.started_at}</span>
               <button
                 className="text-accent transition-colors hover:text-accent-ink"
                 onClick={() => toggle(r.id)}

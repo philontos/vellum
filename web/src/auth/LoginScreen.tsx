@@ -26,13 +26,13 @@ export function LoginScreen() {
   }
 
   return (
-    <main className="v-canvas flex h-full min-h-[460px] items-center justify-center px-5 py-10">
-      <section className="w-full max-w-[390px] rounded-2xl border border-line bg-surface p-7 shadow-float sm:p-9">
+    <main className="v-canvas v-safe-y flex h-full h-dvh min-h-0 items-start justify-center overflow-y-auto px-4 sm:items-center sm:px-5">
+      <section className="my-auto w-full max-w-[390px] rounded-2xl border border-line bg-surface p-5 shadow-float sm:p-9">
         <div className="relative mb-1 w-max font-serif text-[31px] font-medium tracking-tight text-ink">
           Vellum
           <span className="absolute bottom-2 left-0 h-0.5 w-[29px] rounded-full bg-accent" />
         </div>
-        <p className="mb-8 text-sm text-muted">{t("auth.subtitle")}</p>
+        <p className="mb-6 text-sm text-muted sm:mb-8">{t("auth.subtitle")}</p>
 
         <form className="space-y-4" onSubmit={submit}>
           <label className="block text-xs font-medium text-ink-soft">
@@ -43,7 +43,7 @@ export function LoginScreen() {
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-line bg-well px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent"
+              className="mt-1.5 min-h-11 w-full rounded-lg border border-line bg-well px-3.5 py-2.5 text-base sm:text-sm text-ink outline-none transition-colors focus:border-accent"
             />
           </label>
           <label className="block text-xs font-medium text-ink-soft">
@@ -53,14 +53,14 @@ export function LoginScreen() {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-line bg-well px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-accent"
+              className="mt-1.5 min-h-11 w-full rounded-lg border border-line bg-well px-3.5 py-2.5 text-base sm:text-sm text-ink outline-none transition-colors focus:border-accent"
             />
           </label>
           {failed && <p className="text-xs text-status-fail-fg">{t("auth.invalid")}</p>}
           <button
             type="submit"
             disabled={submitting || !username.trim() || !password}
-            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-11 w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-fg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {submitting ? t("auth.signingIn") : t("auth.signIn")}
           </button>

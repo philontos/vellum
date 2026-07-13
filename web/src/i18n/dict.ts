@@ -12,6 +12,8 @@ export const DICT = {
     "nav.diary": "Diary",
     "nav.you": "You",
     "nav.traces": "Traces",
+    "nav.openMenu": "Open navigation",
+    "nav.closeMenu": "Close navigation",
 
     // private family authentication
     "auth.subtitle": "Your private family space",
@@ -166,6 +168,8 @@ export const DICT = {
     "nav.diary": "日记",
     "nav.you": "你是谁",
     "nav.traces": "Traces",
+    "nav.openMenu": "打开导航",
+    "nav.closeMenu": "关闭导航",
 
     "auth.subtitle": "你的家庭私密空间",
     "auth.username": "用户名",

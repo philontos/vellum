@@ -20,11 +20,11 @@ export function ModelPanel() {
 
   return (
     <div className="v-canvas flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-10">
-        <h1 className="font-serif text-[26px] tracking-tight text-ink">{t("nav.you")}</h1>
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
+        <h1 className="font-serif text-2xl tracking-tight text-ink sm:text-[26px]">{t("nav.you")}</h1>
 
         {/* Dossier — full-width narrative banner */}
-        <section className="mt-8">
+        <section className="mt-7 sm:mt-8">
           <SectionHeader label={t("model.dossierTitle")} />
           {m.dossier ? (
             <p className={`v-dropcap whitespace-pre-wrap font-serif text-[17px] leading-[1.76] text-ink ${blur}`}>
@@ -36,7 +36,7 @@ export function ModelPanel() {
         </section>
 
         {/* Facts (narrow) + Personality (wide grid) */}
-        <div className="mt-11 grid gap-10 lg:grid-cols-[minmax(0,17rem)_1fr]">
+        <div className="mt-9 grid gap-9 sm:mt-11 sm:gap-10 lg:grid-cols-[minmax(0,17rem)_1fr]">
           <section>
             <SectionHeader label={t("model.factsTitle")} />
             <ul className="space-y-2.5 text-sm">

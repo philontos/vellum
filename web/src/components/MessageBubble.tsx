@@ -41,7 +41,7 @@ export function MessageBubble({
       onClick={del}
       title={t("chat.delete")}
       aria-label={t("chat.delete")}
-      className="v-msg-del opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+      className="v-msg-del opacity-70 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
     >
       ✕
     </button>
@@ -54,7 +54,7 @@ export function MessageBubble({
     return (
       <div className="group flex items-start justify-end gap-1.5">
         {DeleteButton}
-        <div className="v-slip max-w-[78%]">
+        <div className="v-slip max-w-[88%] break-words sm:max-w-[78%]">
           <div className="v-eyebrow v-eyebrow--you">{t("chat.you")}</div>
           <div className={`whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft ${blur}`}>
             {m.content || "…"}
@@ -66,7 +66,7 @@ export function MessageBubble({
 
   return (
     <div className="group flex items-start justify-start gap-1.5">
-      <div className="max-w-[88%]">
+      <div className="min-w-0 max-w-[calc(100%_-_2.5rem)] sm:max-w-[88%]">
         <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
         <ProcessBlock
           reasoning={m.reasoning}

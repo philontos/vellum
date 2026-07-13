@@ -89,8 +89,8 @@ export function MessageList({
   let prevDay = "";
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[58rem] flex-col gap-7 px-5 py-10 sm:px-8 2xl:max-w-[60rem]">
+    <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overscroll-contain overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-[58rem] flex-col gap-6 px-4 py-6 sm:gap-7 sm:px-8 sm:py-10 2xl:max-w-[60rem]">
         <div ref={topRef} aria-hidden className="h-px" />
         {cappedEarlier && (
           <button
