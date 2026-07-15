@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChatLayout } from "./components/ChatLayout";
 import { DiaryPanel } from "./components/DiaryPanel";
 import { ModelPanel } from "./components/ModelPanel";
@@ -9,7 +9,10 @@ import { PromptsPanel } from "./components/PromptsPanel";
 import { AppShell, type View } from "./components/ui/AppShell";
 import { useChat } from "./hooks/useChat";
 import type { AuthUser } from "./auth/client";
+import { diaryEntryPath, diaryTimelinePath, parseDiaryRoute } from "./diary/route";
 import { useT } from "./i18n";
+
+const VELLUM_PAGE_STATE = "vellumPage";
 
 export function allowViewChange(
   currentView: View,
@@ -27,19 +30,78 @@ export default function App({
   onLogout?: () => Promise<void>;
 }) {
   const { t } = useT();
-  const [view, setView] = useState<View>("chat");
+  const initialDiaryRoute = parseDiaryRoute(window.location.pathname);
+  const [view, setView] = useState<View>(
+    () => initialDiaryRoute.kind === "other" ? "chat" : "diary",
+  );
+  const [diaryEntryId, setDiaryEntryId] = useState<number | null>(
+    () => initialDiaryRoute.kind === "entry" ? initialDiaryRoute.entryId : null,
+  );
   const [promptDirty, setPromptDirty] = useState(false);
   const { messages, streaming, persona, setPersona, send, stop, retry, remove, loadEarlier, canLoadEarlier, cappedEarlier } = useChat(user?.id);
 
+  useEffect(() => {
+    function followBrowserHistory() {
+      const route = parseDiaryRoute(window.location.pathname);
+      if (route.kind === "timeline") {
+        setView("diary");
+        setDiaryEntryId(null);
+      } else if (route.kind === "entry") {
+        setView("diary");
+        setDiaryEntryId(route.entryId);
+      } else {
+        setView("chat");
+        setDiaryEntryId(null);
+      }
+    }
+    window.addEventListener("popstate", followBrowserHistory);
+    return () => window.removeEventListener("popstate", followBrowserHistory);
+  }, []);
+
+  function showDiaryTimeline() {
+    window.history.replaceState(
+      { [VELLUM_PAGE_STATE]: "diary" },
+      "",
+      diaryTimelinePath(),
+    );
+    setDiaryEntryId(null);
+  }
+
   function changeView(next: View) {
-    if (next === view) return;
+    if (next === view) {
+      if (next === "diary" && diaryEntryId !== null) showDiaryTimeline();
+      return;
+    }
     if (!allowViewChange(
       view,
       promptDirty,
       () => window.confirm(t("prompts.discardConfirm")),
     )) return;
     setPromptDirty(false);
+    if (next === "diary") {
+      showDiaryTimeline();
+    } else if (view === "diary") {
+      window.history.replaceState({ [VELLUM_PAGE_STATE]: next }, "", "/");
+      setDiaryEntryId(null);
+    }
     setView(next);
+  }
+
+  function openDiaryEntry(entryId: number) {
+    window.history.pushState(
+      { [VELLUM_PAGE_STATE]: "diary-entry" },
+      "",
+      diaryEntryPath(entryId),
+    );
+    setDiaryEntryId(entryId);
+  }
+
+  function closeDiaryEntry() {
+    if (window.history.state?.[VELLUM_PAGE_STATE] === "diary-entry") {
+      window.history.back();
+      return;
+    }
+    showDiaryTimeline();
   }
 
   async function logout() {
@@ -73,10 +135,17 @@ export default function App({
           canLoadEarlier={canLoadEarlier}
           cappedEarlier={cappedEarlier}
           onLoadEarlier={loadEarlier}
-          onOpenDiary={() => setView("diary")}
+          onOpenDiary={() => changeView("diary")}
         />
       )}
-      {view === "diary" && <DiaryPanel userId={user?.id} />}
+      {view === "diary" && (
+        <DiaryPanel
+          userId={user?.id}
+          entryId={diaryEntryId}
+          onOpenEntry={openDiaryEntry}
+          onCloseEntry={closeDiaryEntry}
+        />
+      )}
       {view === "model" && <ModelPanel />}
       {view === "traces" && <TracesPanel />}
       {view === "probe" && <ProbePanel />}

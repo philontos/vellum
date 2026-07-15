@@ -1,29 +1,36 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { getDiary, getDiaryMessages, type DiaryCard } from "../api/client";
 import { userStorageKey } from "../auth/storage";
 import { groupByDay } from "../diary/group";
 import { useT } from "../i18n";
 import { DiaryEntry, type DiaryEntryState } from "./diary/DiaryEntry";
-import { DiaryPager } from "./diary/DiaryPager";
 import { DiaryTimeline } from "./diary/DiaryTimeline";
 
 const PAGE = 20;
 
 /**
- * The diary keeps its timeline and entry reader as two sibling pages. Opening an
- * entry slides the reader in without unmounting the timeline, so long transcripts
- * get their own scroll surface and returning preserves the reader's list position.
+ * The timeline and entry reader are separate browser-history pages. The controller
+ * keeps fetched cards and scroll position alive while the route swaps components.
  */
-export function DiaryPanel({ userId }: { userId?: string }) {
+export function DiaryPanel({
+  userId,
+  entryId,
+  onOpenEntry,
+  onCloseEntry,
+}: {
+  userId?: string;
+  entryId: number | null;
+  onOpenEntry: (entryId: number) => void;
+  onCloseEntry: () => void;
+}) {
   const { lang } = useT();
   const personaKey = userStorageKey(userId, "persona");
   const [cards, setCards] = useState<DiaryCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [atEnd, setAtEnd] = useState(false);
-  const [selected, setSelected] = useState<DiaryCard | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
   const [details, setDetails] = useState<Record<number, DiaryEntryState>>({});
+  const [detailCards, setDetailCards] = useState<Record<number, DiaryCard>>({});
   const [stream, setStream] = useState<string>(
     () => localStorage.getItem(personaKey) || "neutral",
   );
@@ -31,6 +38,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
   const loadingRef = useRef(false);
   const detailLoadingRef = useRef(new Set<number>());
   const returnFocusIdRef = useRef<number | null>(null);
+  const timelineScrollTopRef = useRef(0);
   const atEndRef = useRef(false);
   const cardsRef = useRef<DiaryCard[]>([]);
   const streamRef = useRef(stream);
@@ -76,7 +84,8 @@ export function DiaryPanel({ userId }: { userId?: string }) {
       },
     }));
     try {
-      const { messages } = await getDiaryMessages(cardId);
+      const { summary, messages } = await getDiaryMessages(cardId);
+      setDetailCards((current) => ({ ...current, [cardId]: summary }));
       setDetails((current) => ({
         ...current,
         [cardId]: { status: "ready", messages },
@@ -97,14 +106,11 @@ export function DiaryPanel({ userId }: { userId?: string }) {
 
   function openDetail(card: DiaryCard) {
     returnFocusIdRef.current = card.id;
-    setSelected(card);
-    setDetailOpen(true);
+    timelineScrollTopRef.current = scrollRef.current?.scrollTop ?? 0;
+    setDetailCards((current) => ({ ...current, [card.id]: card }));
+    onOpenEntry(card.id);
     const cached = details[card.id];
     if (!cached || cached.status === "error") void loadDetail(card.id);
-  }
-
-  function closeDetail() {
-    setDetailOpen(false);
   }
 
   useEffect(() => {
@@ -114,7 +120,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
     atEndRef.current = false;
     setCards([]);
     setAtEnd(false);
-    setDetailOpen(false);
+    timelineScrollTopRef.current = 0;
     void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream]);
@@ -122,7 +128,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
   useEffect(() => {
     const sentinel = bottomRef.current;
     const root = scrollRef.current;
-    if (!sentinel || !root || atEnd || detailOpen) return;
+    if (!sentinel || !root || atEnd || entryId !== null) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) void loadMore();
@@ -132,69 +138,79 @@ export function DiaryPanel({ userId }: { userId?: string }) {
     observer.observe(sentinel);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [atEnd, cards.length, detailOpen]);
+  }, [atEnd, cards.length, entryId]);
 
   useEffect(() => {
-    if (!detailOpen) return;
+    if (entryId === null) return;
     function escape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        closeDetail();
+        onCloseEntry();
       }
     }
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
-  }, [detailOpen]);
+  }, [entryId, onCloseEntry]);
 
   useEffect(() => {
-    if (selected) detailScrollRef.current?.scrollTo({ top: 0 });
-  }, [selected]);
+    if (entryId !== null) detailScrollRef.current?.scrollTo({ top: 0 });
+  }, [entryId]);
 
   useEffect(() => {
-    if (detailOpen || returnFocusIdRef.current === null) return;
+    if (entryId !== null || returnFocusIdRef.current === null) return;
     const cardId = returnFocusIdRef.current;
     const frame = requestAnimationFrame(() => {
       scrollRef.current
-        ?.querySelector<HTMLButtonElement>(`[data-diary-card="${cardId}"]`)
+        ?.querySelector<HTMLAnchorElement>(`[data-diary-card="${cardId}"]`)
         ?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [detailOpen]);
+  }, [entryId]);
+
+  useLayoutEffect(() => {
+    if (entryId === null && scrollRef.current) {
+      scrollRef.current.scrollTop = timelineScrollTopRef.current;
+    }
+  }, [entryId]);
+
+  useEffect(() => {
+    if (entryId === null) return;
+    const cached = details[entryId];
+    if (!cached || cached.status === "error") void loadDetail(entryId);
+    // Loading is keyed by the route id; cache updates must not restart the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryId]);
 
   const days = groupByDay(cards);
-  const detailState = selected ? details[selected.id] : undefined;
+  if (entryId !== null) {
+    const detailCard = detailCards[entryId] ?? cards.find((card) => card.id === entryId) ?? null;
+    return (
+      <div className="v-canvas flex h-full min-h-0 flex-col overflow-hidden">
+        <DiaryEntry
+          card={detailCard}
+          state={details[entryId]}
+          lang={lang}
+          scrollRef={detailScrollRef}
+          onBack={onCloseEntry}
+          onRetry={() => void loadDetail(entryId)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="v-canvas flex h-full min-h-0 flex-col overflow-hidden">
-      <DiaryPager
-        detailOpen={detailOpen}
-        timeline={(
-          <DiaryTimeline
-            days={days}
-            cardCount={cards.length}
-            stream={stream}
-            lang={lang}
-            loading={loading}
-            atEnd={atEnd}
-            scrollRef={scrollRef}
-            bottomRef={bottomRef}
-            onStreamChange={setStream}
-            onOpen={openDetail}
-          />
-        )}
-        detail={(
-          <DiaryEntry
-            card={selected}
-            state={detailState}
-            active={detailOpen}
-            lang={lang}
-            scrollRef={detailScrollRef}
-            onBack={closeDetail}
-            onRetry={() => {
-              if (selected) void loadDetail(selected.id);
-            }}
-          />
-        )}
+      <DiaryTimeline
+        days={days}
+        cardCount={cards.length}
+        stream={stream}
+        lang={lang}
+        loading={loading}
+        atEnd={atEnd}
+        scrollRef={scrollRef}
+        bottomRef={bottomRef}
+        onStreamChange={setStream}
+        onOpen={openDetail}
       />
     </div>
   );

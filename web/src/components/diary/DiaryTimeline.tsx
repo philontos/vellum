@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 
 import type { DiaryCard } from "../../api/client";
 import type { DiaryDay } from "../../diary/group";
+import { diaryEntryPath } from "../../diary/route";
 import { useT } from "../../i18n";
 import { dayLabel } from "../../util/day";
 
@@ -70,11 +71,22 @@ export function DiaryTimeline({
                 {day.day ? dayLabel(day.cards[0].created_at, lang) : ""}
               </div>
               {day.cards.map((card) => (
-                <button
+                <a
                   key={card.id}
-                  type="button"
+                  href={diaryEntryPath(card.id)}
                   data-diary-card={card.id}
-                  onClick={() => onOpen(card)}
+                  onClick={(event) => {
+                    if (
+                      event.defaultPrevented ||
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    ) return;
+                    event.preventDefault();
+                    onOpen(card);
+                  }}
                   className="group/entry w-full rounded-xl border border-line bg-surface px-4 py-3 text-left transition-colors hover:border-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 >
                   <span className="flex items-start gap-3">
@@ -97,7 +109,7 @@ export function DiaryTimeline({
                       </span>
                     </span>
                   </span>
-                </button>
+                </a>
               ))}
             </div>
           ))}

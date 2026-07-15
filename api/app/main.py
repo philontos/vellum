@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import config
@@ -78,6 +79,10 @@ def create_app() -> FastAPI:
     # Vite dev server is used instead.
     dist = _web_dist_dir()
     if dist.is_dir():
+        @app.get("/app/{path:path}", include_in_schema=False)
+        def web_app_route(path: str):
+            return FileResponse(dist / "index.html")
+
         app.mount("/", StaticFiles(directory=str(dist), html=True), name="web")
 
     return app
