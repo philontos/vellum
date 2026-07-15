@@ -61,8 +61,11 @@ export const DICT = {
     "diary.loading": "Loading…",
     "diary.end": "That's the beginning.",
     "diary.span": "turns {start}–{end}",
-    "diary.open": "Open",
-    "diary.collapse": "Collapse",
+    "diary.read": "Read",
+    "diary.back": "Back",
+    "diary.summary": "Summary",
+    "diary.loadFailed": "Couldn't load this diary entry.",
+    "diary.retry": "Try again",
 
     // context rail (what Vellum is learning, alongside the conversation)
     "rail.title": "Vellum",
@@ -275,8 +278,11 @@ export const DICT = {
     "diary.loading": "加载中…",
     "diary.end": "到头了。",
     "diary.span": "第 {start}–{end} 轮",
-    "diary.open": "展开",
-    "diary.collapse": "收起",
+    "diary.read": "查看全文",
+    "diary.back": "返回",
+    "diary.summary": "本段摘要",
+    "diary.loadFailed": "这篇日记加载失败。",
+    "diary.retry": "重试",
 
     "rail.title": "Vellum",
     "rail.sub": "它正在拼凑对你的理解",
