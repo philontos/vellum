@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { LoginScreen } from "./auth/LoginScreen";
+import { ConfirmProvider } from "./confirm/ConfirmProvider";
 import { I18nProvider, useT } from "./i18n";
 // Self-hosted fonts (offline-safe) — Newsreader (serif voice) + Inter (UI/text)
 import "@fontsource/newsreader/400.css";
@@ -36,9 +37,11 @@ function Root() {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <I18nProvider>
-      <AuthProvider>
-        <Root />
-      </AuthProvider>
+      <ConfirmProvider>
+        <AuthProvider>
+          <Root />
+        </AuthProvider>
+      </ConfirmProvider>
     </I18nProvider>
   </React.StrictMode>,
 );

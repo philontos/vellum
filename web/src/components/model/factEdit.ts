@@ -5,14 +5,12 @@ type InvalidReason = "empty" | "too_long";
 export type FactSaveDecision =
   | { kind: "invalid"; reason: InvalidReason }
   | { kind: "unchanged" }
-  | { kind: "cancelled" }
-  | { kind: "save"; text: string };
+  | { kind: "changed"; text: string };
 
 
-export function decideFactSave(
+export function validateFactDraft(
   draft: string,
   current: string,
-  confirmSave: () => boolean,
 ): FactSaveDecision {
   const text = draft.trim();
   if (!text) return { kind: "invalid", reason: "empty" };
@@ -20,6 +18,5 @@ export function decideFactSave(
     return { kind: "invalid", reason: "too_long" };
   }
   if (text === current) return { kind: "unchanged" };
-  if (!confirmSave()) return { kind: "cancelled" };
-  return { kind: "save", text };
+  return { kind: "changed", text };
 }

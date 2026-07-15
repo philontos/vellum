@@ -15,6 +15,11 @@ export const DICT = {
     "nav.openMenu": "Open navigation",
     "nav.closeMenu": "Close navigation",
 
+    // global confirmation dialog
+    "dialog.cancel": "Cancel",
+    "dialog.delete": "Delete",
+    "dialog.save": "Save",
+
     // private family authentication
     "auth.subtitle": "Your private family space",
     "auth.username": "Username",
@@ -46,7 +51,8 @@ export const DICT = {
     "chat.searchN": "{n} searches",
     "chat.olderInDiary": "Earlier messages live in the Diary →",
     "chat.delete": "Delete from history",
-    "chat.deleteConfirm": "Delete this message from history? It stops being fed to the model and won't be recalled. This is reversible.",
+    "chat.deleteTitle": "Delete this message?",
+    "chat.deleteConfirm": "It will stop being fed to the model and won't be recalled. This is reversible.",
 
     // diary (a timeline of past conversation, browsed like a journal)
     "diary.sub": "Past conversations, by the day",
@@ -81,8 +87,10 @@ export const DICT = {
     "model.factEditField": "Fact text",
     "model.factSave": "Save",
     "model.factCancel": "Cancel",
-    "model.factSaveConfirm": "Save this change? It will replace the fact used in your profile and future conversations.",
-    "model.factDeleteConfirm": "Delete this fact? It will stop appearing in your profile and future conversations.",
+    "model.factSaveTitle": "Save this Fact?",
+    "model.factSaveConfirm": "The edited text will replace the fact used in your profile and future conversations.",
+    "model.factDeleteTitle": "Delete this Fact?",
+    "model.factDeleteConfirm": "It will stop appearing in your profile and future conversations.",
     "model.factEmptyError": "A fact cannot be empty.",
     "model.factTooLongError": "Keep this fact under {max} characters.",
     "model.factDuplicateError": "Another active fact already says the same thing.",
@@ -176,6 +184,10 @@ export const DICT = {
     "nav.openMenu": "打开导航",
     "nav.closeMenu": "关闭导航",
 
+    "dialog.cancel": "取消",
+    "dialog.delete": "删除",
+    "dialog.save": "保存",
+
     "auth.subtitle": "你的家庭私密空间",
     "auth.username": "用户名",
     "auth.password": "密码",
@@ -204,7 +216,8 @@ export const DICT = {
     "chat.searchN": "{n} 次搜索",
     "chat.olderInDiary": "更早的消息在『日记』里 →",
     "chat.delete": "从历史中删除",
-    "chat.deleteConfirm": "把这条消息从历史中删除？它将不再喂给模型、也不会被检索召回。此操作可恢复。",
+    "chat.deleteTitle": "删除这条消息？",
+    "chat.deleteConfirm": "删除后，它将不再喂给模型、也不会被检索召回。此操作可恢复。",
 
     // diary (一条时间线，像翻日记一样回看过往对话)
     "diary.sub": "过往的对话，按天回看",
@@ -237,8 +250,10 @@ export const DICT = {
     "model.factEditField": "Fact 内容",
     "model.factSave": "保存",
     "model.factCancel": "取消",
-    "model.factSaveConfirm": "确认保存这次修改吗？它会替换个人页和后续对话中使用的这条 Fact。",
-    "model.factDeleteConfirm": "确认删除这条 Fact 吗？删除后它将不再出现在个人页和后续对话中。",
+    "model.factSaveTitle": "保存这条 Fact？",
+    "model.factSaveConfirm": "修改后的内容会替换个人页和后续对话中使用的这条 Fact。",
+    "model.factDeleteTitle": "删除这条 Fact？",
+    "model.factDeleteConfirm": "删除后，它将不再出现在个人页和后续对话中。",
     "model.factEmptyError": "Fact 不能为空。",
     "model.factTooLongError": "Fact 不能超过 {max} 个字符。",
     "model.factDuplicateError": "已有另一条 active Fact 表达了相同内容。",
