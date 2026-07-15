@@ -20,5 +20,6 @@ describe("ModelTabs", () => {
     expect(html).toContain("Portrait");
     expect(html).toContain("Facts");
     expect(html).toContain("Traits");
+    expect(html).not.toContain("lg:hidden");
   });
 });
