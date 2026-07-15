@@ -14,6 +14,7 @@ from app.auth.middleware import AuthContextMiddleware
 from app.auth import routes as auth_routes
 from app.routes import chat as chat_routes
 from app.routes import diary as diary_routes
+from app.routes import facts as fact_routes
 from app.routes import history as history_routes
 from app.routes import inspect as inspect_routes
 
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_routes.router, dependencies=protected)
     app.include_router(history_routes.router, dependencies=protected)
     app.include_router(diary_routes.router, dependencies=protected)
+    app.include_router(fact_routes.router, dependencies=protected)
     app.include_router(inspect_routes.router, dependencies=protected)
 
     @app.get("/health")

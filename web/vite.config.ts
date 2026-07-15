@@ -10,6 +10,7 @@ export default defineConfig({
       "/history": "http://localhost:18080",
       "/health": "http://localhost:18080",
       "/auth": "http://localhost:18080",
+      "/facts": "http://localhost:18080",
       "/inspect": "http://localhost:18080",
     },
   },

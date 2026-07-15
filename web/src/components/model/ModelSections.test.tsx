@@ -19,7 +19,12 @@ describe("ModelSections", () => {
   it("keeps inactive sections hidden at every viewport size", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>
-        <ModelSections model={model} active="facts" />
+        <ModelSections
+          model={model}
+          active="facts"
+          onFactSave={async () => undefined}
+          onFactDelete={async () => undefined}
+        />
       </I18nProvider>,
     );
 
@@ -27,5 +32,7 @@ describe("ModelSections", () => {
     expect(sectionTag(html, "model-panel-facts")).not.toContain("hidden");
     expect(sectionTag(html, "model-panel-traits")).toContain('hidden=""');
     expect(html).not.toContain("lg:block");
+    expect(html).toContain("Edit fact");
+    expect(html).toContain("Delete fact");
   });
 });
