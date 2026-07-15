@@ -70,7 +70,7 @@ export function AppShell({
           <span aria-hidden>☰</span>
         </button>
         <Wordmark compact />
-        <span className="ml-auto truncate text-sm text-muted">{current}</span>
+        <span className="ml-auto truncate text-sm font-medium text-ink-soft">{current}</span>
       </header>
 
       <nav

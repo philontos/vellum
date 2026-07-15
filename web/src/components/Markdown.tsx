@@ -130,7 +130,7 @@ export function Markdown({ text, caret = false }: { text: string; caret?: boolea
   const lastIdx = blocks.length - 1;
 
   return (
-    <div className="v-md text-[15px] leading-[1.68] sm:text-base sm:leading-[1.72]">
+    <div className="v-md text-[15px] font-medium leading-[1.68] sm:text-base sm:font-normal sm:leading-[1.72]">
       {blocks.map((b, i) => {
         const tail = caret && i === lastIdx ? <span className="v-caret" aria-hidden /> : null;
         switch (b.type) {

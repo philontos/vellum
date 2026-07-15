@@ -56,9 +56,10 @@ describe("mobile controls", () => {
     );
 
     expect(assistantHtml).toContain(
-      "v-md text-[15px] leading-[1.68] sm:text-base sm:leading-[1.72]",
+      "v-md text-[15px] font-medium leading-[1.68] sm:text-base sm:font-normal sm:leading-[1.72]",
     );
     expect(userHtml).toContain("text-[13.5px]");
+    expect(userHtml).toContain("text-ink-soft");
     expect(userHtml).not.toContain("text-[15px]");
   });
 
