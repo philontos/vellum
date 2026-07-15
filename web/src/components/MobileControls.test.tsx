@@ -63,6 +63,21 @@ describe("mobile controls", () => {
     expect(userHtml).not.toContain("text-[15px]");
   });
 
+  it("does not reserve a right-side action gutter beside assistant text on mobile", () => {
+    const assistantHtml = withLanguage(
+      <MessageBubble
+        m={{ turn: 1, role: "assistant", content: "A full-width answer" }}
+        latest={false}
+        streaming={false}
+        onDelete={() => undefined}
+      />,
+    );
+
+    expect(assistantHtml).toContain("min-w-0 w-full md:max-w-[88%]");
+    expect(assistantHtml).not.toContain("max-w-[calc(100%_-_2.5rem)]");
+    expect(assistantHtml).toContain("absolute right-0 top-0 md:static md:pt-5");
+  });
+
   it("uses a keyboard-safe viewport and 16px login inputs", () => {
     const html = withLanguage(
       <AuthProvider>

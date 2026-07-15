@@ -57,7 +57,13 @@ export function MessageBubble({
       onClick={() => void del()}
       title={t("chat.delete")}
       aria-label={t("chat.delete")}
-      className="v-msg-del opacity-70 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+      className={
+        "v-msg-del opacity-70 " +
+        (mine
+          ? "sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 "
+          : "md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 ") +
+        "transition-opacity"
+      }
     >
       ✕
     </button>
@@ -81,9 +87,11 @@ export function MessageBubble({
   }
 
   return (
-    <div className="group flex items-start justify-start gap-1.5">
-      <div className="min-w-0 max-w-[calc(100%_-_2.5rem)] sm:max-w-[88%]">
-        <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
+    <div className="group relative flex min-w-0 items-start justify-start gap-1.5">
+      <div className="min-w-0 w-full md:max-w-[88%]">
+        <div className={DeleteButton ? "min-h-8 pr-10 md:min-h-0 md:pr-0" : undefined}>
+          <div className="v-eyebrow v-eyebrow--vellum">{t("chat.vellum")}</div>
+        </div>
         <ProcessBlock
           reasoning={m.reasoning}
           activity={m.activity}
@@ -114,7 +122,9 @@ export function MessageBubble({
           </div>
         )}
       </div>
-      <div className="pt-5">{DeleteButton}</div>
+      {DeleteButton && (
+        <div className="absolute right-0 top-0 md:static md:pt-5">{DeleteButton}</div>
+      )}
     </div>
   );
 }
