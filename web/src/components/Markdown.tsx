@@ -23,6 +23,7 @@ const ATX = /^\s*(#{1,6})\s+(.*\S)\s*$/;
 const BOLD_LINE = /^\s*\*\*((?:(?!\*\*).)+)\*\*[：:。.!?！？]*\s*$/;
 const UL = /^\s*[-*]\s+(.*\S)\s*$/;
 const OL = /^\s*\d+[.)]\s+(.*\S)\s*$/;
+const CJK = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]/;
 
 /** Parse source markdown into a flat list of blocks. Pure — unit-tested directly. */
 export function parseBlocks(src: string): Block[] {
@@ -128,9 +129,12 @@ export function renderInline(text: string, key: string): ReactNode[] {
 export function Markdown({ text, caret = false }: { text: string; caret?: boolean }) {
   const blocks = parseBlocks(text);
   const lastIdx = blocks.length - 1;
+  const languageClass = CJK.test(text) ? " v-md--cjk" : "";
 
   return (
-    <div className="v-md text-[15px] font-medium leading-[1.68] sm:text-base sm:font-normal sm:leading-[1.72]">
+    <div
+      className={`v-md${languageClass} text-[14px] font-normal leading-[1.72] sm:text-base sm:leading-[1.72]`}
+    >
       {blocks.map((b, i) => {
         const tail = caret && i === lastIdx ? <span className="v-caret" aria-hidden /> : null;
         switch (b.type) {

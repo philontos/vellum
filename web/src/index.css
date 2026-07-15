@@ -171,12 +171,27 @@ textarea {
     border-left: 1px solid rgba(198, 151, 90, 0.22);
   }
 
-  /* Vellum's manuscript: the serif reading voice, with its markdown set in type. */
+  /* Vellum's manuscript: a compact sans reading face fits narrow screens without
+     losing the warmer serif voice used by headings and wider reading layouts. */
   .v-md {
-    font-family: theme("fontFamily.serif");
+    font-family: theme("fontFamily.sans");
     color: theme("colors.ink");
-    text-wrap: pretty;
+    text-wrap: wrap;
     overflow-wrap: anywhere;
+  }
+  @media (min-width: 640px) {
+    .v-md {
+      font-family: theme("fontFamily.serif");
+      text-wrap: pretty;
+    }
+  }
+  @media (max-width: 639px) {
+    .v-md--cjk p,
+    .v-md--cjk li {
+      text-align: justify;
+      text-justify: inter-character;
+      text-align-last: start;
+    }
   }
   .v-md > :first-child { margin-top: 0; }
   .v-md > :last-child { margin-bottom: 0; }
