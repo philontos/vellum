@@ -26,39 +26,47 @@ export function DiaryEntry({
   onRetry: () => void;
 }) {
   const { t } = useT();
-  const backRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => backRef.current?.focus());
+    const frame = requestAnimationFrame(() => {
+      titleRef.current?.focus({ preventScroll: true });
+    });
     return () => cancelAnimationFrame(frame);
   }, [card?.id]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-none items-center gap-3 border-b border-line bg-base/95 px-3 py-2.5 backdrop-blur sm:px-5 sm:py-3">
-        <button
-          ref={backRef}
-          type="button"
-          onClick={onBack}
-          className="flex min-h-10 flex-none items-center gap-1.5 rounded-lg px-2.5 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          <span aria-hidden className="text-base">←</span>
-          {t("diary.back")}
-        </button>
-        <div className="min-w-0 border-l border-line pl-3">
-          <div className="truncate font-serif text-base text-ink">
-            {card ? dayLabel(card.created_at, lang) : t("diary.entryTitle")}
+      <header className="flex-none border-b border-line bg-base/95 px-2 py-1.5 backdrop-blur sm:px-5 sm:py-2">
+        <div className="relative mx-auto flex min-h-10 w-full max-w-[58rem] items-center justify-center px-12">
+          <button
+            type="button"
+            aria-label={t("diary.back")}
+            title={t("diary.back")}
+            onClick={onBack}
+            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          >
+            <span aria-hidden className="text-base leading-none">←</span>
+          </button>
+          <div className="min-w-0 max-w-full text-center">
+            <h1
+              ref={titleRef}
+              tabIndex={-1}
+              className="truncate font-serif text-base text-ink focus:outline-none"
+            >
+              {card ? dayLabel(card.created_at, lang) : t("diary.entryTitle")}
+            </h1>
+            {card && (
+              <div className="truncate font-mono text-[10px] text-muted">
+                {card.created_at?.slice(11, 16)} · {t("diary.span", {
+                  start: card.start_turn,
+                  end: card.end_turn,
+                })}
+              </div>
+            )}
           </div>
-          {card && (
-            <div className="truncate font-mono text-[10px] text-muted">
-              {card.created_at?.slice(11, 16)} · {t("diary.span", {
-                start: card.start_turn,
-                end: card.end_turn,
-              })}
-            </div>
-          )}
         </div>
-      </div>
+      </header>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto flex w-full max-w-[58rem] flex-col gap-7 px-4 py-6 sm:gap-9 sm:px-8 sm:py-9">
