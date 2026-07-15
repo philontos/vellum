@@ -22,6 +22,18 @@ const WORKSPACE: PromptWorkspace = {
       key: "chat/system prompt",
       name: "Chat system",
       description: "Main conversation instructions",
+      documentation: {
+        en: {
+          usage: "Used for the main conversation.",
+          runtime: "Loaded at the beginning of every chat turn.",
+          editing_guidance: ["Keep the role focused.", "Do not pin output language."],
+        },
+        zh: {
+          usage: "用于主对话。",
+          runtime: "每轮聊天开始时载入。",
+          editing_guidance: ["保持角色聚焦。", "不要固定输出语言。"],
+        },
+      },
       category: "chat",
       template_format: "format",
       variables: ["context"],

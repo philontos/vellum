@@ -9,10 +9,22 @@ export type PromptRelease = PromptReleaseSummary & {
   is_active: boolean;
 };
 
+export type PromptGuide = {
+  usage: string;
+  runtime: string;
+  editing_guidance: string[];
+};
+
+export type PromptDocumentation = {
+  en: PromptGuide;
+  zh: PromptGuide;
+};
+
 export type ManagedPrompt = {
   key: string;
   name: string;
   description: string;
+  documentation: PromptDocumentation;
   category: string;
   template_format: string;
   variables: string[];

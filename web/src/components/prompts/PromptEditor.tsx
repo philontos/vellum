@@ -1,24 +1,46 @@
+import { useState } from "react";
+
 import type { ManagedPrompt } from "../../api/prompts";
 import { useT } from "../../i18n";
 import { ReadingBlock } from "../ui/ReadingBlock";
 import { Tag } from "../ui/StatusChip";
+import { PromptEditorTabs, type PromptEditorTab } from "./PromptEditorTabs";
+import { PromptGuide } from "./PromptGuide";
 
 export type PromptBusy = "refresh" | "save" | "publish" | "restore" | null;
 
-export function PromptEditor({
-  prompt,
-  draft,
-  dirty,
-  busy,
-  onDraftChange,
-  onSave,
-}: {
+type PromptEditorProps = {
   prompt: ManagedPrompt;
   draft: string;
   dirty: boolean;
   busy: PromptBusy;
   onDraftChange: (content: string) => void;
   onSave: () => void;
+};
+
+export function PromptEditor(props: PromptEditorProps) {
+  const [activeTab, setActiveTab] = useState<PromptEditorTab>("edit");
+  return (
+    <PromptEditorView
+      {...props}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    />
+  );
+}
+
+export function PromptEditorView({
+  prompt,
+  draft,
+  dirty,
+  busy,
+  onDraftChange,
+  onSave,
+  activeTab,
+  onTabChange,
+}: PromptEditorProps & {
+  activeTab: PromptEditorTab;
+  onTabChange: (tab: PromptEditorTab) => void;
 }) {
   const { t } = useT();
   const editorDisabled = busy !== null || !prompt.editable;
@@ -45,62 +67,81 @@ export function PromptEditor({
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
-          {t("prompts.variables")}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {prompt.variables.length > 0 ? (
-            prompt.variables.map((variable) => <Tag key={variable}>{variable}</Tag>)
-          ) : (
-            <span className="text-xs text-muted">{t("prompts.noVariables")}</span>
-          )}
-        </div>
-      </div>
+      <PromptEditorTabs active={activeTab} dirty={dirty} onChange={onTabChange} />
 
-      {prompt.validation_errors.length > 0 && (
-        <div className="mt-4 rounded-lg border border-status-fail-fg/30 bg-status-fail-bg px-3 py-2.5">
-          <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-status-fail-fg">
-            {t("prompts.validation")}
+      <div
+        id="prompt-panel-edit"
+        role="tabpanel"
+        aria-labelledby="prompt-tab-edit"
+        hidden={activeTab !== "edit"}
+      >
+        <div className="mt-4">
+          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+            {t("prompts.variables")}
           </div>
-          <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-status-fail-fg">
-            {prompt.validation_errors.map((error) => <li key={error}>{error}</li>)}
-          </ul>
+          <div className="flex flex-wrap gap-1.5">
+            {prompt.variables.length > 0 ? (
+              prompt.variables.map((variable) => <Tag key={variable}>{variable}</Tag>)
+            ) : (
+              <span className="text-xs text-muted">{t("prompts.noVariables")}</span>
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="mt-5 flex flex-wrap items-center gap-2">
-        <label htmlFor="prompt-draft" className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
-          {t("prompts.draft")}
-        </label>
-        {dirty && <span className="text-[10px] text-status-warn-fg">{t("prompts.unsaved")}</span>}
-        <button
-          type="button"
-          disabled={editorDisabled || !dirty}
-          onClick={onSave}
-          className="ml-auto min-h-10 rounded-lg bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:cursor-not-allowed disabled:bg-well disabled:text-muted disabled:opacity-70"
-        >
-          {busy === "save" ? t("prompts.saving") : t("prompts.save")}
-        </button>
+        {prompt.validation_errors.length > 0 && (
+          <div className="mt-4 rounded-lg border border-status-fail-fg/30 bg-status-fail-bg px-3 py-2.5">
+            <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-status-fail-fg">
+              {t("prompts.validation")}
+            </div>
+            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-status-fail-fg">
+              {prompt.validation_errors.map((error) => <li key={error}>{error}</li>)}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <label htmlFor="prompt-draft" className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+            {t("prompts.draft")}
+          </label>
+          {dirty && <span className="text-[10px] text-status-warn-fg">{t("prompts.unsaved")}</span>}
+          <button
+            type="button"
+            disabled={editorDisabled || !dirty}
+            onClick={onSave}
+            className="ml-auto min-h-10 rounded-lg bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:cursor-not-allowed disabled:bg-well disabled:text-muted disabled:opacity-70"
+          >
+            {busy === "save" ? t("prompts.saving") : t("prompts.save")}
+          </button>
+        </div>
+        <textarea
+          id="prompt-draft"
+          aria-label={t("prompts.draft")}
+          value={draft}
+          disabled={editorDisabled}
+          onChange={(event) => onDraftChange(event.target.value)}
+          spellCheck={false}
+          className="mt-2 min-h-[24rem] w-full resize-y rounded-lg border border-line bg-well p-3 font-mono text-sm leading-relaxed text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-70"
+        />
+
+        <details className="mt-4 rounded-lg border border-line bg-well px-3 py-2">
+          <summary className="cursor-pointer text-xs text-muted">{t("prompts.publishedContent")}</summary>
+          <div className="mt-3">
+            <ReadingBlock label={t("prompts.publishedContent")} className="max-h-80">
+              {prompt.published_content || <span className="text-muted">{t("prompts.noPublished")}</span>}
+            </ReadingBlock>
+          </div>
+        </details>
       </div>
-      <textarea
-        id="prompt-draft"
-        aria-label={t("prompts.draft")}
-        value={draft}
-        disabled={editorDisabled}
-        onChange={(event) => onDraftChange(event.target.value)}
-        spellCheck={false}
-        className="mt-2 min-h-[24rem] w-full resize-y rounded-lg border border-line bg-well p-3 font-mono text-sm leading-relaxed text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-70"
-      />
 
-      <details className="mt-4 rounded-lg border border-line bg-well px-3 py-2">
-        <summary className="cursor-pointer text-xs text-muted">{t("prompts.publishedContent")}</summary>
-        <div className="mt-3">
-          <ReadingBlock label={t("prompts.publishedContent")} className="max-h-80">
-            {prompt.published_content || <span className="text-muted">{t("prompts.noPublished")}</span>}
-          </ReadingBlock>
-        </div>
-      </details>
+      <div
+        id="prompt-panel-guide"
+        role="tabpanel"
+        aria-labelledby="prompt-tab-guide"
+        tabIndex={0}
+        hidden={activeTab !== "guide"}
+      >
+        <PromptGuide prompt={prompt} />
+      </div>
     </section>
   );
 }

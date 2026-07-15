@@ -221,7 +221,10 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
 - **Prompt releases.** The owner-only **Prompts** tab edits a deployment-wide draft
   workspace shared by every account. Saving does not affect live calls; publishing
   validates every template and atomically activates one immutable release. Loading
-  an older release creates a draft for review before it is republished.
+  an older release creates a draft for review before it is republished. Every
+  catalog entry also has a bilingual usage guide covering its runtime path and
+  editing constraints; guide text is code-owned metadata and is never sent to the
+  model or included in a release.
 - **Reasoning models:** chain-of-thought (`reasoning_content` / `reasoning`) is
   captured into traces for inspection, but never streamed into the chat answer.
 - **Tests:** backend `pytest` (from `api/`); web `pnpm test` (from `web/`).
@@ -238,4 +241,5 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
   it from rolling pruning; add a note to mark good/bad results while you tune.
 - **Prompts** (owner only) — production chat, memory-modeling, trait, and tool
-  prompts; explicit draft/save/publish workflow with immutable release history.
+  prompts; per-Prompt usage guides plus an explicit draft/save/publish workflow
+  with immutable release history.

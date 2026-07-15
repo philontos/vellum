@@ -16,6 +16,27 @@ def test_every_builtin_prompt_satisfies_its_publication_contract():
     assert failures == {}
 
 
+def test_every_builtin_prompt_has_detailed_bilingual_documentation():
+    for definition in definitions():
+        documentation = definition.documentation
+        for language in ("en", "zh"):
+            guide = getattr(documentation, language)
+            usage_minimum = 80 if language == "en" else 45
+            runtime_minimum = 80 if language == "en" else 60
+            assert len(guide.usage) >= usage_minimum, (
+                definition.key, language, "usage",
+            )
+            assert len(guide.runtime) >= runtime_minimum, (
+                definition.key, language, "runtime",
+            )
+            assert len(guide.editing_guidance) >= 2, (
+                definition.key, language, "editing_guidance",
+            )
+            assert all(len(item) >= 20 for item in guide.editing_guidance), (
+                definition.key, language, "editing_guidance item",
+            )
+
+
 def test_format_templates_require_exact_known_variables():
     definition = PromptDefinition(
         key="test.format",

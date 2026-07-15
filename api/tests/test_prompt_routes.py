@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from fastapi.testclient import TestClient
 
 from app.auth import accounts
@@ -41,6 +43,11 @@ def test_lists_every_builtin_prompt_as_an_unpublished_workspace(migrated_db):
     assert body["has_unpublished_changes"] is False
     assert body["releases"] == []
     assert all(item["draft_content"] == item["published_content"] for item in body["prompts"])
+    summary = _prompt(body, "memory.summary")
+    assert set(summary["documentation"]) == {"en", "zh"}
+    assert summary["documentation"]["en"]["usage"]
+    assert summary["documentation"]["zh"]["runtime"]
+    assert len(summary["documentation"]["en"]["editing_guidance"]) >= 2
 
 
 def test_saves_a_draft_without_changing_runtime_then_publishes_one_atomic_release(migrated_db):
@@ -277,3 +284,52 @@ def test_publication_advances_revision_and_includes_new_catalog_prompts(
             (published["active_release"]["id"], added.key),
         ).fetchone()
     assert item["content"] == added.default_content
+
+
+def test_documentation_changes_do_not_create_or_modify_prompt_releases(
+    migrated_db, monkeypatch,
+):
+    baseline = service.publish(0, "baseline")
+    original_definitions = service.definitions()
+    original = original_definitions[0]
+    changed_documentation = replace(
+        original.documentation,
+        en=replace(
+            original.documentation.en,
+            usage=original.documentation.en.usage + " Documentation-only update.",
+        ),
+    )
+    changed = replace(original, documentation=changed_documentation)
+    monkeypatch.setattr(
+        service,
+        "definitions",
+        lambda: (changed, *original_definitions[1:]),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "definitions",
+        lambda: (changed, *original_definitions[1:]),
+    )
+
+    workspace = service.get_workspace()
+    republished = service.publish(workspace["workspace_revision"], "docs only")
+    runtime_snapshot = runtime.active_snapshot()
+
+    assert workspace["has_unpublished_changes"] is False
+    assert "Documentation-only update" in _prompt(
+        workspace, original.key,
+    )["documentation"]["en"]["usage"]
+    assert republished["active_release"] == baseline["active_release"]
+    assert republished["workspace_revision"] == baseline["workspace_revision"]
+    assert runtime_snapshot.contents[original.key] == original.default_content
+    assert all(
+        isinstance(content, str) for content in runtime_snapshot.contents.values()
+    )
+    assert all(
+        "Documentation-only update" not in content
+        for content in runtime_snapshot.contents.values()
+    )
+    with get_conn() as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) AS n FROM prompt_releases"
+        ).fetchone()["n"] == 1

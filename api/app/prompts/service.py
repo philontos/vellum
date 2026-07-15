@@ -64,10 +64,37 @@ def _prompt_view(
     updated_at: str | None,
     force_modified: bool = False,
 ) -> dict:
+    documentation = definition.documentation
+    if documentation is None:
+        documentation_view = {
+            "en": {
+                "usage": definition.description,
+                "runtime": "Detailed runtime documentation is not available.",
+                "editing_guidance": [],
+            },
+            "zh": {
+                "usage": definition.description,
+                "runtime": "暂时没有详细的运行时说明。",
+                "editing_guidance": [],
+            },
+        }
+    else:
+        documentation_view = {
+            language: {
+                "usage": guide.usage,
+                "runtime": guide.runtime,
+                "editing_guidance": list(guide.editing_guidance),
+            }
+            for language, guide in (
+                ("en", documentation.en),
+                ("zh", documentation.zh),
+            )
+        }
     return {
         "key": definition.key,
         "name": definition.name,
         "description": definition.description,
+        "documentation": documentation_view,
         "category": definition.category,
         "template_format": definition.template_format,
         "variables": list(definition.variables),
