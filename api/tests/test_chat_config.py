@@ -3,7 +3,8 @@ from app import config
 
 def test_defaults(monkeypatch):
     for k in ("VELLUM_TAIL_SIZE", "VELLUM_RECALL_K", "VELLUM_RECALL_MIN_SIM",
-              "VELLUM_NEIGHBORHOOD_W", "VELLUM_RECALL_MAX_HOPS", "VELLUM_PERSONA"):
+              "VELLUM_NEIGHBORHOOD_W", "VELLUM_RECALL_MAX_HOPS", "VELLUM_PERSONA",
+              "VELLUM_TIMEZONE"):
         monkeypatch.delenv(k, raising=False)
     assert config.tail_size() == 20
     assert config.recall_k() == 6
@@ -11,8 +12,11 @@ def test_defaults(monkeypatch):
     assert config.neighborhood_w() == 3
     assert config.recall_max_hops() == 3
     assert config.persona_name() == "neutral"
+    assert config.timezone_name() == "Asia/Shanghai"
 
 
 def test_env_override(monkeypatch):
     monkeypatch.setenv("VELLUM_TAIL_SIZE", "8")
+    monkeypatch.setenv("VELLUM_TIMEZONE", "America/New_York")
     assert config.tail_size() == 8
+    assert config.timezone_name() == "America/New_York"

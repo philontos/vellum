@@ -14,3 +14,8 @@ def test_loads_four_dimensions():
     assert ocean["_extract"]                       # template text loaded
     assert [s["key"] for s in ocean["sub_dimensions"]] == ["O", "C", "E", "A", "N"]
     assert "single entry" not in ocean["_extract"]  # reworded to span
+
+
+def test_all_trait_prompts_follow_the_language_contract():
+    for dimension in dl.load_dimensions().values():
+        assert "Match the user's language" in dimension["_extract"]

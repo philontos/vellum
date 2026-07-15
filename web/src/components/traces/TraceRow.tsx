@@ -23,12 +23,11 @@ const STAGE_DOT: Record<string, string> = {
  * for both the round view (chat/facts) and the background view (passes).
  */
 export function TraceRow({
-  trace, onPin, onNote, blur, badge,
+  trace, onPin, onNote, badge,
 }: {
   trace: Trace;
   onPin: (t: Trace) => void;
   onNote: (t: Trace, value: string) => void;
-  blur: string;
   badge?: ReactNode;
 }) {
   const { t: tr } = useT();
@@ -89,14 +88,14 @@ export function TraceRow({
           <input
             defaultValue={trace.note ?? ""}
             placeholder={tr("traces.notePh")}
-            className={`min-h-11 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-base sm:text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 ${blur}`}
+            className="min-h-11 w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-base sm:text-xs text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20"
             onBlur={(e) => onNote(trace, e.target.value)}
           />
-          <ReadingBlock label="PROMPT" className={trace.prompt ? blur : ""}>
+          <ReadingBlock label="PROMPT">
             {trace.prompt ?? <span className="text-muted">{tr("traces.pruned")}</span>}
           </ReadingBlock>
           {trace.reasoning && (
-            <ReadingBlock label="REASONING" className={blur}>
+            <ReadingBlock label="REASONING">
               {trace.reasoning}
             </ReadingBlock>
           )}
@@ -113,11 +112,11 @@ export function TraceRow({
                     </span>
                     <span className="font-mono text-ink-soft">{c.name}</span>
                   </div>
-                  <ReadingBlock label="ARGS" className={blur}>
+                  <ReadingBlock label="ARGS">
                     {c.raw_args ?? JSON.stringify(c.args ?? {}, null, 2)}
                   </ReadingBlock>
                   {c.result != null && (
-                    <ReadingBlock label="RESULT" className={blur}>
+                    <ReadingBlock label="RESULT">
                       {c.result}
                     </ReadingBlock>
                   )}
@@ -125,7 +124,7 @@ export function TraceRow({
               ))}
             </div>
           )}
-          <ReadingBlock label="OUTPUT" className={trace.output ? blur : ""}>
+          <ReadingBlock label="OUTPUT">
             {trace.output ?? <span className="text-muted">{tr("traces.pruned")}</span>}
           </ReadingBlock>
         </div>

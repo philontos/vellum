@@ -1,6 +1,5 @@
 import type { Message } from "../api/client";
 import { useT } from "../i18n";
-import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { Markdown } from "./Markdown";
 import { ProcessBlock } from "./ProcessBlock";
 import { TypingDots } from "./TypingDots";
@@ -26,7 +25,6 @@ export function MessageBubble({
   onDelete?: (turn: number) => void;
 }) {
   const { t } = useT();
-  const blur = usePrivacyBlur();
   const mine = m.role === "user";
   const live = !mine && latest;
   // A stray retry / debug line can be soft-deleted out of history. Never offer it
@@ -56,7 +54,7 @@ export function MessageBubble({
         {DeleteButton}
         <div className="v-slip max-w-[88%] break-words sm:max-w-[78%]">
           <div className="v-eyebrow v-eyebrow--you">{t("chat.you")}</div>
-          <div className={`whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft ${blur}`}>
+          <div className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.62] text-ink-soft">
             {m.content || "…"}
           </div>
         </div>
@@ -74,7 +72,7 @@ export function MessageBubble({
           live={live}
           hasContent={!!m.content}
         />
-        <div className={blur}>
+        <div>
           {m.content ? (
             <Markdown text={m.content} caret={live && streaming} />
           ) : live && streaming && nothingYet ? (

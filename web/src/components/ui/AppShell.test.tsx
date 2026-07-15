@@ -2,35 +2,25 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { I18nProvider } from "../../i18n";
-import { createPrivacyStore } from "../../privacy/store";
-import { PrivacyProvider } from "../../privacy/PrivacyProvider";
 import { AppShell } from "./AppShell";
 
 function renderShell() {
-  const store = createPrivacyStore({
-    read: () => null,
-    write: () => undefined,
-    clear: () => undefined,
-  });
-
   return renderToStaticMarkup(
     <I18nProvider>
-      <PrivacyProvider store={store}>
-        <AppShell
-          view="chat"
-          onChange={() => undefined}
-          user={{
-            id: "owner-1",
-            username: "owner",
-            display_name: "Owner",
-            role: "owner",
-            status: "active",
-          }}
-          onLogout={async () => undefined}
-        >
-          <div>content</div>
-        </AppShell>
-      </PrivacyProvider>
+      <AppShell
+        view="chat"
+        onChange={() => undefined}
+        user={{
+          id: "owner-1",
+          username: "owner",
+          display_name: "Owner",
+          role: "owner",
+          status: "active",
+        }}
+        onLogout={async () => undefined}
+      >
+        <div>content</div>
+      </AppShell>
     </I18nProvider>,
   );
 }
@@ -50,5 +40,12 @@ describe("AppShell responsive navigation", () => {
 
     expect(html).toContain("h-dvh");
     expect(html).toContain("hidden md:flex");
+  });
+
+  it("does not render a second device PIN or privacy mask after account login", () => {
+    const html = renderShell();
+
+    expect(html).not.toContain("Click to reveal");
+    expect(html).not.toContain(">Hidden<");
   });
 });

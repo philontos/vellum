@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useT } from "../../i18n";
 import { NavItem } from "./NavItem";
-import { PrivacyToggle } from "../PrivacyToggle";
 import type { AuthUser } from "../../auth/client";
 
 export type View = "chat" | "diary" | "model" | "traces" | "probe" | "evals";
@@ -163,9 +162,8 @@ function AccountControls({
   const { t } = useT();
   return (
     <div className="mt-auto flex flex-col gap-2 border-t border-line px-2.5 pt-3 text-xs text-muted">
-      <PrivacyToggle />
       {user && (
-        <div className="flex min-h-10 items-center justify-between gap-2 border-t border-line pt-2">
+        <div className="flex min-h-10 items-center justify-between gap-2">
           <span className="min-w-0 truncate text-ink-soft" title={user.username}>
             {user.display_name}
           </span>

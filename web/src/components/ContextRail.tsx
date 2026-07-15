@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { getModel, type Fact, type ModelView } from "../api/client";
 import { useT } from "../i18n";
-import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 
 /**
  * The conversation's right-hand companion on wide screens: a quiet running read
@@ -19,7 +18,6 @@ export function ContextRail({
   className?: string;
 }) {
   const { t } = useT();
-  const blur = usePrivacyBlur();
   const injected = data !== undefined;
   const [model, setModel] = useState<ModelView | null>(injected ? data ?? null : null);
 
@@ -63,7 +61,7 @@ export function ContextRail({
                     className="absolute left-0 top-[0.5em] h-1.5 w-1.5 rounded-full border border-gold/70"
                     aria-hidden
                   />
-                  <span className={blur}>{f.text}</span>
+                  <span>{f.text}</span>
                 </li>
               ))}
             </ul>

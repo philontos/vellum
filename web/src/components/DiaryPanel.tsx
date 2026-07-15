@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { getDiary, getDiaryMessages, type DiaryCard, type Message } from "../api/client";
 import { groupByDay } from "../diary/group";
 import { useT } from "../i18n";
-import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { dayLabel } from "../util/day";
 import { MessageBubble } from "./MessageBubble";
 import { userStorageKey } from "../auth/storage";
@@ -21,7 +20,6 @@ const MODES = ["neutral", "freud"] as const;
 export function DiaryPanel({ userId }: { userId?: string }) {
   const { t, lang } = useT();
   const personaKey = userStorageKey(userId, "persona");
-  const blur = usePrivacyBlur();
   const [cards, setCards] = useState<DiaryCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [atEnd, setAtEnd] = useState(false);
@@ -159,7 +157,7 @@ export function DiaryPanel({ userId }: { userId?: string }) {
                   >
                     <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-gold" />
                     <span className="min-w-0 flex-1">
-                      <span className={`block text-[13.5px] leading-[1.6] text-ink-soft ${blur}`}>
+                      <span className="block text-[13.5px] leading-[1.6] text-ink-soft">
                         {c.content}
                       </span>
                       <span className="mt-1.5 block font-mono text-[11px] text-muted">

@@ -4,22 +4,11 @@ import { describe, expect, it } from "vitest";
 import { AuthProvider } from "../auth/AuthProvider";
 import { LoginScreen } from "../auth/LoginScreen";
 import { I18nProvider } from "../i18n";
-import { PrivacyProvider } from "../privacy/PrivacyProvider";
-import { createPrivacyStore } from "../privacy/store";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 
 function withLanguage(child: React.ReactNode) {
   return renderToStaticMarkup(<I18nProvider>{child}</I18nProvider>);
-}
-
-function withPrivacy(child: React.ReactNode) {
-  const store = createPrivacyStore({
-    read: () => null,
-    write: () => undefined,
-    clear: () => undefined,
-  });
-  return withLanguage(<PrivacyProvider store={store}>{child}</PrivacyProvider>);
 }
 
 describe("mobile controls", () => {
@@ -33,7 +22,7 @@ describe("mobile controls", () => {
   });
 
   it("keeps message actions visible on touch screens", () => {
-    const html = withPrivacy(
+    const html = withLanguage(
       <MessageBubble
         m={{ turn: 1, role: "user", content: "hello" }}
         latest
