@@ -48,4 +48,22 @@ describe("AppShell responsive navigation", () => {
     expect(html).not.toContain("Click to reveal");
     expect(html).not.toContain(">Hidden<");
   });
+
+  it("keeps diagnostic and tuning views out of the mobile navigation", () => {
+    const html = renderShell();
+    const mobileNavigation = html.match(/id="mobile-navigation"[\s\S]*?<\/nav>/)?.[0];
+
+    expect(mobileNavigation).toBeDefined();
+    expect(mobileNavigation).toContain("Chat");
+    expect(mobileNavigation).toContain("Diary");
+    expect(mobileNavigation).toContain("You");
+    expect(mobileNavigation).not.toContain("Traces");
+    expect(mobileNavigation).not.toContain("Probe");
+    expect(mobileNavigation).not.toContain("Evals");
+
+    // The full toolset remains available from the desktop navigation rail.
+    expect(html).toContain("Traces");
+    expect(html).toContain("Probe");
+    expect(html).toContain("Evals");
+  });
 });

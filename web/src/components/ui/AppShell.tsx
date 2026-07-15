@@ -34,6 +34,9 @@ export function AppShell({
     { key: "probe", label: t("nav.probe") },
     ...(user?.role === "member" ? [] : [{ key: "evals" as const, label: t("nav.evals") }]),
   ];
+  const mobileNav = nav.filter(
+    ({ key }) => key === "chat" || key === "diary" || key === "model",
+  );
   const current = nav.find((item) => item.key === view)?.label;
 
   function navigate(next: View) {
@@ -102,7 +105,7 @@ export function AppShell({
               <span aria-hidden>✕</span>
             </button>
           </div>
-          <Navigation entries={nav} view={view} onChange={navigate} />
+          <Navigation entries={mobileNav} view={view} onChange={navigate} />
           {controls()}
         </nav>
       </div>
