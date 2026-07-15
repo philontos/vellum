@@ -2,8 +2,9 @@ import { useRef, useState } from "react";
 
 import type { Fact } from "../../api/client";
 import { FactMutationError } from "../../api/facts";
+import { useConfirm } from "../../confirm/ConfirmProvider";
 import { useT } from "../../i18n";
-import { decideFactSave, FACT_TEXT_MAX_CHARS } from "./factEdit";
+import { FACT_TEXT_MAX_CHARS, validateFactDraft } from "./factEdit";
 import { FactEditor } from "./FactEditor";
 
 export function FactCard({
@@ -16,6 +17,7 @@ export function FactCard({
   onDelete: (id: number) => Promise<void>;
 }) {
   const { t } = useT();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(fact.text);
   const [error, setError] = useState("");
@@ -31,11 +33,7 @@ export function FactCard({
 
   async function save() {
     if (submitting.current) return;
-    const decision = decideFactSave(
-      draft,
-      fact.text,
-      () => window.confirm(t("model.factSaveConfirm")),
-    );
+    const decision = validateFactDraft(draft, fact.text);
     if (decision.kind === "invalid") {
       setError(
         decision.reason === "empty"
@@ -48,9 +46,19 @@ export function FactCard({
       cancel();
       return;
     }
-    if (decision.kind === "cancelled") return;
     submitting.current = true;
     setBusy(true);
+    const approved = await confirm({
+      title: t("model.factSaveTitle"),
+      message: t("model.factSaveConfirm"),
+      confirmLabel: t("dialog.save"),
+      cancelLabel: t("dialog.cancel"),
+    });
+    if (!approved) {
+      submitting.current = false;
+      setBusy(false);
+      return;
+    }
     setError("");
     try {
       await onSave(fact.id, decision.text);
@@ -70,9 +78,21 @@ export function FactCard({
   }
 
   async function remove() {
-    if (submitting.current || !window.confirm(t("model.factDeleteConfirm"))) return;
+    if (submitting.current) return;
     submitting.current = true;
     setBusy(true);
+    const approved = await confirm({
+      title: t("model.factDeleteTitle"),
+      message: t("model.factDeleteConfirm"),
+      confirmLabel: t("dialog.delete"),
+      cancelLabel: t("dialog.cancel"),
+      tone: "danger",
+    });
+    if (!approved) {
+      submitting.current = false;
+      setBusy(false);
+      return;
+    }
     setError("");
     try {
       await onDelete(fact.id);

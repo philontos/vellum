@@ -3,12 +3,17 @@ import { describe, expect, it } from "vitest";
 
 import { AuthProvider } from "../auth/AuthProvider";
 import { LoginScreen } from "../auth/LoginScreen";
+import { ConfirmProvider } from "../confirm/ConfirmProvider";
 import { I18nProvider } from "../i18n";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 
 function withLanguage(child: React.ReactNode) {
-  return renderToStaticMarkup(<I18nProvider>{child}</I18nProvider>);
+  return renderToStaticMarkup(
+    <I18nProvider>
+      <ConfirmProvider>{child}</ConfirmProvider>
+    </I18nProvider>,
+  );
 }
 
 describe("mobile controls", () => {

@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { ModelView } from "../../api/client";
+import { ConfirmProvider } from "../../confirm/ConfirmProvider";
 import { I18nProvider } from "../../i18n";
 import { ModelSections } from "./ModelSections";
 
@@ -19,12 +20,14 @@ describe("ModelSections", () => {
   it("keeps inactive sections hidden at every viewport size", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>
-        <ModelSections
-          model={model}
-          active="facts"
-          onFactSave={async () => undefined}
-          onFactDelete={async () => undefined}
-        />
+        <ConfirmProvider>
+          <ModelSections
+            model={model}
+            active="facts"
+            onFactSave={async () => undefined}
+            onFactDelete={async () => undefined}
+          />
+        </ConfirmProvider>
       </I18nProvider>,
     );
 

@@ -1,4 +1,7 @@
+import { useRef } from "react";
+
 import type { Message } from "../api/client";
+import { useConfirm } from "../confirm/ConfirmProvider";
 import { useT } from "../i18n";
 import { Markdown } from "./Markdown";
 import { ProcessBlock } from "./ProcessBlock";
@@ -25,18 +28,33 @@ export function MessageBubble({
   onDelete?: (turn: number) => void;
 }) {
   const { t } = useT();
+  const confirm = useConfirm();
+  const confirmingDelete = useRef(false);
   const mine = m.role === "user";
   const live = !mine && latest;
   // A stray retry / debug line can be soft-deleted out of history. Never offer it
   // on the reply still streaming in — that turn isn't persisted server-side yet.
   const deletable = !!onDelete && !(live && streaming);
-  const del = () => {
-    if (onDelete && window.confirm(t("chat.deleteConfirm"))) onDelete(m.turn);
+  const del = async () => {
+    if (!onDelete || confirmingDelete.current) return;
+    confirmingDelete.current = true;
+    try {
+      const approved = await confirm({
+        title: t("chat.deleteTitle"),
+        message: t("chat.deleteConfirm"),
+        confirmLabel: t("dialog.delete"),
+        cancelLabel: t("dialog.cancel"),
+        tone: "danger",
+      });
+      if (approved) onDelete(m.turn);
+    } finally {
+      confirmingDelete.current = false;
+    }
   };
   const DeleteButton = deletable ? (
     <button
       type="button"
-      onClick={del}
+      onClick={() => void del()}
       title={t("chat.delete")}
       aria-label={t("chat.delete")}
       className="v-msg-del opacity-70 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
