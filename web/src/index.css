@@ -2,13 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
+:root {
+  --v-shell-color: #161009;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
+  background-color: var(--v-shell-color);
 }
 
 body {
-  background-color: theme("colors.base");
   color: theme("colors.ink");
   font-family: theme("fontFamily.sans");
   overflow: hidden;
