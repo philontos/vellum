@@ -44,9 +44,9 @@ export function DiaryEntry({
             aria-label={t("diary.back")}
             title={t("diary.back")}
             onClick={onBack}
-            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 text-accent-ink transition-colors hover:bg-accent/20 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            <span aria-hidden className="text-base leading-none">←</span>
+            <span aria-hidden className="text-lg font-semibold leading-none">←</span>
           </button>
           <div className="min-w-0 max-w-full text-center">
             <h1

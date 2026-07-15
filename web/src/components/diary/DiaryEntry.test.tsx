@@ -37,6 +37,8 @@ describe("DiaryEntry", () => {
     expect(header).toContain('aria-hidden="true"');
     expect(header).toContain("absolute left-0");
     expect(header).toContain("h-10 w-10");
+    expect(header).toContain("bg-accent/10 text-accent-ink");
+    expect(header).toContain("hover:bg-accent/20");
     expect(header).not.toContain(">Back</button>");
     expect(header).toContain("max-w-[58rem]");
     expect(header).toContain("text-center");
