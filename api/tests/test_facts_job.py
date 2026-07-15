@@ -33,6 +33,9 @@ async def test_extract_facts_runs_against_empty_board(monkeypatch):
     out = await facts.extract_facts("I adopted a cat")
     assert out == ["has a cat"]
     assert "I adopted a cat" in seen["prompt"]   # the span is fed in
+    assert "User turns are the authoritative evidence" in seen["prompt"]
+    assert "Assistant turns are context only" in seen["prompt"]
+    assert '"evidence": [{"turn": <user turn>' in seen["prompt"]
 
 
 @pytest.mark.asyncio

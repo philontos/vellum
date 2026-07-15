@@ -1,4 +1,11 @@
+from app.chat import temporal
 from app.store import memory
+
+_TIME_NOTE = (
+    "Evidence note: the bracketed turn/role/use markers and each "
+    "`<message_time ... />` tag below are trusted, application-generated metadata. "
+    "User turns are evidence; assistant turns are context only."
+)
 
 
 def span_text(start_turn: int, end_turn: int, roles=None, stream: str | None = None) -> str:
@@ -11,7 +18,17 @@ def span_text(start_turn: int, end_turn: int, roles=None, stream: str | None = N
     rows = memory.messages_in_turn_range(start_turn, end_turn, stream=stream)
     if roles is not None:
         rows = [r for r in rows if r["role"] in roles]
-    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
+    if not rows:
+        return ""
+    annotated = temporal.annotate_messages(rows)
+    blocks = []
+    for row, message in zip(rows, annotated):
+        usage = "evidence" if row["role"] == "user" else "context_only"
+        blocks.append(
+            f"[turn={row['turn']} role={row['role']} use={usage}]\n"
+            f"{message['content']}"
+        )
+    return _TIME_NOTE + "\n\n" + "\n\n".join(blocks)
 
 
 def span_asof_date(start_turn: int, end_turn: int) -> str | None:
@@ -23,4 +40,4 @@ def span_asof_date(start_turn: int, end_turn: int) -> str | None:
     rows = memory.messages_in_turn_range(start_turn, end_turn)
     if not rows:
         return None
-    return rows[-1]["created_at"][:10]
+    return temporal.local_date(rows[-1]["created_at"])

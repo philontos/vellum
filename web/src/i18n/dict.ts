@@ -72,6 +72,10 @@ export const DICT = {
     "model.factsEmpty": "(no facts extracted yet)",
     "model.traitsTitle": "Trait dimensions",
     "model.traitsEmpty": "(no model yet — chat a bit more)",
+    "model.tabsLabel": "Model sections",
+    "model.tabDossier": "Portrait",
+    "model.tabFacts": "Facts",
+    "model.tabTraits": "Traits",
 
     // traces panel
     "traces.allStages": "all stages",
@@ -150,18 +154,6 @@ export const DICT = {
     "probe.factsFilter": "Filter facts…",
     "probe.noFacts": "No durable facts on the board (matching the filter).",
 
-    // privacy screen (shoulder-surfing mask, NOT encryption)
-    "privacy.hidden": "Hidden",
-    "privacy.shown": "Shown",
-    "privacy.clickToReveal": "Click to reveal (enter PIN)",
-    "privacy.clickToHide": "Click to hide",
-    "privacy.setTitle": "Set a PIN to reveal",
-    "privacy.enterTitle": "Enter PIN to reveal",
-    "privacy.placeholder": "PIN",
-    "privacy.confirm": "OK",
-    "privacy.wrong": "Wrong PIN",
-    "privacy.forgot": "Forgot? Reset PIN",
-    "privacy.resetConfirm": "Reset the PIN? Content stays hidden until you set a new one. Your data is not affected.",
   },
   zh: {
     "nav.chat": "聊天",
@@ -223,6 +215,10 @@ export const DICT = {
     "model.factsEmpty": "（还没抽到事实）",
     "model.traitsTitle": "人格维度",
     "model.traitsEmpty": "（还没建模，多聊几轮）",
+    "model.tabsLabel": "个人页分区",
+    "model.tabDossier": "个人画像",
+    "model.tabFacts": "Facts",
+    "model.tabTraits": "人格维度",
 
     "traces.allStages": "全部阶段",
     "traces.refresh": "刷新",
@@ -300,18 +296,6 @@ export const DICT = {
     "probe.factsFilter": "过滤 facts…",
     "probe.noFacts": "看板上没有匹配的 durable facts。",
 
-    // privacy screen (shoulder-surfing mask, NOT encryption)
-    "privacy.hidden": "已隐藏",
-    "privacy.shown": "显示中",
-    "privacy.clickToReveal": "点击显示（输入 PIN）",
-    "privacy.clickToHide": "点击隐藏",
-    "privacy.setTitle": "设置一个 PIN 以显示",
-    "privacy.enterTitle": "输入 PIN 以显示",
-    "privacy.placeholder": "PIN",
-    "privacy.confirm": "确定",
-    "privacy.wrong": "PIN 错误",
-    "privacy.forgot": "忘记了？重置 PIN",
-    "privacy.resetConfirm": "重置 PIN？在你设置新 PIN 前内容保持隐藏。你的数据不受影响。",
   },
 } as const;
 

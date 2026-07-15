@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getModel, type ModelView } from "../api/client";
 import { useT } from "../i18n";
-import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { TraitChart } from "./TraitChart";
+import { ModelTabs, type ModelSection } from "./model/ModelTabs";
 import { SectionHeader } from "./ui/SectionHeader";
 
 export function ModelPanel() {
   const { t } = useT();
-  const blur = usePrivacyBlur();
   const [m, setM] = useState<ModelView | null>(null);
   const [err, setErr] = useState("");
+  const [section, setSection] = useState<ModelSection>("dossier");
+  const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     getModel().then(setM).catch((e) => setErr(String(e)));
   }, []);
@@ -18,16 +19,27 @@ export function ModelPanel() {
 
   const facts = m.facts.filter((f) => f.status === "active");
 
+  function selectSection(next: ModelSection) {
+    setSection(next);
+    scrollRef.current?.scrollTo({ top: 0 });
+  }
+
   return (
-    <div className="v-canvas flex-1 overflow-y-auto">
+    <div ref={scrollRef} className="v-canvas flex-1 overflow-y-auto">
+      <ModelTabs active={section} onChange={selectSection} />
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-10">
-        <h1 className="font-serif text-2xl tracking-tight text-ink sm:text-[26px]">{t("nav.you")}</h1>
+        <h1 className="hidden font-serif text-[26px] tracking-tight text-ink lg:block">{t("nav.you")}</h1>
 
         {/* Dossier — full-width narrative banner */}
-        <section className="mt-7 sm:mt-8">
+        <section
+          id="model-panel-dossier"
+          role="tabpanel"
+          aria-labelledby="model-tab-dossier"
+          className={`${section === "dossier" ? "block" : "hidden"} lg:mt-8 lg:block`}
+        >
           <SectionHeader label={t("model.dossierTitle")} />
           {m.dossier ? (
-            <p className={`v-dropcap whitespace-pre-wrap font-serif text-[17px] leading-[1.76] text-ink ${blur}`}>
+            <p className="v-dropcap whitespace-pre-wrap font-serif text-[17px] leading-[1.76] text-ink">
               {m.dossier}
             </p>
           ) : (
@@ -36,21 +48,31 @@ export function ModelPanel() {
         </section>
 
         {/* Facts (narrow) + Personality (wide grid) */}
-        <div className="mt-9 grid gap-9 sm:mt-11 sm:gap-10 lg:grid-cols-[minmax(0,17rem)_1fr]">
-          <section>
+        <div className="lg:mt-11 lg:grid lg:gap-10 lg:grid-cols-[minmax(0,17rem)_1fr]">
+          <section
+            id="model-panel-facts"
+            role="tabpanel"
+            aria-labelledby="model-tab-facts"
+            className={`${section === "facts" ? "block" : "hidden"} lg:block`}
+          >
             <SectionHeader label={t("model.factsTitle")} />
             <ul className="space-y-2.5 text-sm">
               {facts.map((f) => (
                 <li key={f.id} className="flex gap-3 text-ink-soft">
                   <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-gold" />
-                  <span className={blur}>{f.text}</span>
+                  <span>{f.text}</span>
                 </li>
               ))}
               {facts.length === 0 && <li className="text-muted">{t("model.factsEmpty")}</li>}
             </ul>
           </section>
 
-          <section>
+          <section
+            id="model-panel-traits"
+            role="tabpanel"
+            aria-labelledby="model-tab-traits"
+            className={`${section === "traits" ? "block" : "hidden"} lg:block`}
+          >
             <SectionHeader label={t("model.traitsTitle")} />
             <div className="grid gap-4 sm:grid-cols-2">
               {m.traits.map((d) => <TraitChart key={d.dimension} dim={d} />)}

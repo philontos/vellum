@@ -10,12 +10,11 @@ import { TraceRow } from "./TraceRow";
  * by default; each inner trace's body stays collapsed until expanded.
  */
 export function RoundCard({
-  round, onPin, onNote, blur,
+  round, onPin, onNote,
 }: {
   round: Round;
   onPin: (t: Trace) => void;
   onNote: (t: Trace, value: string) => void;
-  blur: string;
 }) {
   const { t: tr } = useT();
   const [open, setOpen] = useState(true);
@@ -32,13 +31,13 @@ export function RoundCard({
         <span className="flex-none font-mono text-[11px] text-muted">
           {round.turn === null ? tr("traces.ungrouped") : tr("traces.roundTurn", { turn: round.turn })}
         </span>
-        {snippet && <span className={`min-w-0 flex-1 truncate text-sm text-ink-soft ${blur}`}>{snippet}</span>}
+        {snippet && <span className="min-w-0 flex-1 truncate text-sm text-ink-soft">{snippet}</span>}
         <span className="ml-auto hidden flex-none font-mono text-[11px] text-muted sm:inline">{round.chat?.created_at ?? ""}</span>
       </button>
       {open && (
         <div className="space-y-3 px-3 pb-3 sm:px-4 sm:pl-8">
           {rows.map((t) => (
-            <TraceRow key={t.id} trace={t} onPin={onPin} onNote={onNote} blur={blur} />
+            <TraceRow key={t.id} trace={t} onPin={onPin} onNote={onNote} />
           ))}
         </div>
       )}

@@ -114,6 +114,7 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `VELLUM_DB_KEY` / `VELLUM_DB_KEY_FILE` | _(unset)_ | 256-bit hex key enabling SQLCipher at-rest encryption. Unset = plaintext. See *Encryption* below. |
 | `VELLUM_AUTH_COOKIE_SECURE` | `0` | Keep `0` for HTTP over WireGuard/SSH; set `1` only when the site is served through HTTPS. |
 | `VELLUM_AUTH_SESSION_DAYS` | `30` | Login session lifetime. Password changes and account disable revoke existing sessions. |
+| `VELLUM_TIMEZONE` | `Asia/Shanghai` | Local timezone attached to model-facing user turns for relative-time and conversation-gap reasoning. Stored messages remain UTC and unchanged. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
 ---

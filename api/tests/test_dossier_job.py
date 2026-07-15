@@ -19,6 +19,9 @@ async def test_dossier_rewritten_from_span_and_prior(migrated_db, monkeypatch):
 
     assert "autonomy" in model.get_dossier()
     assert "Prior: enjoys learning." in seen["prompt"]   # prior fed in for rewrite
+    assert "User turns are the primary evidence" in seen["prompt"]
+    assert "Assistant turns provide conversational context only" in seen["prompt"]
+    assert "weak acknowledgement" in seen["prompt"]
 
 
 @pytest.mark.asyncio

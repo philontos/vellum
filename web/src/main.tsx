@@ -4,7 +4,6 @@ import App from "./App";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { LoginScreen } from "./auth/LoginScreen";
 import { I18nProvider, useT } from "./i18n";
-import { PrivacyProvider } from "./privacy/PrivacyProvider";
 // Self-hosted fonts (offline-safe) — Newsreader (serif voice) + Inter (UI/text)
 import "@fontsource/newsreader/400.css";
 import "@fontsource/newsreader/500.css";
@@ -31,11 +30,7 @@ function Root() {
     );
   }
   if (auth.enabled && !auth.user) return <LoginScreen />;
-  return (
-    <PrivacyProvider namespace={auth.user?.id ?? "legacy"}>
-      <App user={auth.user} onLogout={auth.enabled ? auth.logout : undefined} />
-    </PrivacyProvider>
-  );
+  return <App user={auth.user} onLogout={auth.enabled ? auth.logout : undefined} />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -202,3 +202,24 @@ async def test_retrieve_equals_explained_snippets(migrated_db, monkeypatch):
     snips = await retrieval.retrieve("that offer", k=5, min_sim=0.0, w=1)
     out = await retrieval.retrieve_explained("that offer", k=5, min_sim=0.0, w=1)
     assert snips == out["snippets"]
+
+
+@pytest.mark.asyncio
+async def test_retrieved_user_turns_include_time_metadata(migrated_db, monkeypatch):
+    """Recalled history is model context too, so its user turns need the same
+    temporal view as the recent tail instead of becoming timeless excerpts."""
+    monkeypatch.setenv("VELLUM_TIMEZONE", "Asia/Shanghai")
+    _seed(monkeypatch)
+    u = memory.append_message("user", "should I take the offer")
+    from app.store.db import get_conn
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE messages SET created_at = ? WHERE id = ?",
+            ("2026-07-14 01:15:00", u["id"]),
+        )
+    VectorStore().add(memory.add_vector_ref("message", u["id"]), [1.0, 0.0, 0.0])
+
+    snippets = await retrieval.retrieve("that offer", k=5, min_sim=0.0, w=0)
+
+    assert '<message_time datetime="2026-07-14T09:15:00+08:00"' in snippets[0]["text"]
+    assert "user: <message_time" in snippets[0]["text"]

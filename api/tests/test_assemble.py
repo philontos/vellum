@@ -2,6 +2,7 @@ import pytest
 
 from app.chat import assemble
 from app.store import memory, model
+from app.store.db import get_conn
 
 
 @pytest.mark.asyncio
@@ -19,7 +20,8 @@ async def test_build_messages_has_altitude_persona_and_tail(migrated_db, monkeyp
     assert "background reference" in system.lower()  # altitude framing
     assert "values autonomy" in system               # dossier
     assert "allergic to penicillin" in system        # facts
-    assert msgs[-1] == {"role": "user", "content": "hello there"}   # tail tail
+    assert msgs[-1]["role"] == "user"
+    assert msgs[-1]["content"].endswith("\nhello there")   # annotated tail
 
 
 @pytest.mark.asyncio
@@ -33,11 +35,11 @@ async def test_tail_and_recall_are_scoped_to_the_mode_stream(migrated_db, monkey
     memory.append_message("user", "counseling message", stream="freud")
 
     neutral = await assemble.build_messages(persona_name="neutral")
-    assert neutral[-1]["content"] == "daily message"      # only the neutral stream's tail
+    assert neutral[-1]["content"].endswith("\ndaily message")  # only neutral tail
     assert seen["stream"] == "neutral"                     # recall scoped to the mode
 
     freud = await assemble.build_messages(persona_name="freud")
-    assert freud[-1]["content"] == "counseling message"   # only the freud stream's tail
+    assert freud[-1]["content"].endswith("\ncounseling message")  # only freud tail
     assert seen["stream"] == "freud"
 
 
@@ -99,3 +101,45 @@ async def test_retrieved_snippets_included(migrated_db, monkeypatch):
     memory.append_message("user", "q")
     system = (await assemble.build_messages())[0]["content"]
     assert "assistant: y" in system
+
+
+@pytest.mark.asyncio
+async def test_user_turns_carry_local_time_and_elapsed_context(migrated_db, monkeypatch):
+    """The model-facing copy of every user turn gets trusted local-time metadata,
+    while assistant text remains untouched. SQLite continues to store raw text."""
+    monkeypatch.setenv("VELLUM_TIMEZONE", "Asia/Shanghai")
+
+    async def fake_retrieve(q, **kw):
+        return []
+
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    first = memory.append_message("user", "first thought")
+    reply = memory.append_message("assistant", "go on")
+    second = memory.append_message("user", "back to this")
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE messages SET created_at = ? WHERE id = ?",
+            ("2026-07-14 01:15:00", first["id"]),
+        )
+        conn.execute(
+            "UPDATE messages SET created_at = ? WHERE id = ?",
+            ("2026-07-14 01:16:00", reply["id"]),
+        )
+        conn.execute(
+            "UPDATE messages SET created_at = ? WHERE id = ?",
+            ("2026-07-14 05:45:00", second["id"]),
+        )
+
+    msgs = await assemble.build_messages()
+
+    assert "## Time context" in msgs[0]["content"]
+    assert "Asia/Shanghai" in msgs[0]["content"]
+    assert msgs[1]["content"].startswith(
+        '<message_time datetime="2026-07-14T09:15:00+08:00" '
+        'timezone="Asia/Shanghai" weekday="Tuesday" period="morning"'
+    )
+    assert msgs[2] == {"role": "assistant", "content": "go on"}
+    assert 'period="afternoon"' in msgs[3]["content"]
+    assert 'elapsed_since_previous_user="4h 30m"' in msgs[3]["content"]
+    assert msgs[3]["content"].endswith("\nback to this")
+    assert memory.get_message(second["id"])["content"] == "back to this"

@@ -5,13 +5,14 @@ resolve labels to sources -> hydrate turn-neighbourhoods (message hits pull the
 surrounding window INCLUDING assistant turns; summary hits pull the raw turns of
 their marked range, NOT the digest text) -> dedup overlapping windows."""
 from app import config
+from app.chat import temporal
 from app.llm.embed import embed
 from app.store import memory
 from app.store.vectors import VectorStore
 
 
 def _format_window(rows: list[dict]) -> str:
-    return "\n".join(f"{r['role']}: {r['content']}" for r in rows)
+    return temporal.render_transcript(rows)
 
 
 async def retrieve(query: str, stream: str = "neutral", k: int | None = None,

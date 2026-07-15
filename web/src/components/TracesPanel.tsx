@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { getTraces, patchTrace, type Trace } from "../api/client";
 import { useT } from "../i18n";
-import { usePrivacyBlur } from "../privacy/PrivacyProvider";
 import { backgroundPasses, groupRounds } from "./traces/group";
 import { RoundCard } from "./traces/RoundCard";
 import { TraceRow } from "./traces/TraceRow";
@@ -11,7 +10,6 @@ type TabKey = "rounds" | "background";
 
 export function TracesPanel() {
   const { t: tr } = useT();
-  const blur = usePrivacyBlur();
   const [tab, setTab] = useState<TabKey>("rounds");
   const [rows, setRows] = useState<Trace[]>([]);
 
@@ -60,7 +58,7 @@ export function TracesPanel() {
         {tab === "rounds" ? (
           rounds.length > 0 ? (
             rounds.map((r) => (
-              <RoundCard key={r.turn ?? "ungrouped"} round={r} onPin={pin} onNote={note} blur={blur} />
+              <RoundCard key={r.turn ?? "ungrouped"} round={r} onPin={pin} onNote={note} />
             ))
           ) : (
             <div className="p-4 text-muted sm:p-8">{tr("traces.empty")}</div>
@@ -72,7 +70,6 @@ export function TracesPanel() {
                 trace={p}
                 onPin={pin}
                 onNote={note}
-                blur={blur}
                 badge={<SpanBadge from={p.from} to={p.to} />}
               />
             </div>
