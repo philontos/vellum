@@ -85,7 +85,7 @@ const WORKSPACE: PromptWorkspace = {
 };
 
 describe("PromptWorkspaceView", () => {
-  it("renders the prompt list, editor metadata, validation, and release history", () => {
+  it("renders a stable management tab with explicit scroll regions", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>
         <PromptWorkspaceView
@@ -96,6 +96,8 @@ describe("PromptWorkspaceView", () => {
           dirty
           busy={null}
           error=""
+          activeTab="manage"
+          onTabChange={() => undefined}
           onSelect={() => undefined}
           onDraftChange={() => undefined}
           onNoteChange={() => undefined}
@@ -117,6 +119,20 @@ describe("PromptWorkspaceView", () => {
     expect(html).toContain("Published prompt");
     expect(html).toContain("v3");
     expect(html).toContain("Load as draft");
+    expect(html).toContain('aria-label="Prompt workspace sections"');
+    expect(html).toMatch(
+      /id="prompt-workspace-tab-manage" role="tab" aria-selected="true"/,
+    );
+    expect(html).toMatch(
+      /id="prompt-workspace-panel-manage" role="tabpanel" aria-labelledby="prompt-workspace-tab-manage"/,
+    );
+    expect(html).toMatch(
+      /id="prompt-workspace-panel-history" role="tabpanel" aria-labelledby="prompt-workspace-tab-history" hidden=""/,
+    );
+    expect(html).toContain('data-scroll-region="prompt-index"');
+    expect(html).toContain('data-scroll-region="prompt-editor"');
+    expect(html).toContain('data-scroll-region="release-history"');
+    expect(html).toContain('aria-label="Choose a Prompt"');
     expect(html).toContain('role="tablist"');
     expect(html).toContain("Edit prompt");
     expect(html).toContain("Usage guide");
@@ -126,6 +142,48 @@ describe("PromptWorkspaceView", () => {
     expect(html).toContain(DOCUMENTATION.en.usage);
     expect(html).toContain(DOCUMENTATION.en.runtime);
     expect(html).toContain(DOCUMENTATION.en.editing_guidance[0]);
+  });
+
+  it("isolates release history in its own tab without unmounting the editor", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <PromptWorkspaceView
+          workspace={WORKSPACE}
+          selectedKey="chat.system"
+          draft="Locally edited prompt"
+          note="release note"
+          dirty
+          busy={null}
+          error=""
+          activeTab="history"
+          onTabChange={() => undefined}
+          onSelect={() => undefined}
+          onDraftChange={() => undefined}
+          onNoteChange={() => undefined}
+          onSave={() => undefined}
+          onPublish={() => undefined}
+          onRestore={() => undefined}
+          onRefresh={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(html).toMatch(
+      /id="prompt-workspace-tab-history" role="tab" aria-selected="true"/,
+    );
+    expect(html).toMatch(
+      /id="prompt-workspace-panel-manage" role="tabpanel" aria-labelledby="prompt-workspace-tab-manage" hidden=""/,
+    );
+    expect(html).toMatch(
+      /id="prompt-workspace-panel-history" role="tabpanel" aria-labelledby="prompt-workspace-tab-history"[^>]*>/,
+    );
+    expect(html).toContain("Release history");
+    expect(html).toContain("v3");
+    expect(html).toContain("Locally edited prompt");
+    expect(html).toContain('aria-label="unsaved local edit"');
+    expect(html.indexOf("Release note")).toBeGreaterThan(
+      html.indexOf('id="prompt-workspace-panel-history"'),
+    );
   });
 
   it("disables publishing while the selected prompt has unsaved local edits", () => {
@@ -145,6 +203,8 @@ describe("PromptWorkspaceView", () => {
           dirty
           busy={null}
           error=""
+          activeTab="manage"
+          onTabChange={() => undefined}
           onSelect={() => undefined}
           onDraftChange={() => undefined}
           onNoteChange={() => undefined}
@@ -171,6 +231,8 @@ describe("PromptWorkspaceView", () => {
           dirty={false}
           busy={null}
           error=""
+          activeTab="manage"
+          onTabChange={() => undefined}
           onSelect={() => undefined}
           onDraftChange={() => undefined}
           onNoteChange={() => undefined}
@@ -209,6 +271,8 @@ describe("PromptWorkspaceView", () => {
           dirty={false}
           busy={null}
           error=""
+          activeTab="manage"
+          onTabChange={() => undefined}
           onSelect={() => undefined}
           onDraftChange={() => undefined}
           onNoteChange={() => undefined}

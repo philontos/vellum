@@ -6,6 +6,7 @@ import { ReadingBlock } from "../ui/ReadingBlock";
 import { Tag } from "../ui/StatusChip";
 import { PromptEditorTabs, type PromptEditorTab } from "./PromptEditorTabs";
 import { PromptGuide } from "./PromptGuide";
+import { promptCategoryMeta } from "./promptCategories";
 
 export type PromptBusy = "refresh" | "save" | "publish" | "restore" | null;
 
@@ -44,6 +45,7 @@ export function PromptEditorView({
 }) {
   const { t } = useT();
   const editorDisabled = busy !== null || !prompt.editable;
+  const categoryMetadata = promptCategoryMeta(prompt.category);
 
   return (
     <section className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
@@ -51,7 +53,7 @@ export function PromptEditorView({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-serif text-xl text-ink">{prompt.name}</h2>
-            <Tag>{prompt.category}</Tag>
+            <Tag>{categoryMetadata ? t(categoryMetadata.labelKey) : prompt.category}</Tag>
             <Tag>{prompt.template_format}</Tag>
             {!prompt.editable && <Tag>{t("prompts.readOnly")}</Tag>}
           </div>
@@ -120,7 +122,7 @@ export function PromptEditorView({
           disabled={editorDisabled}
           onChange={(event) => onDraftChange(event.target.value)}
           spellCheck={false}
-          className="mt-2 min-h-[24rem] w-full resize-y rounded-lg border border-line bg-well p-3 font-mono text-sm leading-relaxed text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-70"
+          className="mt-2 h-[24rem] w-full resize-none rounded-lg border border-line bg-well p-3 font-mono text-sm leading-relaxed text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:cursor-not-allowed disabled:opacity-70"
         />
 
         <details className="mt-4 rounded-lg border border-line bg-well px-3 py-2">

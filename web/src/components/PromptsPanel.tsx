@@ -9,9 +9,14 @@ import {
   type PromptWorkspace,
 } from "../api/prompts";
 import { useT } from "../i18n";
-import { PromptEditor, type PromptBusy } from "./prompts/PromptEditor";
-import { PromptList } from "./prompts/PromptList";
+import type { PromptBusy } from "./prompts/PromptEditor";
+import { PromptManagementPanel } from "./prompts/PromptManagementPanel";
+import { PromptPublishBar } from "./prompts/PromptPublishBar";
 import { ReleaseHistory } from "./prompts/ReleaseHistory";
+import {
+  PromptWorkspaceTabs,
+  type PromptWorkspaceTab,
+} from "./prompts/PromptWorkspaceTabs";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -27,6 +32,7 @@ export function PromptsPanel({
   const [selectedKey, setSelectedKey] = useState("");
   const [draft, setDraft] = useState("");
   const [note, setNote] = useState("");
+  const [activeTab, setActiveTab] = useState<PromptWorkspaceTab>("manage");
   const [busy, setBusy] = useState<PromptBusy>("refresh");
   const [error, setError] = useState("");
 
@@ -146,6 +152,7 @@ export function PromptsPanel({
       installWorkspace(
         await restorePromptRelease(release.id, workspace.workspace_revision),
       );
+      setActiveTab("manage");
     } catch (restoreError) {
       setError(errorMessage(restoreError));
     } finally {
@@ -186,6 +193,8 @@ export function PromptsPanel({
       dirty={dirty}
       busy={busy}
       error={error}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       onSelect={selectPrompt}
       onDraftChange={setDraft}
       onNoteChange={setNote}
@@ -205,6 +214,8 @@ export function PromptWorkspaceView({
   dirty,
   busy,
   error,
+  activeTab,
+  onTabChange,
   onSelect,
   onDraftChange,
   onNoteChange,
@@ -220,6 +231,8 @@ export function PromptWorkspaceView({
   dirty: boolean;
   busy: PromptBusy;
   error: string;
+  activeTab: PromptWorkspaceTab;
+  onTabChange: (tab: PromptWorkspaceTab) => void;
   onSelect: (key: string) => void;
   onDraftChange: (content: string) => void;
   onNoteChange: (note: string) => void;
@@ -229,7 +242,6 @@ export function PromptWorkspaceView({
   onRefresh: () => void;
 }) {
   const { t } = useT();
-  const selected = workspace.prompts.find((prompt) => prompt.key === selectedKey);
   const hasValidationErrors = workspace.prompts.some(
     (prompt) => prompt.validation_errors.length > 0,
   );
@@ -248,8 +260,11 @@ export function PromptWorkspaceView({
         : "";
 
   return (
-    <div className="v-canvas flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
+    <div
+      aria-busy={busy !== null}
+      className="v-canvas flex h-full min-h-0 flex-col overflow-hidden"
+    >
+      <header className="flex flex-none flex-wrap items-center gap-3 border-b border-line px-4 py-3 sm:px-5">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h1 className="font-serif text-2xl text-ink">{t("prompts.title")}</h1>
@@ -278,65 +293,65 @@ export function PromptWorkspaceView({
           </button>
         </div>
       </header>
+      <PromptWorkspaceTabs
+        active={activeTab}
+        dirty={dirty}
+        releaseCount={workspace.releases.length}
+        onChange={onTabChange}
+      />
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-7xl space-y-4 px-3 py-4 sm:px-5 sm:py-5">
-          {error && (
-            <div role="alert" className="rounded-lg border border-status-fail-fg/30 bg-status-fail-bg px-3 py-2 text-sm text-status-fail-fg">
-              {error}
-            </div>
-          )}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <div
+          id="prompt-workspace-panel-manage"
+          role="tabpanel"
+          aria-labelledby="prompt-workspace-tab-manage"
+          hidden={activeTab !== "manage"}
+          className="h-full min-h-0"
+        >
+          <PromptManagementPanel
+            workspace={workspace}
+            selectedKey={selectedKey}
+            draft={draft}
+            dirty={dirty}
+            busy={busy}
+            error={error}
+            onSelect={onSelect}
+            onDraftChange={onDraftChange}
+            onSave={onSave}
+          />
+        </div>
 
-          <section className="rounded-xl border border-line bg-surface p-4 shadow-card">
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="min-w-[14rem] flex-1">
-                <span className="mb-1 block text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
-                  {t("prompts.releaseNote")}
-                </span>
-                <input
-                  value={note}
-                  disabled={busy !== null}
-                  onChange={(event) => onNoteChange(event.target.value)}
-                  placeholder={t("prompts.releaseNotePh")}
-                  className="min-h-11 w-full rounded-lg border border-line bg-well px-3 text-base text-ink-soft placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/20 sm:text-sm disabled:opacity-60"
-                />
-              </label>
-              <button
-                type="button"
-                disabled={publishDisabled}
-                onClick={onPublish}
-                className="min-h-11 rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-ink disabled:cursor-not-allowed disabled:bg-well disabled:text-muted disabled:opacity-70"
-              >
-                {busy === "publish" ? t("prompts.publishing") : t("prompts.publish")}
-              </button>
-            </div>
-            {publishBlocker && <div className="mt-1.5 text-xs text-muted">{publishBlocker}</div>}
-          </section>
-
-          <div className="grid items-start gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-            <PromptList
-              prompts={workspace.prompts}
-              selectedKey={selectedKey}
-              disabled={busy !== null}
-              onSelect={onSelect}
-            />
-            {selected ? (
-              <PromptEditor
-                prompt={selected}
-                draft={draft}
-                dirty={dirty}
-                busy={busy}
-                onDraftChange={onDraftChange}
-                onSave={onSave}
-              />
-            ) : (
-              <div className="rounded-xl border border-line bg-surface p-8 text-sm text-muted">
-                {t("prompts.empty")}
+        <div
+          id="prompt-workspace-panel-history"
+          role="tabpanel"
+          aria-labelledby="prompt-workspace-tab-history"
+          hidden={activeTab !== "history"}
+          className="h-full min-h-0"
+        >
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-col px-3 py-3 sm:px-5 sm:py-4">
+            {error && (
+              <div role="alert" className="mb-3 flex-none rounded-lg border border-status-fail-fg/30 bg-status-fail-bg px-3 py-2 text-sm text-status-fail-fg">
+                {error}
               </div>
             )}
+            <div className="flex-none pb-3">
+              <PromptPublishBar
+                note={note}
+                busy={busy}
+                disabled={publishDisabled}
+                blocker={publishBlocker}
+                onNoteChange={onNoteChange}
+                onPublish={onPublish}
+              />
+            </div>
+            <div className="min-h-0 flex-1">
+              <ReleaseHistory
+                releases={workspace.releases}
+                busy={busy}
+                onRestore={onRestore}
+              />
+            </div>
           </div>
-
-          <ReleaseHistory releases={workspace.releases} busy={busy} onRestore={onRestore} />
         </div>
       </div>
     </div>

@@ -14,14 +14,22 @@ export function ReleaseHistory({
   const { t } = useT();
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
-      <div className="border-b border-line px-4 py-3 text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+    <section
+      aria-label={t("prompts.history")}
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-card"
+    >
+      <div className="flex-none border-b border-line px-4 py-3 text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
         {t("prompts.history")}
       </div>
-      <div>
-        {releases.length === 0 && <div className="p-4 text-sm text-muted">{t("prompts.noActive")}</div>}
+      <ol
+        data-scroll-region="release-history"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
+        {releases.length === 0 && (
+          <li className="p-4 text-sm text-muted">{t("prompts.noActive")}</li>
+        )}
         {releases.map((release) => (
-          <div key={release.id} className="flex flex-wrap items-center gap-2 border-b border-line/70 px-4 py-3 last:border-b-0">
+          <li key={release.id} className="flex flex-wrap items-center gap-2 border-b border-line/70 px-4 py-3 last:border-b-0">
             <span className="font-mono text-sm text-ink">v{release.version}</span>
             {release.is_active && (
               <span className="rounded-full bg-status-pass-bg px-2 py-0.5 text-[10px] text-status-pass-fg">
@@ -36,15 +44,16 @@ export function ReleaseHistory({
             </span>
             <button
               type="button"
+              aria-label={t("prompts.loadVersionDraft", { version: release.version })}
               disabled={busy !== null || release.is_active}
               onClick={() => onRestore(release)}
               className="min-h-10 rounded-lg border border-line bg-well px-3 text-xs text-accent transition-colors hover:text-accent-ink disabled:cursor-not-allowed disabled:text-muted disabled:opacity-60"
             >
               {busy === "restore" ? t("prompts.restoring") : t("prompts.loadDraft")}
             </button>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
   );
 }
