@@ -26,6 +26,14 @@ def test_api_route_takes_precedence_over_static(tmp_path, monkeypatch):
     assert r.json() == {"status": "ok"}
 
 
+def test_serves_spa_index_for_diary_page_routes(tmp_path, monkeypatch):
+    monkeypatch.setenv("VELLUM_WEB_DIST", str(_dist(tmp_path)))
+    client = TestClient(create_app())
+    r = client.get("/app/diary/42")
+    assert r.status_code == 200
+    assert "Vellum" in r.text
+
+
 def test_starts_without_dist(tmp_path, monkeypatch):
     monkeypatch.setenv("VELLUM_WEB_DIST", str(tmp_path / "missing"))
     client = TestClient(create_app())
