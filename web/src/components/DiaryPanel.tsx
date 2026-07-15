@@ -1,41 +1,43 @@
 import { useEffect, useRef, useState } from "react";
-import { getDiary, getDiaryMessages, type DiaryCard, type Message } from "../api/client";
+
+import { getDiary, getDiaryMessages, type DiaryCard } from "../api/client";
+import { userStorageKey } from "../auth/storage";
 import { groupByDay } from "../diary/group";
 import { useT } from "../i18n";
-import { dayLabel } from "../util/day";
-import { MessageBubble } from "./MessageBubble";
-import { userStorageKey } from "../auth/storage";
+import { DiaryEntry, type DiaryEntryState } from "./diary/DiaryEntry";
+import { DiaryPager } from "./diary/DiaryPager";
+import { DiaryTimeline } from "./diary/DiaryTimeline";
 
 const PAGE = 20;
 
-// The diary is split per mode (matches the composer's stream switch). It opens on
-// whichever mode the chat last used; the toggle scopes the timeline to that stream.
-const MODES = ["neutral", "freud"] as const;
-
 /**
- * The diary: the conversation's background summaries laid out as a timeline of
- * cards, grouped by day. Each card is one span's one-paragraph digest; open it to
- * load and read the full messages of that span. Scrolls down to page further back.
+ * The diary keeps its timeline and entry reader as two sibling pages. Opening an
+ * entry slides the reader in without unmounting the timeline, so long transcripts
+ * get their own scroll surface and returning preserves the reader's list position.
  */
 export function DiaryPanel({ userId }: { userId?: string }) {
-  const { t, lang } = useT();
+  const { lang } = useT();
   const personaKey = userStorageKey(userId, "persona");
   const [cards, setCards] = useState<DiaryCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [atEnd, setAtEnd] = useState(false);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [detail, setDetail] = useState<Record<number, Message[]>>({});
-
+  const [selected, setSelected] = useState<DiaryCard | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [details, setDetails] = useState<Record<number, DiaryEntryState>>({});
   const [stream, setStream] = useState<string>(
     () => localStorage.getItem(personaKey) || "neutral",
   );
 
   const loadingRef = useRef(false);
+  const detailLoadingRef = useRef(new Set<number>());
+  const returnFocusIdRef = useRef<number | null>(null);
   const atEndRef = useRef(false);
   const cardsRef = useRef<DiaryCard[]>([]);
   const streamRef = useRef(stream);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const detailScrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     cardsRef.current = cards;
   }, [cards]);
@@ -44,28 +46,67 @@ export function DiaryPanel({ userId }: { userId?: string }) {
     if (loadingRef.current || atEndRef.current) return;
     loadingRef.current = true;
     setLoading(true);
-    const s = streamRef.current;
+    const requestedStream = streamRef.current;
     try {
       const seen = cardsRef.current;
       const before = seen.length ? seen[seen.length - 1].id : undefined;
-      const page = await getDiary(before, PAGE, s);
-      if (streamRef.current !== s) return; // mode switched mid-flight — drop stale page
-      // before===undefined is a fresh load: replace (so a mode switch can't append
-      // the new stream's first page onto the old stream's lingering cards).
-      setCards((c) => (before === undefined ? page : [...c, ...page]));
+      const page = await getDiary(before, PAGE, requestedStream);
+      if (streamRef.current !== requestedStream) return;
+      setCards((current) => (before === undefined ? page : [...current, ...page]));
       if (page.length < PAGE) {
         atEndRef.current = true;
         setAtEnd(true);
       }
-    } catch (e) {
-      console.error("diary load failed", e);
+    } catch (error) {
+      console.error("diary load failed", error);
     } finally {
       loadingRef.current = false;
       setLoading(false);
     }
   }
 
-  // Load on mount and whenever the mode changes — reset the timeline for the new stream.
+  async function loadDetail(cardId: number) {
+    if (detailLoadingRef.current.has(cardId)) return;
+    detailLoadingRef.current.add(cardId);
+    setDetails((current) => ({
+      ...current,
+      [cardId]: {
+        status: "loading",
+        messages: current[cardId]?.messages ?? [],
+      },
+    }));
+    try {
+      const { messages } = await getDiaryMessages(cardId);
+      setDetails((current) => ({
+        ...current,
+        [cardId]: { status: "ready", messages },
+      }));
+    } catch (error) {
+      console.error("diary detail failed", error);
+      setDetails((current) => ({
+        ...current,
+        [cardId]: {
+          status: "error",
+          messages: current[cardId]?.messages ?? [],
+        },
+      }));
+    } finally {
+      detailLoadingRef.current.delete(cardId);
+    }
+  }
+
+  function openDetail(card: DiaryCard) {
+    returnFocusIdRef.current = card.id;
+    setSelected(card);
+    setDetailOpen(true);
+    const cached = details[card.id];
+    if (!cached || cached.status === "error") void loadDetail(card.id);
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+  }
+
   useEffect(() => {
     streamRef.current = stream;
     cardsRef.current = [];
@@ -73,120 +114,88 @@ export function DiaryPanel({ userId }: { userId?: string }) {
     atEndRef.current = false;
     setCards([]);
     setAtEnd(false);
-    setOpenId(null);
-    loadMore();
+    setDetailOpen(false);
+    void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream]);
 
-  // Page further back when the bottom sentinel scrolls into view.
   useEffect(() => {
-    const el = bottomRef.current;
+    const sentinel = bottomRef.current;
     const root = scrollRef.current;
-    if (!el || !root || atEnd) return;
-    const obs = new IntersectionObserver(
+    if (!sentinel || !root || atEnd || detailOpen) return;
+    const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) loadMore();
+        if (entries[0].isIntersecting) void loadMore();
       },
       { root },
     );
-    obs.observe(el);
-    return () => obs.disconnect();
+    observer.observe(sentinel);
+    return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [atEnd, cards.length]);
+  }, [atEnd, cards.length, detailOpen]);
 
-  async function toggle(card: DiaryCard) {
-    if (openId === card.id) {
-      setOpenId(null);
-      return;
-    }
-    setOpenId(card.id);
-    if (!detail[card.id]) {
-      try {
-        const { messages } = await getDiaryMessages(card.id);
-        setDetail((d) => ({ ...d, [card.id]: messages }));
-      } catch (e) {
-        console.error("diary detail failed", e);
+  useEffect(() => {
+    if (!detailOpen) return;
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDetail();
       }
     }
-  }
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [detailOpen]);
+
+  useEffect(() => {
+    if (selected) detailScrollRef.current?.scrollTo({ top: 0 });
+  }, [selected]);
+
+  useEffect(() => {
+    if (detailOpen || returnFocusIdRef.current === null) return;
+    const cardId = returnFocusIdRef.current;
+    const frame = requestAnimationFrame(() => {
+      scrollRef.current
+        ?.querySelector<HTMLButtonElement>(`[data-diary-card="${cardId}"]`)
+        ?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [detailOpen]);
 
   const days = groupByDay(cards);
+  const detailState = selected ? details[selected.id] : undefined;
 
   return (
-    <div className="v-canvas flex h-full flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-        <span className="text-sm text-muted">{t("diary.sub")}</span>
-        <div
-          role="radiogroup"
-          aria-label={t("composer.mode.label")}
-          className="inline-flex shrink-0 rounded-lg border border-line bg-base p-0.5 text-[11px] font-medium"
-        >
-          {MODES.map((m) => {
-            const active = stream === m;
-            return (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setStream(m)}
-                className={
-                  "rounded-md px-2.5 py-1 transition-colors " +
-                  (active ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")
-                }
-              >
-                {t(`composer.mode.${m}`)}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[52rem] flex-col gap-5 px-4 py-6 sm:px-5 sm:py-8">
-          {days.map((d) => (
-            <div key={d.day} className="flex flex-col gap-3">
-              <div className="v-timebreak" aria-hidden>
-                {d.day ? dayLabel(d.cards[0].created_at, lang) : ""}
-              </div>
-              {d.cards.map((c) => (
-                <div key={c.id} className="rounded-xl border border-line bg-surface px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => toggle(c)}
-                    className="flex w-full items-start gap-3 text-left"
-                  >
-                    <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-gold" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13.5px] leading-[1.6] text-ink-soft">
-                        {c.content}
-                      </span>
-                      <span className="mt-1.5 block font-mono text-[11px] text-muted">
-                        {c.created_at?.slice(11, 16)} · {t("diary.span", { start: c.start_turn, end: c.end_turn })}
-                        {" · "}
-                        {openId === c.id ? t("diary.collapse") : t("diary.open")}
-                      </span>
-                    </span>
-                  </button>
-                  {openId === c.id && (
-                    <div className="mt-4 flex flex-col gap-5 border-t border-line/70 pt-4">
-                      {(detail[c.id] ?? []).map((m) => (
-                        <MessageBubble key={m.turn} m={m} latest={false} streaming={false} />
-                      ))}
-                      {!detail[c.id] && <div className="text-xs text-muted">{t("diary.loading")}</div>}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-          {cards.length === 0 && !loading && <div className="p-4 text-muted sm:p-8">{t("diary.empty")}</div>}
-          <div ref={bottomRef} aria-hidden className="h-px" />
-          {loading && <div className="py-4 text-center text-xs text-muted">{t("diary.loading")}</div>}
-          {atEnd && cards.length > 0 && (
-            <div className="py-4 text-center text-xs text-muted">{t("diary.end")}</div>
-          )}
-        </div>
-      </div>
+    <div className="v-canvas flex h-full min-h-0 flex-col overflow-hidden">
+      <DiaryPager
+        detailOpen={detailOpen}
+        timeline={(
+          <DiaryTimeline
+            days={days}
+            cardCount={cards.length}
+            stream={stream}
+            lang={lang}
+            loading={loading}
+            atEnd={atEnd}
+            scrollRef={scrollRef}
+            bottomRef={bottomRef}
+            onStreamChange={setStream}
+            onOpen={openDetail}
+          />
+        )}
+        detail={(
+          <DiaryEntry
+            card={selected}
+            state={detailState}
+            active={detailOpen}
+            lang={lang}
+            scrollRef={detailScrollRef}
+            onBack={closeDetail}
+            onRetry={() => {
+              if (selected) void loadDetail(selected.id);
+            }}
+          />
+        )}
+      />
     </div>
   );
 }
