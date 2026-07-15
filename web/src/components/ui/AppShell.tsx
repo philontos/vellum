@@ -57,7 +57,7 @@ export function AppShell({
   );
 
   return (
-    <div className="flex h-full h-dvh w-full flex-col overflow-hidden md:flex-row">
+    <div className="flex h-full h-dvh w-full flex-col overflow-hidden bg-[#161009] md:flex-row">
       <header className="v-safe-top flex flex-none items-center gap-3 border-b border-line bg-[#161009] px-4 pb-3 pt-3 md:hidden">
         <button
           type="button"
@@ -83,19 +83,28 @@ export function AppShell({
       </nav>
 
       <div
-        className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? "block" : "hidden"}`}
+        data-state={mobileOpen ? "open" : "closed"}
+        className={`fixed inset-0 z-50 transition-[visibility] duration-0 motion-reduce:delay-0 md:hidden ${
+          mobileOpen
+            ? "visible pointer-events-auto delay-0"
+            : "invisible pointer-events-none delay-200"
+        }`}
         aria-hidden={!mobileOpen}
       >
         <button
           type="button"
           aria-label={t("nav.closeMenu")}
-          className="absolute inset-0 bg-black/65 backdrop-blur-[2px]"
+          className={`absolute inset-0 bg-black/65 backdrop-blur-[2px] transition-opacity duration-200 ease-out motion-reduce:transition-none ${
+            mobileOpen ? "opacity-100" : "opacity-0"
+          }`}
           onClick={() => setMobileOpen(false)}
         />
         <nav
           id="mobile-navigation"
           aria-label="Primary"
-          className="v-safe-y relative flex h-full h-dvh w-[min(20rem,86vw)] flex-col gap-1 border-r border-line bg-gradient-to-b from-[#161009] to-[#0e0b07] px-4 py-4 shadow-float"
+          className={`v-safe-y relative flex h-full h-dvh w-[min(20rem,86vw)] transform-gpu flex-col gap-1 border-r border-line bg-gradient-to-b from-[#161009] to-[#0e0b07] px-4 py-4 shadow-float transition-transform duration-200 ease-out motion-reduce:transition-none ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
         >
           <div className="mb-3 flex items-center justify-between px-2.5">
             <Wordmark compact />

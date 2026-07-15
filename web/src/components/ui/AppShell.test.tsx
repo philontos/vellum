@@ -38,6 +38,12 @@ describe("AppShell responsive navigation", () => {
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain("ml-auto truncate text-sm font-medium text-ink-soft");
     expect(html).toContain("border-transparent text-ink-soft");
+    expect(html).toContain('data-state="closed"');
+    expect(html).toContain("transition-[visibility]");
+    expect(html).toContain("transition-opacity");
+    expect(html).toContain("transition-transform");
+    expect(html).toContain("-translate-x-full");
+    expect(html).toContain("motion-reduce:transition-none");
   });
 
   it("uses the dynamic viewport and keeps the desktop rail out of mobile layout", () => {
