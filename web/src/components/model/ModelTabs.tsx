@@ -25,7 +25,7 @@ export function ModelTabs({
   }
 
   return (
-    <div className="sticky top-0 z-20 border-b border-line bg-base/95 px-4 py-2.5 backdrop-blur lg:hidden">
+    <div className="sticky top-0 z-20 border-b border-line bg-base/95 px-4 py-2.5 backdrop-blur lg:px-8 lg:py-3">
       <div
         role="tablist"
         aria-label={t("model.tabsLabel")}
