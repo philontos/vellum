@@ -39,6 +39,29 @@ describe("mobile controls", () => {
     expect(html).toContain("opacity-70 sm:opacity-0");
   });
 
+  it("uses compact responsive type only for assistant replies", () => {
+    const assistantHtml = withLanguage(
+      <MessageBubble
+        m={{ turn: 1, role: "assistant", content: "A considered answer" }}
+        latest
+        streaming={false}
+      />,
+    );
+    const userHtml = withLanguage(
+      <MessageBubble
+        m={{ turn: 2, role: "user", content: "A personal message" }}
+        latest
+        streaming={false}
+      />,
+    );
+
+    expect(assistantHtml).toContain(
+      "v-md text-[15px] leading-[1.68] sm:text-base sm:leading-[1.72]",
+    );
+    expect(userHtml).toContain("text-[13.5px]");
+    expect(userHtml).not.toContain("text-[15px]");
+  });
+
   it("uses a keyboard-safe viewport and 16px login inputs", () => {
     const html = withLanguage(
       <AuthProvider>

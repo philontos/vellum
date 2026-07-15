@@ -167,8 +167,6 @@ textarea {
   /* Vellum's manuscript: the serif reading voice, with its markdown set in type. */
   .v-md {
     font-family: theme("fontFamily.serif");
-    font-size: 17px;
-    line-height: 1.72;
     color: theme("colors.ink");
     text-wrap: pretty;
     overflow-wrap: anywhere;
