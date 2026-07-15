@@ -37,7 +37,7 @@ export function DiaryEntry({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex-none border-b border-line bg-base/95 px-2 py-1.5 backdrop-blur sm:px-5 sm:py-2">
+      <header className="flex-none border-b border-line bg-canvas/95 px-2 py-1.5 backdrop-blur sm:px-5 sm:py-2">
         <div className="relative mx-auto flex min-h-10 w-full max-w-[58rem] items-center justify-center px-12">
           <button
             type="button"

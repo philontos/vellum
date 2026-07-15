@@ -5,7 +5,7 @@ export default {
     extend: {
       colors: {
         // Ember Noir — deep espresso ground, sienna accent, gold detail.
-        base: "#110D09",
+        canvas: "#110D09",
         surface: "#18120C",
         well: "#0F0C08",
         ink: "#EFE6D7",

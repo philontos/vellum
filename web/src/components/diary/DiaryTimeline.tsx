@@ -40,7 +40,7 @@ export function DiaryTimeline({
         <div
           role="radiogroup"
           aria-label={t("composer.mode.label")}
-          className="inline-flex shrink-0 rounded-lg border border-line bg-base p-0.5 text-[11px] font-medium"
+          className="inline-flex shrink-0 rounded-lg border border-line bg-canvas p-0.5 text-[11px] font-medium"
         >
           {MODES.map((mode) => {
             const active = stream === mode;

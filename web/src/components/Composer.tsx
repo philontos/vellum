@@ -47,7 +47,7 @@ export function Composer({
   }
 
   return (
-    <div className="flex-none border-t border-line bg-gradient-to-b from-transparent to-base">
+    <div className="flex-none border-t border-line bg-gradient-to-b from-transparent to-canvas">
       <div className="v-safe-bottom mx-auto w-full max-w-[58rem] px-3 pt-3 sm:px-8 sm:pt-4 2xl:max-w-[60rem]">
         <div className="rounded-2xl border border-line bg-surface shadow-card transition-colors focus-within:border-accent/40 focus-within:ring-2 focus-within:ring-accent/15">
           <textarea
@@ -71,7 +71,7 @@ export function Composer({
                 <div
                   role="radiogroup"
                   aria-label={tr("composer.mode.label")}
-                  className="inline-flex shrink-0 rounded-lg border border-line bg-base p-0.5 text-[11px] font-medium"
+                  className="inline-flex shrink-0 rounded-lg border border-line bg-canvas p-0.5 text-[11px] font-medium"
                 >
                   {MODES.map((m) => {
                     const active = (persona ?? "neutral") === m;
