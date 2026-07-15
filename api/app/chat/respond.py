@@ -8,6 +8,7 @@ import json
 from app import config
 from app.chat.tools import recall, registry, websearch
 from app.llm import client as llm
+from app.prompts import runtime
 
 
 def _build_registry(stream: str) -> registry.ToolRegistry:
@@ -30,6 +31,14 @@ def _max_hops() -> int:
 
 
 async def stream(messages: list[dict], stream: str = "neutral"):
+    # Tool descriptions and every hop of one answer must see the same release,
+    # including direct callers outside the HTTP/Feishu turn wrappers.
+    with runtime.ensure_snapshot():
+        async for event in _stream(messages, stream=stream):
+            yield event
+
+
+async def _stream(messages: list[dict], stream: str = "neutral"):
     reg = _build_registry(stream)
     tools = reg.schemas()
     convo = list(messages)

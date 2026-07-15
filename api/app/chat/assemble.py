@@ -5,6 +5,7 @@ framed so the model leads with the answer and only leans on them when relevant
 from app import config
 from app.chat import persona, retrieval, temporal
 from app.config.dimensions_loader import dimension_meta
+from app.prompts import runtime
 from app.store import memory, model
 from app.store.db import get_conn
 
@@ -118,6 +119,12 @@ async def build_messages(query: str | None = None,
     """Assemble system + recent tail. `query` for retrieval defaults to the last
     user message in the tail. `persona_name` selects the prompt-side mode (voice +
     stance); None falls back to VELLUM_PERSONA."""
+    with runtime.ensure_snapshot():
+        return await _build_messages(query=query, persona_name=persona_name)
+
+
+async def _build_messages(query: str | None = None,
+                          persona_name: str | None = None) -> list[dict]:
     # The mode's name is also its context stream: the live tail + recall are scoped
     # to it, so switching modes never drags another mode's transcript in. The user
     # model below (dossier/facts/traits) stays global, co-built from every stream.
@@ -128,10 +135,14 @@ async def build_messages(query: str | None = None,
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)
         query = last_user["content"] if last_user else ""
 
-    sections = [p.voice, p.stance or _ALTITUDE, _RESPONSE_PROTOCOL,
+    altitude = runtime.resolve("chat.altitude", _ALTITUDE)
+    response_protocol = runtime.resolve("chat.response_protocol", _RESPONSE_PROTOCOL)
+    sections = [p.voice, p.stance or altitude, response_protocol,
                 temporal.system_context()]
     if config.web_search_configured():
-        sections.append(_RESEARCH_DISCIPLINE)
+        sections.append(runtime.resolve(
+            "chat.research_discipline", _RESEARCH_DISCIPLINE,
+        ))
 
     dossier = model.get_dossier().strip()
     if dossier:
@@ -143,8 +154,9 @@ async def build_messages(query: str | None = None,
 
     traits = _trait_summary()
     if traits:
+        trait_frame = runtime.resolve("chat.trait_frame", _TRAIT_FRAME)
         sections.append("## How the user tends to be\n" +
-                        (p.trait_frame or _TRAIT_FRAME) + "\n\n" + traits)
+                        (p.trait_frame or trait_frame) + "\n\n" + traits)
 
     if query:
         snips = await retrieval.retrieve(query, stream=stream)

@@ -10,6 +10,7 @@ from app import config
 from app.chat import assemble, ingest, persona, respond
 from app.llm.client import resolve_structured_llm_config
 from app.model_loop import runner
+from app.prompts import runtime
 from app.store import traces
 
 _background_tasks: set[asyncio.Task] = set()
@@ -37,6 +38,12 @@ async def reply(text: str, persona_name: str | None = None) -> str:
     both turns persist into it — switching modes on mobile keeps the same per-mode
     partitioning the web has. Records one chat trace and schedules background
     modeling — the same observability + learning POST /chat performs, sans SSE."""
+    with runtime.ensure_snapshot() as snapshot:
+        return await _reply(text, persona_name, snapshot)
+
+
+async def _reply(text: str, persona_name: str | None,
+                 snapshot: runtime.PromptSnapshot) -> str:
     pname = persona_name if persona_name in persona.available() else config.persona_name()
     await ingest.persist_user(text, stream=pname)
     messages = await assemble.build_messages(query=text, persona_name=pname)
@@ -58,7 +65,12 @@ async def reply(text: str, persona_name: str | None = None) -> str:
     assistant = ingest.persist_assistant(final, stream=pname)
     traces.record(
         turn=assistant["turn"], stage="chat", model=cfg.get("model"),
-        params={"provider": cfg.get("provider"), "persona": pname},
+        params={
+            "provider": cfg.get("provider"),
+            "persona": pname,
+            "prompt_release_id": snapshot.release_id,
+            "prompt_release_version": snapshot.release_version,
+        },
         prompt=json.dumps(messages, ensure_ascii=False), output=final,
         reasoning=reasoning, tool_calls=tool_calls,
         prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,

@@ -9,6 +9,8 @@ from typing import Any, AsyncIterator, Optional
 
 import httpx
 
+from app.prompts import runtime
+
 
 # Transient errors worth retrying. ReadTimeout covers slow LLM responses
 # (DeepSeek can take >60s); RemoteProtocolError covers chunked-stream drops;
@@ -306,8 +308,9 @@ async def chat_json(
     # the library layer so callers that put everything in system_prompt
     # (e.g. pipeline slice stages) work across providers.
     user_content = (user_prompt or "").strip() or "Proceed."
+    json_only_hint = runtime.resolve("llm.json_only_hint", _JSON_ONLY_HINT)
     base_messages = [
-        {"role": "system", "content": (system_prompt or "") + _JSON_ONLY_HINT},
+        {"role": "system", "content": (system_prompt or "") + json_only_hint},
         {"role": "user", "content": user_content},
     ]
     base_payload: dict[str, Any] = {

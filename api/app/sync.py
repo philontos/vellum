@@ -4,10 +4,11 @@
     VELLUM_SYNC_REMOTE=...                                  python -m app.sync pull
     python -m app.sync status
 
-Model: the deployment data root IS a git repo. Legacy mode tracks vellum.db;
-family mode tracks encrypted auth.db plus each users/<id>/vellum.db. Treat it as
-a baton — one active device at a time. `pull` refuses to clobber un-pushed local
-changes, so you can't silently lose work by editing on two devices.
+Model: the deployment data root IS a git repo. Every mode tracks the shared
+prompts.db; legacy mode also tracks vellum.db, while family mode tracks encrypted
+auth.db plus each users/<id>/vellum.db. Treat it as a baton — one active device at
+a time. `pull` refuses to clobber un-pushed local changes, so you can't silently
+lose work by editing on two devices.
 
 Observability DBs (traces/evals) stay per-device. The key is NEVER stored here —
 it lives outside the data dir and is supplied via VELLUM_DB_KEY, so an encrypted
@@ -34,9 +35,9 @@ def _repo_dir() -> Path:
 
 def _synced_paths() -> list[Path]:
     if not config.auth_enabled():
-        return [Path("vellum.db")]
+        return [Path("vellum.db"), Path("prompts.db")]
     root = config.base_data_dir()
-    paths = [Path("auth.db")]
+    paths = [Path("auth.db"), Path("prompts.db")]
     paths.extend(
         path.relative_to(root)
         for path in sorted((root / "users").glob("*/vellum.db"))
@@ -68,9 +69,12 @@ def _ensure_repo(repo: Path) -> None:
         _git(repo, "config", "user.email", "vellum@local")
     # Track only canonical DBs; observability/traces stay local to the VPS.
     if config.auth_enabled():
-        want = "*\n!.gitignore\n!auth.db\n!users/\n!users/*/\n!users/*/vellum.db\n"
+        want = (
+            "*\n!.gitignore\n!auth.db\n!prompts.db\n"
+            "!users/\n!users/*/\n!users/*/vellum.db\n"
+        )
     else:
-        want = "*\n!.gitignore\n!vellum.db\n"
+        want = "*\n!.gitignore\n!vellum.db\n!prompts.db\n"
     gi = repo / ".gitignore"
     if (gi.read_text() if gi.exists() else None) != want:
         gi.write_text(want)

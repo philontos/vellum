@@ -12,6 +12,7 @@ from app import config
 from app.chat import assemble, ingest, persona, respond
 from app.llm.client import resolve_structured_llm_config
 from app.model_loop import runner
+from app.prompts import runtime
 from app.store import traces
 
 router = APIRouter()
@@ -41,12 +42,13 @@ async def chat(body: ChatIn):
     # Validate against the known modes; an unknown value quietly uses the default
     # so a stale client can never wedge the chat on a missing persona. The mode name
     # is also the context stream — the live tail + recall are partitioned by it.
-    pname = body.persona if body.persona in persona.available() else config.persona_name()
-    await ingest.persist_user(body.message, stream=pname)
-    messages = await assemble.build_messages(query=body.message, persona_name=pname)
-    cfg = resolve_structured_llm_config()
+    with runtime.ensure_snapshot() as snapshot:
+        pname = body.persona if body.persona in persona.available() else config.persona_name()
+        await ingest.persist_user(body.message, stream=pname)
+        messages = await assemble.build_messages(query=body.message, persona_name=pname)
+        cfg = resolve_structured_llm_config()
 
-    async def gen():
+    async def _gen():
         final = ""
         reasoning = None
         tool_calls = None
@@ -73,7 +75,12 @@ async def chat(body: ChatIn):
             assistant = ingest.persist_assistant(final, stream=pname)
             traces.record(
                 turn=assistant["turn"], stage="chat", model=cfg.get("model"),
-                params={"provider": cfg.get("provider"), "persona": pname},
+                params={
+                    "provider": cfg.get("provider"),
+                    "persona": pname,
+                    "prompt_release_id": snapshot.release_id,
+                    "prompt_release_version": snapshot.release_version,
+                },
                 prompt=json.dumps(messages, ensure_ascii=False), output=final,
                 reasoning=reasoning, tool_calls=tool_calls,
                 prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
@@ -88,5 +95,12 @@ async def chat(body: ChatIn):
         finally:
             # Always terminate the stream so the client can stop waiting.
             yield "data: [DONE]\n\n"
+
+    async def gen():
+        # Streaming begins after the route handler returns, so explicitly restore
+        # the release used to assemble the messages for the generator's lifetime.
+        with runtime.use_snapshot(snapshot):
+            async for frame in _gen():
+                yield frame
 
     return StreamingResponse(gen(), media_type="text/event-stream")

@@ -14,6 +14,7 @@ from app import config
 from app.data_scope import current_user_id
 from app.llm.client import capture_llm_calls
 from app.model_loop import dossier, facts, summary, traits
+from app.prompts import runtime
 from app.store import memory, traces
 
 
@@ -43,6 +44,10 @@ def _flush_traces(calls: list[dict], turn: int, start_turn: int | None = None,
         if c.get("user_prompt"):
             prompt += "\n\n[user]\n" + c["user_prompt"]
         params = {"status": c.get("status"), "error": c.get("error")}
+        snapshot = runtime.current_snapshot()
+        if snapshot is not None:
+            params["prompt_release_id"] = snapshot.release_id
+            params["prompt_release_version"] = snapshot.release_version
         if start_turn is not None:
             params["from"] = start_turn
             params["to"] = turn
@@ -122,4 +127,7 @@ async def _run_pending_unlocked() -> None:
 
 async def run_pending() -> None:
     async with _user_lock():
-        await _run_pending_unlocked()
+        # Select after acquiring the per-user lock: a queued batch starts from the
+        # release active when it actually runs, then keeps it across all concerns.
+        with runtime.use_snapshot():
+            await _run_pending_unlocked()

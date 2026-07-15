@@ -3,6 +3,7 @@ store it, embed it, and index it so it's searchable (spec §6/§8)."""
 from app.llm.client import chat_json
 from app.llm.embed import embed
 from app.model_loop._span import span_text
+from app.prompts import runtime
 from app.store import memory
 from app.store.vectors import VectorStore
 
@@ -10,7 +11,8 @@ _PROMPT = (
     "Summarize the conversation span below in one tight paragraph: what was "
     "discussed, any conclusion or decision, any commitment made. This is a search "
     "handle for future recall, so be specific. Respond as strict JSON: "
-    "{\"summary\": \"<one paragraph>\"}. Match the user's language.\n\n## Span\n"
+    "{{\"summary\": \"<one paragraph>\"}}. Match the user's language."
+    "\n\n## Span\n{span}"
 )
 
 
@@ -22,7 +24,11 @@ async def run(start_turn: int, end_turn: int, stream: str = "neutral") -> None:
     if not span.strip():
         return
     try:
-        result = await chat_json(system_prompt=_PROMPT + span, user_prompt="", stage="summary")
+        with runtime.ensure_snapshot():
+            prompt = runtime.resolve("memory.summary", _PROMPT).format(span=span)
+            result = await chat_json(
+                system_prompt=prompt, user_prompt="", stage="summary",
+            )
     except Exception:
         return
     text = (result.get("summary") or "").strip()

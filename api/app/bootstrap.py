@@ -2,9 +2,11 @@
 from app import config
 from app.data_scope import user_scope
 from app.store import crypto, db
+from app.prompts import db as prompt_db
 
 
 def migrate_all() -> None:
+    prompt_db.run_migrations()
     if not config.auth_enabled():
         crypto.assert_db_accessible()
         db.run_migrations()

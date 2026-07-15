@@ -3,19 +3,23 @@
 the user references that the model does not already know. Snippets today (C);
 the same structured results extend cleanly to full-page fetch later (B)."""
 from app import config
+from app.prompts import runtime
 from app.web import search as web
+
+
+_DESCRIPTION = (
+    "Search the live web for information you may not have or that may be "
+    "out of date — recent events, current data, fast-moving or niche "
+    "topics, anything beyond your training. Use a focused query (not the "
+    "raw user message). Treat results as evidence to weigh and cross-check "
+    "across sources before relying on them."
+)
 
 _SCHEMA = {
     "type": "function",
     "function": {
         "name": "web_search",
-        "description": (
-            "Search the live web for information you may not have or that may be "
-            "out of date — recent events, current data, fast-moving or niche "
-            "topics, anything beyond your training. Use a focused query (not the "
-            "raw user message). Treat results as evidence to weigh and cross-check "
-            "across sources before relying on them."
-        ),
+        "description": _DESCRIPTION,
         "parameters": {
             "type": "object",
             "properties": {
@@ -59,4 +63,13 @@ async def _handler(args: dict) -> str:
 
 
 def register_into(reg) -> None:
-    reg.register(schema=_SCHEMA, handler=_handler)
+    schema = {
+        **_SCHEMA,
+        "function": {
+            **_SCHEMA["function"],
+            "description": runtime.resolve(
+                "tool.web_search.description", _DESCRIPTION,
+            ),
+        },
+    }
+    reg.register(schema=schema, handler=_handler)

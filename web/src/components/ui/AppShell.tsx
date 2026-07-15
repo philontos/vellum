@@ -3,7 +3,7 @@ import { useT } from "../../i18n";
 import { NavItem } from "./NavItem";
 import type { AuthUser } from "../../auth/client";
 
-export type View = "chat" | "diary" | "model" | "traces" | "probe" | "evals";
+export type View = "chat" | "diary" | "model" | "traces" | "probe" | "prompts" | "evals";
 
 type NavEntry = { key: View; label: string };
 
@@ -32,7 +32,10 @@ export function AppShell({
     { key: "model", label: t("nav.you") },
     { key: "traces", label: t("nav.traces") },
     { key: "probe", label: t("nav.probe") },
-    ...(user?.role === "member" ? [] : [{ key: "evals" as const, label: t("nav.evals") }]),
+    ...(user?.role === "member" ? [] : [
+      { key: "prompts" as const, label: t("nav.prompts") },
+      { key: "evals" as const, label: t("nav.evals") },
+    ]),
   ];
   const mobileNav = nav.filter(
     ({ key }) => key === "chat" || key === "diary" || key === "model",

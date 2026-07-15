@@ -141,8 +141,8 @@ port-forwarding works too — forward the VPS port and open the localhost link.)
   ```cron
   30 3 * * * /opt/vellum/deploy/backup.sh >> /tmp/vellum-backup.log 2>&1
   ```
-  (`backup.sh` checkpoints + pushes encrypted `auth.db` and every user's
-  `vellum.db`; override its location with
+  (`backup.sh` checkpoints + pushes encrypted shared `prompts.db`, `auth.db`, and
+  every user's `vellum.db`; override its location with
   `VELLUM_API_DIR=` if you didn't deploy to `/opt/vellum`.)
 - Confirm the remote only ever holds ciphertext.
 
@@ -151,7 +151,9 @@ port-forwarding works too — forward the VPS port and open the localhost link.)
 - [ ] `sudo systemctl kill vellum` (or kill the uvicorn PID) → systemd restarts it.
 - [ ] Owner and member can each log in; their chat/history/model data are distinct.
 - [ ] A member receives 403 for `/inspect/evals`; the owner can use it.
+- [ ] A member cannot open `/admin/prompts`; the owner can save a draft and publish
+      one release used by every account.
 - [ ] From outside WireGuard: `curl http://<VPS_PUBLIC_IP>:<VELLUM_PORT>/health`
       is refused/times out (app is **not** public).
-- [ ] `deploy/backup.sh` runs clean; the remote repo shows encrypted `auth.db` and
-      `users/<id>/vellum.db`, with no observability DBs or key material.
+- [ ] `deploy/backup.sh` runs clean; the remote repo shows encrypted `prompts.db`,
+      `auth.db`, and `users/<id>/vellum.db`, with no observability DBs or key material.

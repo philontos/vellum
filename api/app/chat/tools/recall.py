@@ -1,17 +1,21 @@
 """The recall_memory tool (B): lets the model issue a targeted/iterative memory
 query with a well-formed search string."""
 from app.chat import retrieval
+from app.prompts import runtime
+
+
+_DESCRIPTION = (
+    "Search the user's long-term memory for past conversations relevant "
+    "to a query. Use when the user references something from the past, or "
+    "when prior context would materially help — with a focused query "
+    "(not the raw user message)."
+)
 
 _SCHEMA = {
     "type": "function",
     "function": {
         "name": "recall_memory",
-        "description": (
-            "Search the user's long-term memory for past conversations relevant "
-            "to a query. Use when the user references something from the past, or "
-            "when prior context would materially help — with a focused query "
-            "(not the raw user message)."
-        ),
+        "description": _DESCRIPTION,
         "parameters": {
             "type": "object",
             "properties": {
@@ -30,4 +34,13 @@ def register_into(reg, stream: str = "neutral") -> None:
             return "No relevant past conversations found."
         return "\n---\n".join(s["text"] for s in snips)
 
-    reg.register(schema=_SCHEMA, handler=_handler)
+    schema = {
+        **_SCHEMA,
+        "function": {
+            **_SCHEMA["function"],
+            "description": runtime.resolve(
+                "tool.recall_memory.description", _DESCRIPTION,
+            ),
+        },
+    }
+    reg.register(schema=schema, handler=_handler)

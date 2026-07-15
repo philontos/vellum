@@ -2,21 +2,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { I18nProvider } from "../../i18n";
+import type { AuthUser } from "../../auth/client";
 import { AppShell } from "./AppShell";
 
-function renderShell() {
+const OWNER: AuthUser = {
+  id: "owner-1",
+  username: "owner",
+  display_name: "Owner",
+  role: "owner",
+  status: "active",
+};
+
+function renderShell(user: AuthUser | null = OWNER) {
   return renderToStaticMarkup(
     <I18nProvider>
       <AppShell
         view="chat"
         onChange={() => undefined}
-        user={{
-          id: "owner-1",
-          username: "owner",
-          display_name: "Owner",
-          role: "owner",
-          status: "active",
-        }}
+        user={user}
         onLogout={async () => undefined}
       >
         <div>content</div>
@@ -60,10 +63,27 @@ describe("AppShell responsive navigation", () => {
     expect(mobileNavigation).not.toContain("Traces");
     expect(mobileNavigation).not.toContain("Probe");
     expect(mobileNavigation).not.toContain("Evals");
+    expect(mobileNavigation).not.toContain("Prompts");
 
     // The full toolset remains available from the desktop navigation rail.
     expect(html).toContain("Traces");
     expect(html).toContain("Probe");
     expect(html).toContain("Evals");
+    expect(html).toContain("Prompts");
+  });
+
+  it("keeps deployment-wide Prompts owner-only", () => {
+    const memberHtml = renderShell({
+      id: "member-1",
+      username: "member",
+      display_name: "Member",
+      role: "member",
+      status: "active",
+    });
+    const legacyHtml = renderShell(null);
+
+    expect(memberHtml).not.toContain("Prompts");
+    expect(memberHtml).not.toContain("Evals");
+    expect(legacyHtml).toContain("Prompts");
   });
 });

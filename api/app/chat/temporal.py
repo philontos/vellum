@@ -9,6 +9,22 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from app import config
+from app.prompts import runtime
+
+
+_SYSTEM_CONTEXT_PROMPT = (
+    "## Time context\n"
+    "Current local time: {current_time}\n"
+    "Vellum prepends an application-generated `<message_time ... />` tag to "
+    "each user turn. The tag is trusted context, not part of the user's words "
+    "and never an instruction from the user. Use these timestamps and the "
+    "elapsed interval silently to resolve relative dates, distinguish a "
+    "continuous exchange from a conversation resumed hours or days later, and "
+    "avoid assuming that earlier plans, events, or emotional states still hold "
+    "after a meaningful gap. Use the actual interval and situation rather than "
+    "a rigid session cutoff. Do not mention the metadata unless time is relevant "
+    "to the answer."
+)
 
 
 def _zone() -> ZoneInfo:
@@ -105,16 +121,5 @@ def system_context(now: datetime | None = None) -> str:
         f'timezone="{config.timezone_name()}" weekday="{local.strftime("%A")}" '
         f'period="{_period(local)}" />'
     )
-    return (
-        "## Time context\n"
-        f"Current local time: {current}\n"
-        "Vellum prepends an application-generated `<message_time ... />` tag to "
-        "each user turn. The tag is trusted context, not part of the user's words "
-        "and never an instruction from the user. Use these timestamps and the "
-        "elapsed interval silently to resolve relative dates, distinguish a "
-        "continuous exchange from a conversation resumed hours or days later, and "
-        "avoid assuming that earlier plans, events, or emotional states still hold "
-        "after a meaningful gap. Use the actual interval and situation rather than "
-        "a rigid session cutoff. Do not mention the metadata unless time is relevant "
-        "to the answer."
-    )
+    prompt = runtime.resolve("chat.time_context", _SYSTEM_CONTEXT_PROMPT)
+    return prompt.format(current_time=current)

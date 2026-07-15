@@ -99,6 +99,7 @@ async def _stream_lines(suite: str):
         # The child process cannot inherit a ContextVar. Point it at the already
         # scoped owner directory and run it in legacy-path mode; eval scratch then
         # remains isolated without ever falling back to the deployment root DB.
+        env["VELLUM_PROMPT_DB_PATH"] = str(config.prompt_db_path())
         env["VELLUM_DATA_DIR"] = str(config.data_dir())
         env["VELLUM_AUTH_ENABLED"] = "0"
     proc = await asyncio.create_subprocess_exec(

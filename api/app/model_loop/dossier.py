@@ -3,6 +3,7 @@ new span. Compaction is implicit — the prompt caps length, so growth is bounde
 (pinned facts live in their own table and are never at risk). Spec §6.3/§8."""
 from app.llm.client import chat_json
 from app.model_loop._span import span_text
+from app.prompts import runtime
 from app.store import memory, model
 
 _MAX_CHARS = 4000   # soft cap; the model is told to compact toward this
@@ -38,9 +39,16 @@ async def run(start_turn: int, end_turn: int) -> None:
     span = span_text(start_turn, end_turn)
     if not span.strip():
         return
-    prompt = _PROMPT.format(cap=_MAX_CHARS, prior=model.get_dossier() or "(empty)", span=span)
     try:
-        result = await chat_json(system_prompt=prompt, user_prompt="", stage="dossier")
+        with runtime.ensure_snapshot():
+            prompt = runtime.resolve("memory.dossier", _PROMPT).format(
+                cap=_MAX_CHARS,
+                prior=model.get_dossier() or "(empty)",
+                span=span,
+            )
+            result = await chat_json(
+                system_prompt=prompt, user_prompt="", stage="dossier",
+            )
     except Exception:
         return
     text = (result.get("dossier") or "").strip()

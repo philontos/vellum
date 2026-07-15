@@ -85,7 +85,7 @@ pnpm dev
 ### 3. Open it
 
 Go to **http://localhost:5173** and start chatting. The dev server proxies `/auth`,
-`/chat`, `/history`, `/inspect`, `/health` to the backend on `:18080`.
+`/admin`, `/chat`, `/history`, `/inspect`, `/health` to the backend on `:18080`.
 
 Backend-only sanity check: `curl http://localhost:18080/health` → `{"status":"ok"}`.
 
@@ -99,7 +99,7 @@ Copy `api/.env.example` to `api/.env` and fill it in.
 |---|---|---|
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | yes | The chat model — any OpenAI-compatible `/chat/completions` endpoint. |
 | `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` | yes* | The embedding model (`/embeddings`). *Falls back to `LLM_*` if unset — but set it explicitly when your chat provider has no embeddings. |
-| `VELLUM_DATA_DIR` | no | Data root. Family mode stores `auth.db` plus `users/<id>/vellum.db`. Default `./data`. |
+| `VELLUM_DATA_DIR` | no | Data root. `prompts.db` is deployment-wide; family mode also stores `auth.db` plus `users/<id>/vellum.db`. Default `./data`. |
 | `VELLUM_AUTH_ENABLED` | no | `1` enables private family login and per-account stores; default `0` keeps legacy mode. |
 | `EVAL_GEN_BASE_URL` / `EVAL_GEN_API_KEY` / `EVAL_GEN_MODEL` | no | External evaluator model — only needed to *run* evals. |
 
@@ -155,10 +155,10 @@ What it does (all idempotent — safe to re-run):
 
 ### Multi-device sync (optional)
 
-Your data root (`api/data/`) is itself a tiny git repo. Legacy mode tracks the
-encrypted `vellum.db`; family mode tracks encrypted `auth.db` and every
-`users/<id>/vellum.db`. The sync commands push only ciphertext. Treat it as a
-baton: one active device at a time.
+Your data root (`api/data/`) is itself a tiny git repo. Both modes track the shared
+encrypted `prompts.db`; legacy mode also tracks `vellum.db`, while family mode
+tracks encrypted `auth.db` and every `users/<id>/vellum.db`. The sync commands
+push only ciphertext. Treat it as a baton: one active device at a time.
 
 **One-time setup:** create an empty **private** repo (e.g. on GitHub, named
 `vellum-data` — do *not* add a README/.gitignore, leave it empty). Then on your
@@ -218,6 +218,10 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   Argon2id; opaque session tokens are stored only as SHA-256 digests. Each account's
   text, embeddings, model, and traces live in its own SQLite files. HNSW graphs are
   rebuilt into separate per-user memory caches.
+- **Prompt releases.** The owner-only **Prompts** tab edits a deployment-wide draft
+  workspace shared by every account. Saving does not affect live calls; publishing
+  validates every template and atomically activates one immutable release. Loading
+  an older release creates a draft for review before it is republished.
 - **Reasoning models:** chain-of-thought (`reasoning_content` / `reasoning`) is
   captured into traces for inspection, but never streamed into the chat answer.
 - **Tests:** backend `pytest` (from `api/`); web `pnpm test` (from `web/`).
@@ -233,3 +237,5 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
 - **Traces** — every LLM call (chat + facts/trait/summary/dossier), with the full
   prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
   it from rolling pruning; add a note to mark good/bad results while you tune.
+- **Prompts** (owner only) — production chat, memory-modeling, trait, and tool
+  prompts; explicit draft/save/publish workflow with immutable release history.

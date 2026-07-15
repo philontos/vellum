@@ -18,6 +18,7 @@ import json
 import sys
 
 from app.llm.client import capture_llm_calls
+from app.prompts import runtime
 from app.store import db, vectors
 from evals import suites as S
 
@@ -27,7 +28,9 @@ def _emit(obj: dict) -> None:
     sys.stdout.flush()
 
 
-def _calls_to_traces(calls: list[dict], case_name: str) -> list[dict]:
+def _calls_to_traces(
+    calls: list[dict], case_name: str, snapshot: runtime.PromptSnapshot,
+) -> list[dict]:
     out = []
     for c in calls:
         prompt = c.get("system_prompt") or ""
@@ -36,7 +39,12 @@ def _calls_to_traces(calls: list[dict], case_name: str) -> list[dict]:
         out.append({
             "type": "trace", "case": case_name,
             "stage": c.get("stage") or "?", "model": c.get("model"),
-            "params": {"status": c.get("status"), "error": c.get("error")},
+            "params": {
+                "status": c.get("status"),
+                "error": c.get("error"),
+                "prompt_release_id": snapshot.release_id,
+                "prompt_release_version": snapshot.release_version,
+            },
             "prompt": prompt, "output": c.get("response") or "",
             "reasoning": c.get("reasoning") or None,
             "prompt_tokens": c.get("prompt_tokens"),
@@ -49,19 +57,33 @@ def _calls_to_traces(calls: list[dict], case_name: str) -> list[dict]:
 async def _run_one(suite: S.Suite, case, seq: int) -> dict:
     name = suite.name_of(case, seq)
     calls: list[dict] = []
-    try:
-        with capture_llm_calls(calls):
-            if suite.needs_scratch:
-                with db.memory_scratch(f"eval_{suite.key}_{seq}"), vectors.memory_index():
+    # One eval case is one observable execution. A concurrent publication may
+    # affect the next case, never split this case across two Prompt releases.
+    with runtime.use_snapshot() as snapshot:
+        try:
+            with capture_llm_calls(calls):
+                if suite.needs_scratch:
+                    with db.memory_scratch(
+                        f"eval_{suite.key}_{seq}"
+                    ), vectors.memory_index():
+                        result = await suite.run(case)
+                else:
                     result = await suite.run(case)
-            else:
-                result = await suite.run(case)
-        return {"seq": seq, "case": name, "status": suite.status_of(result),
-                "result": result, "_traces": _calls_to_traces(calls, name)}
-    except Exception as exc:  # model unconfigured, judge missing, bad case — never fatal
-        return {"seq": seq, "case": name, "status": "error",
+            return {
+                "seq": seq,
+                "case": name,
+                "status": suite.status_of(result),
+                "result": result,
+                "_traces": _calls_to_traces(calls, name, snapshot),
+            }
+        except Exception as exc:  # bad case/model config is never suite-fatal
+            return {
+                "seq": seq,
+                "case": name,
+                "status": "error",
                 "error": f"{type(exc).__name__}: {exc}",
-                "_traces": _calls_to_traces(calls, name)}
+                "_traces": _calls_to_traces(calls, name, snapshot),
+            }
 
 
 async def main(which: str) -> None:

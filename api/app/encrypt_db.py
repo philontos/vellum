@@ -17,7 +17,7 @@ from pathlib import Path
 import hnswlib
 import numpy as np
 
-from app.config import db_path, observability_db_path, vector_dir
+from app.config import db_path, observability_db_path, prompt_db_path, vector_dir
 from app.store import crypto
 
 
@@ -110,7 +110,11 @@ def main() -> None:
         if folded:
             print(f"folded {folded} legacy embedding(s) into vellum.db")
 
-    for path, label in [(vellum, "vellum.db"), (observability_db_path(), "observability.db")]:
+    for path, label in [
+        (vellum, "vellum.db"),
+        (observability_db_path(), "observability.db"),
+        (prompt_db_path(), "prompts.db"),
+    ]:
         if not path.exists():
             print(f"skip {label}: not found")
         elif is_encrypted(path):

@@ -2,6 +2,7 @@
 when the model is unconfigured, and recall through in-memory scratch (isolation)."""
 import pytest
 
+from app.prompts import runtime, service
 from evals import stream, suites
 
 
@@ -83,3 +84,52 @@ async def test_stream_recall_scratch_isolates_real_db(migrated_db, monkeypatch):
     assert [f for f in frames if f["type"] == "case"]   # ran at least one case
     from app.store import memory
     assert memory.max_turn() == -1                       # real DB never touched
+
+
+@pytest.mark.asyncio
+async def test_each_eval_case_pins_and_traces_one_prompt_release(migrated_db):
+    workspace = service.get_workspace()
+    prompt = next(
+        item for item in workspace["prompts"]
+        if item["key"] == "traits.ocean.extract"
+    )
+    release_a_content = "EVAL RELEASE A\n" + prompt["draft_content"]
+    workspace = service.save_draft(
+        prompt["key"], release_a_content, workspace["workspace_revision"],
+    )
+    published_a = service.publish(workspace["workspace_revision"], "eval A")
+    release_a = published_a["active_release"]
+    workspace = service.save_draft(
+        prompt["key"],
+        "EVAL RELEASE B\n" + release_a_content,
+        published_a["workspace_revision"],
+    )
+    seen = []
+
+    async def run_case(_case):
+        seen.append(runtime.resolve(prompt["key"], "fallback"))
+        service.publish(workspace["workspace_revision"], "eval B")
+        seen.append(runtime.resolve(prompt["key"], "fallback"))
+        _record_ok(seen[-1])
+        return {"ok": True}
+
+    suite = suites.Suite(
+        key="pin-test",
+        load=lambda: [{}],
+        run=run_case,
+        name_of=lambda _case, _seq: "pin-test",
+        status_of=lambda _result: "pass",
+        aggregate=lambda results: {"total": len(results)},
+        needs_eval_gen=False,
+        needs_scratch=False,
+    )
+
+    result = await stream._run_one(suite, {}, 0)
+
+    assert all("EVAL RELEASE A" in content for content in seen)
+    assert all("EVAL RELEASE B" not in content for content in seen)
+    assert result["_traces"][0]["params"]["prompt_release_id"] == release_a["id"]
+    assert (
+        result["_traces"][0]["params"]["prompt_release_version"]
+        == release_a["version"]
+    )

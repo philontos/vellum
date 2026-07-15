@@ -39,6 +39,16 @@ def auth_db_path() -> Path:
     return base_data_dir() / "auth.db"
 
 
+def prompt_db_path() -> Path:
+    """Deployment-wide prompt releases shared by every account.
+
+    Eval workers temporarily repoint ``VELLUM_DATA_DIR`` at one user's directory;
+    an explicit absolute override keeps them on the same control-plane database.
+    """
+    override = (os.getenv("VELLUM_PROMPT_DB_PATH") or "").strip()
+    return Path(override) if override else base_data_dir() / "prompts.db"
+
+
 def db_path() -> Path:
     return data_dir() / "vellum.db"
 

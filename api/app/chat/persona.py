@@ -9,10 +9,10 @@ The data pipeline (dossier, facts, traits, recall) is shared across modes — on
 the prompt-side voice + stance swap. The mode is chosen per chat turn (web sends
 it) and falls back to VELLUM_PERSONA, then to `neutral`."""
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 
 from app import config
+from app.prompts import runtime
 
 _DIR = Path(__file__).resolve().parent.parent / "config" / "persona"
 _DEFAULT = "neutral"
@@ -30,16 +30,22 @@ def _read(path: Path) -> str | None:
     return path.read_text().strip() if path.exists() else None
 
 
-@lru_cache(maxsize=None)
 def _load(name: str) -> Persona:
     voice = _read(_DIR / name / "voice.txt")
     if voice is None:                       # unknown/empty mode → fall back to default
         if name != _DEFAULT:
             return _load(_DEFAULT)
         raise FileNotFoundError(f"persona '{name}' has no voice.txt")
-    return Persona(name=name, voice=voice,
-                   stance=_read(_DIR / name / "stance.txt"),
-                   trait_frame=_read(_DIR / name / "trait_frame.txt"))
+    stance = _read(_DIR / name / "stance.txt")
+    trait_frame = _read(_DIR / name / "trait_frame.txt")
+    return Persona(
+        name=name,
+        voice=runtime.resolve(f"chat.{name}.voice", voice),
+        stance=(runtime.resolve(f"chat.{name}.stance", stance)
+                if stance is not None else None),
+        trait_frame=(runtime.resolve(f"chat.{name}.trait_frame", trait_frame)
+                     if trait_frame is not None else None),
+    )
 
 
 def available() -> set[str]:
@@ -50,4 +56,7 @@ def available() -> set[str]:
 
 
 def load(name: str | None = None) -> Persona:
-    return _load(name or config.persona_name())
+    # One Persona is a three-fragment view. Pin a release even for direct callers
+    # so a publish cannot mix its voice with a newer stance/trait frame.
+    with runtime.ensure_snapshot():
+        return _load(name or config.persona_name())

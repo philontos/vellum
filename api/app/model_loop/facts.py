@@ -26,6 +26,7 @@ anchors (allergies, names, locations, identity) stay forever."""
 from app import config
 from app.llm.client import chat_json
 from app.model_loop._span import span_asof_date, span_text
+from app.prompts import runtime
 from app.store import memory, model
 
 # One shared definition of a good fact, reused by both integration and compaction
@@ -122,9 +123,13 @@ async def _integrate_plan(span: str, as_of_date: str | None, board: list[dict]) 
     """The integration brain: one LLM call that sees the whole board AND the dated
     span, returning an {update, retire, add} changeset. Pure compute — NO DB access
     (the board is passed in), so the eval can drive it against an empty board."""
-    prompt = _INTEGRATE_PROMPT.format(
-        date=as_of_date or "unknown", board=_render_board(board), span=span)
-    return await chat_json(system_prompt=prompt, user_prompt="", stage="facts")
+    with runtime.ensure_snapshot():
+        prompt = runtime.resolve(
+            "memory.facts.integrate", _INTEGRATE_PROMPT,
+        ).format(
+            date=as_of_date or "unknown", board=_render_board(board), span=span,
+        )
+        return await chat_json(system_prompt=prompt, user_prompt="", stage="facts")
 
 
 def _clean_texts(values) -> list[str]:
@@ -305,9 +310,13 @@ async def compact() -> None:
     active = model.active_facts()
     if len(active) < 2:
         return
-    plan = await chat_json(
-        system_prompt=_COMPACT_PROMPT.format(board=_render_board(active)),
-        user_prompt="", stage="compact")
+    with runtime.ensure_snapshot():
+        prompt = runtime.resolve(
+            "memory.facts.compact", _COMPACT_PROMPT,
+        ).format(board=_render_board(active))
+        plan = await chat_json(
+            system_prompt=prompt, user_prompt="", stage="compact",
+        )
     _apply_compaction(plan, active)
 
 
@@ -322,14 +331,16 @@ async def _maybe_compact(end_turn: int) -> None:
 
 
 async def run(start_turn: int, end_turn: int) -> None:
-    span = span_text(start_turn, end_turn)
-    if span.strip():
-        rows = memory.messages_in_turn_range(start_turn, end_turn)
-        user_evidence = {
-            row["turn"]: row["content"] for row in rows if row["role"] == "user"
-        }
-        await integrate(
-            span, span_asof_date(start_turn, end_turn), end_turn,
-            user_evidence=user_evidence,
-        )
-    await _maybe_compact(end_turn)
+    # Integration and the optional compaction pass belong to one facts batch.
+    with runtime.ensure_snapshot():
+        span = span_text(start_turn, end_turn)
+        if span.strip():
+            rows = memory.messages_in_turn_range(start_turn, end_turn)
+            user_evidence = {
+                row["turn"]: row["content"] for row in rows if row["role"] == "user"
+            }
+            await integrate(
+                span, span_asof_date(start_turn, end_turn), end_turn,
+                user_evidence=user_evidence,
+            )
+        await _maybe_compact(end_turn)

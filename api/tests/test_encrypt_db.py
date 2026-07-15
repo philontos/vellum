@@ -19,10 +19,12 @@ def _seed_plaintext(tmp_path, monkeypatch):
     monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("VELLUM_DB_KEY", raising=False)
     monkeypatch.delenv("VELLUM_DB_KEY_FILE", raising=False)
+    from app.prompts import db as prompt_db
     from app.store import db, memory, observability
     import importlib
     importlib.reload(observability)
     db.run_migrations()
+    prompt_db.run_migrations()
     memory.append_message("user", "topsecret")
     with observability.get_conn() as c:
         c.execute("INSERT INTO traces(stage, prompt) VALUES ('chat', 'tracesecret')")
@@ -36,7 +38,7 @@ def test_main_requires_a_key(tmp_path, monkeypatch):
 
 
 @needs_sqlcipher
-def test_encrypts_both_dbs_and_data_survives(tmp_path, monkeypatch):
+def test_encrypts_user_observability_and_shared_prompt_dbs(tmp_path, monkeypatch):
     _seed_plaintext(tmp_path, monkeypatch)
     assert (tmp_path / "vellum.db").read_bytes()[:6] == b"SQLite"  # plaintext first
 
@@ -45,6 +47,7 @@ def test_encrypts_both_dbs_and_data_survives(tmp_path, monkeypatch):
 
     assert (tmp_path / "vellum.db").read_bytes()[:6] != b"SQLite"
     assert (tmp_path / "observability.db").read_bytes()[:6] != b"SQLite"
+    assert (tmp_path / "prompts.db").read_bytes()[:6] != b"SQLite"
 
     # data readable through the keyed connections
     from app.store import memory, observability

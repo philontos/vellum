@@ -11,6 +11,7 @@ export default defineConfig({
       "/health": "http://localhost:18080",
       "/auth": "http://localhost:18080",
       "/facts": "http://localhost:18080",
+      "/admin": "http://localhost:18080",
       "/inspect": "http://localhost:18080",
     },
   },
