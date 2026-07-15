@@ -5,6 +5,7 @@ import { FactMutationError } from "../../api/facts";
 import { useConfirm } from "../../confirm/ConfirmProvider";
 import { useT } from "../../i18n";
 import { FACT_TEXT_MAX_CHARS, validateFactDraft } from "./factEdit";
+import { FactActions } from "./FactActions";
 import { FactEditor } from "./FactEditor";
 
 export function FactCard({
@@ -122,38 +123,23 @@ export function FactCard({
   }
 
   return (
-    <li className="group rounded-xl border border-line bg-surface/55 px-4 py-3 transition-colors hover:border-muted/40">
-      <div className="flex items-start gap-3">
+    <li className="group rounded-xl border border-line bg-surface/55 px-3 py-3 transition-colors hover:border-muted/40 sm:px-4">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_2.5rem] items-start gap-x-2.5">
         <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-gold" />
         <span className="min-w-0 flex-1 whitespace-pre-wrap leading-relaxed text-ink-soft">
           {fact.text}
         </span>
-        <div className="flex flex-none items-center gap-1 opacity-100 transition-opacity sm:opacity-40 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-          <button
-            type="button"
-            disabled={busy}
-            title={t("model.factEdit")}
-            aria-label={t("model.factEdit")}
-            onClick={() => {
-              setDraft(fact.text);
-              setError("");
-              setEditing(true);
-            }}
-            className="rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-well hover:text-ink disabled:opacity-50"
-          >
-            {t("model.factEdit")}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            title={t("model.factDelete")}
-            aria-label={t("model.factDelete")}
-            onClick={() => void remove()}
-            className="rounded-md px-2 py-1 text-xs text-muted transition-colors hover:bg-status-fail-bg hover:text-status-fail-fg disabled:opacity-50"
-          >
-            {t("model.factDelete")}
-          </button>
-        </div>
+        <FactActions
+          editLabel={t("model.factEdit")}
+          deleteLabel={t("model.factDelete")}
+          busy={busy}
+          onEdit={() => {
+            setDraft(fact.text);
+            setError("");
+            setEditing(true);
+          }}
+          onDelete={() => void remove()}
+        />
       </div>
       {error && <div className="mt-2 pl-4 text-xs text-status-fail-fg">{error}</div>}
     </li>
