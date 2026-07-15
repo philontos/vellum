@@ -9,6 +9,14 @@ import json
 from app.store.db import get_conn
 
 
+class FactConflictError(ValueError):
+    """A manual edit would duplicate another active Fact."""
+
+
+def _normalized_fact(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
 def get_dossier() -> str:
     with get_conn() as conn:
         row = conn.execute("SELECT content FROM dossier WHERE id = 1").fetchone()
@@ -89,6 +97,55 @@ def supersede_fact(fact_id: int) -> None:
             "WHERE id = ?",
             (fact_id,),
         )
+
+
+def replace_active_fact(fact_id: int, text: str) -> dict | None:
+    """Atomically replace one active Fact while preserving its source turn.
+
+    The old row stays as lifecycle history (`superseded`), matching automatic
+    Fact updates and compaction. None means the requested row is no longer active.
+    """
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current = conn.execute(
+            "SELECT * FROM facts WHERE id = ? AND status = 'active'",
+            (fact_id,),
+        ).fetchone()
+        if current is None:
+            return None
+        normalized = _normalized_fact(text)
+        others = conn.execute(
+            "SELECT text FROM facts WHERE status = 'active' AND id <> ?",
+            (fact_id,),
+        ).fetchall()
+        if any(_normalized_fact(row["text"]) == normalized for row in others):
+            raise FactConflictError("an equivalent active Fact already exists")
+        inserted = conn.execute(
+            "INSERT INTO facts(text, source_turn) VALUES (?, ?)",
+            (text, current["source_turn"]),
+        )
+        changed = conn.execute(
+            "UPDATE facts SET status = 'superseded', updated_at = datetime('now') "
+            "WHERE id = ? AND status = 'active'",
+            (fact_id,),
+        )
+        if changed.rowcount != 1:
+            raise RuntimeError("Fact changed during manual edit")
+        row = conn.execute(
+            "SELECT * FROM facts WHERE id = ?", (inserted.lastrowid,)
+        ).fetchone()
+        return dict(row)
+
+
+def delete_active_fact(fact_id: int) -> bool:
+    """Retire one active Fact; repeated or unknown deletes are safe no-ops."""
+    with get_conn() as conn:
+        changed = conn.execute(
+            "UPDATE facts SET status = 'superseded', updated_at = datetime('now') "
+            "WHERE id = ? AND status = 'active'",
+            (fact_id,),
+        )
+        return changed.rowcount == 1
 
 
 def all_facts() -> list[dict]:

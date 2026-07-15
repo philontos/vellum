@@ -2,14 +2,19 @@ import type { ModelView } from "../../api/client";
 import { useT } from "../../i18n";
 import { TraitChart } from "../TraitChart";
 import { SectionHeader } from "../ui/SectionHeader";
+import { FactCard } from "./FactCard";
 import type { ModelSection } from "./ModelTabs";
 
 export function ModelSections({
   model,
   active,
+  onFactSave,
+  onFactDelete,
 }: {
   model: ModelView;
   active: ModelSection;
+  onFactSave: (id: number, text: string) => Promise<void>;
+  onFactDelete: (id: number) => Promise<void>;
 }) {
   const { t } = useT();
   const facts = model.facts.filter((fact) => fact.status === "active");
@@ -43,10 +48,12 @@ export function ModelSections({
         <SectionHeader label={t("model.factsTitle")} />
         <ul className="space-y-2.5 text-sm">
           {facts.map((fact) => (
-            <li key={fact.id} className="flex gap-3 text-ink-soft">
-              <span className="mt-[7px] h-1.5 w-1.5 flex-none rounded-full bg-gold" />
-              <span>{fact.text}</span>
-            </li>
+            <FactCard
+              key={fact.id}
+              fact={fact}
+              onSave={onFactSave}
+              onDelete={onFactDelete}
+            />
           ))}
           {facts.length === 0 && <li className="text-muted">{t("model.factsEmpty")}</li>}
         </ul>
