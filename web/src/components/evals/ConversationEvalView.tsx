@@ -232,9 +232,15 @@ function ReplayControls({
             <Tag>{detail.round.stream}</Tag>
             <span className="font-mono normal-case tracking-normal">turn {detail.round.user_turn}</span>
           </div>
-          <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-ink">
+          <div
+            role="region"
+            aria-label={t("eval.selectedInput")}
+            data-scroll-region="eval-selected-input"
+            tabIndex={0}
+            className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-line/60 bg-well/45 px-3 py-2 text-sm leading-relaxed text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
+          >
             {detail.round.user_content}
-          </p>
+          </div>
         </div>
         <div className="w-[min(28rem,42%)] flex-none">
           <label className="block text-[10px] font-medium uppercase tracking-[0.14em] text-muted" htmlFor="eval-prompt-choice">
@@ -284,40 +290,70 @@ function ReplayControls({
       </div>
 
       {promptChoice === "new" && (
-        <div className="mt-3 grid grid-cols-[14rem_minmax(0,1fr)_auto] items-end gap-2 border-t border-line/70 pt-3">
-          <label className="block">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
-              {t("eval.promptName")}
-            </span>
-            <input
-              value={customName}
-              onChange={(event) => onCustomNameChange(event.target.value)}
-              placeholder={t("eval.promptNamePlaceholder")}
-              disabled={savingPrompt || running}
-              className="mt-1 min-h-10 w-full rounded-lg border border-line bg-well px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
-              {t("eval.systemPrompt")}
-            </span>
+        <div className="mt-3 border-t border-line/70 pt-3">
+          <div className="overflow-hidden rounded-xl border border-line bg-well/55 shadow-card">
+            <div className="flex items-start gap-4 border-b border-line bg-surface/55 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <label
+                  className="block text-[10px] font-medium uppercase tracking-[0.14em] text-muted"
+                  htmlFor="eval-system-prompt-editor"
+                >
+                  {t("eval.systemPrompt")}
+                </label>
+                <p id="eval-system-prompt-hint" className="mt-1 text-xs leading-relaxed text-ink-soft">
+                  {t("eval.systemPromptHint")}
+                </p>
+              </div>
+              <span className="flex-none pt-0.5 font-mono text-[10px] text-muted">
+                {t("eval.promptCharCount", { n: customContent.length })}
+              </span>
+              <button
+                type="button"
+                onClick={() => onCustomContentChange(detail.original_system_prompt ?? "")}
+                disabled={
+                  savingPrompt
+                  || running
+                  || customContent === (detail.original_system_prompt ?? "")
+                }
+                className="min-h-8 flex-none rounded-lg border border-line bg-surface px-2.5 text-xs text-ink-soft transition-colors hover:bg-white/5 disabled:opacity-40"
+              >
+                {t("eval.resetPrompt")}
+              </button>
+            </div>
             <textarea
+              id="eval-system-prompt-editor"
+              data-editor="eval-system-prompt"
+              aria-describedby="eval-system-prompt-hint"
               value={customContent}
               onChange={(event) => onCustomContentChange(event.target.value)}
               placeholder={t("eval.systemPromptPlaceholder")}
               disabled={savingPrompt || running}
-              rows={3}
-              className="mt-1 max-h-40 min-h-[5rem] w-full resize-y rounded-lg border border-line bg-well px-3 py-2 font-mono text-xs leading-relaxed text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
+              rows={14}
+              className="block min-h-[18rem] max-h-[55vh] w-full resize-y border-0 bg-well/40 px-4 py-3 font-mono text-[13px] leading-6 text-ink focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent/20 disabled:opacity-60"
             />
-          </label>
-          <button
-            type="button"
-            onClick={onSavePrompt}
-            disabled={savingPrompt || running || !customName.trim() || !customContent.trim()}
-            className="min-h-10 rounded-lg border border-line bg-surface px-3 text-sm text-ink-soft hover:bg-white/5 disabled:opacity-50"
-          >
-            {savingPrompt ? t("eval.savingPrompt") : t("eval.savePrompt")}
-          </button>
+            <div className="flex items-end gap-2 border-t border-line bg-surface/35 px-4 py-3">
+              <label className="block w-full max-w-sm">
+                <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+                  {t("eval.promptName")}
+                </span>
+                <input
+                  value={customName}
+                  onChange={(event) => onCustomNameChange(event.target.value)}
+                  placeholder={t("eval.promptNamePlaceholder")}
+                  disabled={savingPrompt || running}
+                  className="mt-1 min-h-10 w-full rounded-lg border border-line bg-well px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={onSavePrompt}
+                disabled={savingPrompt || running || !customName.trim() || !customContent.trim()}
+                className="min-h-10 flex-none rounded-lg border border-line bg-surface px-3 text-sm text-ink-soft hover:bg-white/5 disabled:opacity-50"
+              >
+                {savingPrompt ? t("eval.savingPrompt") : t("eval.savePrompt")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>
