@@ -64,6 +64,7 @@ def test_member_cannot_use_owner_only_eval_panel(tmp_path, monkeypatch):
     ).status_code == 200
 
     assert client.get("/inspect/evals").status_code == 403
+    assert client.get("/inspect/conversation-evals").status_code == 403
 
 
 def test_two_login_cookies_read_only_their_own_history(tmp_path, monkeypatch):

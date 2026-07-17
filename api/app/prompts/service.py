@@ -57,6 +57,43 @@ def load_active_release() -> tuple[dict | None, dict[str, str]]:
         return _active(conn)
 
 
+def load_release(release_id: int) -> tuple[dict, dict[str, str]]:
+    """Load one immutable release snapshot without changing the active release."""
+    db.run_migrations()
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM prompt_releases WHERE id = ?", (release_id,)
+        ).fetchone()
+        if row is None:
+            raise UnknownReleaseError(release_id)
+        items = {
+            item["prompt_key"]: item["content"]
+            for item in conn.execute(
+                "SELECT prompt_key, content FROM prompt_release_items "
+                "WHERE release_id = ?",
+                (release_id,),
+            )
+        }
+    return dict(row), items
+
+
+def list_releases() -> list[dict]:
+    """Small release catalog for selectors outside the Prompt workspace."""
+    db.run_migrations()
+    with db.get_conn() as conn:
+        active = conn.execute(
+            "SELECT active_release_id FROM prompt_workspace WHERE id = 1"
+        ).fetchone()["active_release_id"]
+        rows = conn.execute(
+            "SELECT id, version, note, published_at FROM prompt_releases "
+            "ORDER BY version DESC"
+        ).fetchall()
+    return [
+        {**dict(row), "is_active": row["id"] == active}
+        for row in rows
+    ]
+
+
 def _prompt_view(
     definition: PromptDefinition,
     published: str,

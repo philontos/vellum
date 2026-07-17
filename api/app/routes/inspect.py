@@ -6,14 +6,16 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app import config
 from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
+from app.evaluation import conversation as conversation_eval
 from app.llm.client import resolve_structured_llm_config
 from app.store import model, observability as obs, traces
 from evals.config import eval_gen_config
@@ -79,6 +81,89 @@ def patch_trace(trace_id: int, body: TracePatch):
     if body.note is not None:
         traces.set_note(trace_id, body.note)
     return {"ok": True}
+
+
+# --- conversation replay evals --------------------------------------------
+
+class ConversationPromptVersionIn(BaseModel):
+    name: str
+    content: str
+
+
+class ConversationReplayIn(BaseModel):
+    assistant_turn: int
+    prompt_kind: Literal["original", "release", "custom"]
+    prompt_release_id: int | None = None
+    prompt_version_id: int | None = None
+
+
+def _conversation_eval_error(exc: Exception):
+    if isinstance(exc, conversation_eval.ConversationRoundNotFoundError):
+        raise HTTPException(status_code=404, detail="Conversation round not found") from exc
+    if isinstance(exc, conversation_eval.ReplayValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    raise exc
+
+
+@router.get("/inspect/conversation-evals")
+def conversation_eval_workspace(
+    limit: int = Query(default=50, ge=1, le=200),
+    before: int | None = Query(default=None),
+    _owner: dict | None = Depends(require_owner),
+):
+    return conversation_eval.workspace(limit=limit, before=before)
+
+
+@router.get("/inspect/conversation-evals/rounds/{assistant_turn}")
+def conversation_eval_round(
+    assistant_turn: int,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        return conversation_eval.round_detail(assistant_turn)
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+
+
+@router.post("/inspect/conversation-evals/prompt-versions", status_code=201)
+def create_conversation_prompt_version(
+    body: ConversationPromptVersionIn,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        return conversation_eval.create_prompt_version(body.name, body.content)
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+
+
+@router.post("/inspect/conversation-evals/run")
+async def run_conversation_eval(
+    body: ConversationReplayIn,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        prepared = await conversation_eval.prepare_replay(
+            body.assistant_turn,
+            body.prompt_kind,
+            prompt_release_id=body.prompt_release_id,
+            prompt_version_id=body.prompt_version_id,
+        )
+        run = conversation_eval.start_run(prepared)
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+
+    async def gen():
+        yield _sse({"run": run})
+        async for event in conversation_eval.run_events(run["id"], prepared):
+            if event["type"] == "delta":
+                yield _sse({"delta": {"text": event["text"]}})
+            elif event["type"] == "activity":
+                yield _sse({"activity": event["activity"]})
+            elif event["type"] == "done":
+                yield _sse({"done": event["run"]})
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # --- eval panel ------------------------------------------------------------

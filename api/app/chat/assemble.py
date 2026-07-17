@@ -115,22 +115,32 @@ def _trait_summary() -> str:
 
 
 async def build_messages(query: str | None = None,
-                         persona_name: str | None = None) -> list[dict]:
+                         persona_name: str | None = None,
+                         through_turn: int | None = None) -> list[dict]:
     """Assemble system + recent tail. `query` for retrieval defaults to the last
     user message in the tail. `persona_name` selects the prompt-side mode (voice +
     stance); None falls back to VELLUM_PERSONA."""
     with runtime.ensure_snapshot():
-        return await _build_messages(query=query, persona_name=persona_name)
+        return await _build_messages(
+            query=query, persona_name=persona_name, through_turn=through_turn,
+        )
 
 
 async def _build_messages(query: str | None = None,
-                          persona_name: str | None = None) -> list[dict]:
+                          persona_name: str | None = None,
+                          through_turn: int | None = None) -> list[dict]:
     # The mode's name is also its context stream: the live tail + recall are scoped
     # to it, so switching modes never drags another mode's transcript in. The user
     # model below (dossier/facts/traits) stays global, co-built from every stream.
     p = persona.load(persona_name)
     stream = p.name
-    tail = memory.recent_tail(config.tail_size(), stream=stream)
+    tail = (
+        memory.recent_tail_through(
+            config.tail_size(), through_turn, stream=stream,
+        )
+        if through_turn is not None
+        else memory.recent_tail(config.tail_size(), stream=stream)
+    )
     if query is None:
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)
         query = last_user["content"] if last_user else ""
@@ -159,7 +169,12 @@ async def _build_messages(query: str | None = None,
                         (p.trait_frame or trait_frame) + "\n\n" + traits)
 
     if query:
-        snips = await retrieval.retrieve(query, stream=stream)
+        if through_turn is None:
+            snips = await retrieval.retrieve(query, stream=stream)
+        else:
+            snips = await retrieval.retrieve(
+                query, stream=stream, through_turn=through_turn,
+            )
         if snips:
             sections.append("## Possibly relevant past\n" +
                             "\n---\n".join(s["text"] for s in snips))

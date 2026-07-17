@@ -29,6 +29,64 @@ def recent_tail(limit: int, stream: str = "neutral") -> list[dict]:
     return [dict(r) for r in reversed(rows)]
 
 
+def recent_tail_through(
+    limit: int, through_turn: int, stream: str = "neutral",
+) -> list[dict]:
+    """Historical tail ending at ``through_turn`` (inclusive), oldest first.
+
+    Conversation evals use this only when an old trace body is unavailable. The
+    cutoff is important: replaying turn 20 must never quietly feed turns 21+ into
+    the model just because they exist in today's database.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE stream = ? AND turn <= ? "
+            "AND deleted_at IS NULL ORDER BY turn DESC LIMIT ?",
+            (stream, through_turn, limit),
+        ).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def conversation_rounds(
+    limit: int, before: int | None = None,
+) -> list[dict]:
+    """Assistant turns paired with the nearest earlier user turn in their stream.
+
+    The stream-local correlated lookup matters now that the global turn sequence
+    interleaves modes. Results are newest first and keyset-paginated by assistant
+    turn, which keeps a long private history cheap to browse.
+    """
+    before_sql = "AND a.turn < ?" if before is not None else ""
+    args = ((before,) if before is not None else ()) + (limit,)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT "
+            "u.id AS user_id, u.turn AS user_turn, u.content AS user_content, "
+            "u.created_at AS user_created_at, "
+            "a.id AS assistant_id, a.turn AS assistant_turn, "
+            "a.content AS original_content, a.created_at AS created_at, a.stream "
+            "FROM messages a "
+            "JOIN messages u ON u.id = ("
+            "  SELECT prior.id FROM messages prior "
+            "  WHERE prior.stream = a.stream AND prior.turn < a.turn "
+            "  ORDER BY prior.turn DESC LIMIT 1"
+            ") "
+            "WHERE a.role = 'assistant' AND a.deleted_at IS NULL "
+            "AND u.role = 'user' AND u.deleted_at IS NULL "
+            f"{before_sql} "
+            "ORDER BY a.turn DESC LIMIT ?",
+            args,
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_conversation_round(assistant_turn: int) -> dict | None:
+    rows = conversation_rounds(1, before=assistant_turn + 1)
+    if rows and rows[0]["assistant_turn"] == assistant_turn:
+        return rows[0]
+    return None
+
+
 def messages_before(before_turn: int, limit: int, stream: str = "neutral") -> list[dict]:
     """The `limit` live `stream` messages immediately older than `before_turn`
     (turn strictly less than it), returned oldest->newest. Keyset page for chat
