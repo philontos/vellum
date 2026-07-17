@@ -105,13 +105,25 @@ export type TraitDim = {
 };
 export type Fact = { id: number; text: string; status: string; source_turn: number | null };
 export type ModelView = { dossier: string; facts: Fact[]; traits: TraitDim[] };
-export type Trace = {
+export type TraceMeta = {
   id: number; turn: number | null; stage: string; model: string | null;
-  prompt: string | null; output: string | null; reasoning: string | null;
   prompt_tokens: number | null;
   completion_tokens: number | null; duration_ms: number | null; pinned: number;
   note: string | null; created_at: string;
   params: string | null; // JSON blob; background passes carry {from,to} covered-span
+};
+
+/** Scan-friendly trace metadata returned by the index. Heavy diagnostic bodies
+ * are deliberately absent and fetched only when the row is expanded. */
+export type TraceSummary = TraceMeta & {
+  snippet: string | null;
+  has_reasoning: boolean;
+  has_tool_calls: boolean;
+};
+
+/** Full diagnostic payload for one LLM call. */
+export type Trace = TraceMeta & {
+  prompt: string | null; output: string | null; reasoning: string | null;
   tool_calls: string | null; // JSON [{name,args,result,ok}] for the turn; null when none ran or pruned
 };
 
@@ -121,12 +133,19 @@ export async function getModel(): Promise<ModelView> {
   return r.json();
 }
 
-export async function getTraces(stage?: string, limit = 100): Promise<Trace[]> {
+export async function getTraces(stage?: string, limit = 100): Promise<TraceSummary[]> {
   const q = new URLSearchParams({ limit: String(limit) });
   if (stage) q.set("stage", stage);
-  const r = await fetch(`/inspect/traces?${q}`);
+  const r = await fetch(`/inspect/traces?${q}`, { cache: "no-store" });
   if (!r.ok) throw new Error(`traces failed: ${r.status}`);
   return (await r.json()).traces;
+}
+
+/** Load the heavy prompt/output/reasoning/tool payload for one expanded row. */
+export async function getTrace(id: number): Promise<Trace> {
+  const r = await fetch(`/inspect/traces/${id}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`trace failed: ${r.status}`);
+  return (await r.json()).trace;
 }
 
 export async function patchTrace(id: number, patch: { pinned?: boolean; note?: string }): Promise<void> {
