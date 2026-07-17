@@ -60,27 +60,32 @@ describe("AppShell responsive navigation", () => {
     expect(html).not.toContain(">Hidden<");
   });
 
-  it("keeps diagnostic and tuning views out of the mobile navigation", () => {
+  it("keeps Admin out of mobile and consolidates desktop tools under one entry", () => {
     const html = renderShell();
     const mobileNavigation = html.match(/id="mobile-navigation"[\s\S]*?<\/nav>/)?.[0];
+    const desktopNavigation = html
+      .match(/<nav[\s\S]*?<\/nav>/g)
+      ?.find((navigation) => navigation.includes("hidden md:flex"));
 
     expect(mobileNavigation).toBeDefined();
     expect(mobileNavigation).toContain("Chat");
     expect(mobileNavigation).toContain("Diary");
     expect(mobileNavigation).toContain("You");
+    expect(mobileNavigation).not.toContain("Admin");
     expect(mobileNavigation).not.toContain("Traces");
     expect(mobileNavigation).not.toContain("Probe");
     expect(mobileNavigation).not.toContain("Evals");
     expect(mobileNavigation).not.toContain("Prompts");
 
-    // The full toolset remains available from the desktop navigation rail.
-    expect(html).toContain("Traces");
-    expect(html).toContain("Probe");
-    expect(html).toContain("Evals");
-    expect(html).toContain("Prompts");
+    expect(desktopNavigation).toBeDefined();
+    expect(desktopNavigation).toContain("Admin");
+    expect(desktopNavigation).not.toContain("Traces");
+    expect(desktopNavigation).not.toContain("Probe");
+    expect(desktopNavigation).not.toContain("Evals");
+    expect(desktopNavigation).not.toContain("Prompts");
   });
 
-  it("keeps deployment-wide Prompts owner-only", () => {
+  it("shows the single desktop Admin entry without exposing its child labels", () => {
     const memberHtml = renderShell({
       id: "member-1",
       username: "member",
@@ -90,8 +95,10 @@ describe("AppShell responsive navigation", () => {
     });
     const legacyHtml = renderShell(null);
 
+    expect(memberHtml).toContain("Admin");
+    expect(legacyHtml).toContain("Admin");
     expect(memberHtml).not.toContain("Prompts");
     expect(memberHtml).not.toContain("Evals");
-    expect(legacyHtml).toContain("Prompts");
+    expect(legacyHtml).not.toContain("Prompts");
   });
 });

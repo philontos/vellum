@@ -11,10 +11,12 @@ export const DICT = {
     "nav.chat": "Chat",
     "nav.diary": "Diary",
     "nav.you": "You",
+    "nav.admin": "Admin",
     "nav.traces": "Traces",
     "nav.prompts": "Prompts",
     "nav.openMenu": "Open navigation",
     "nav.closeMenu": "Close navigation",
+    "admin.tabsLabel": "Admin tools",
 
     // global confirmation dialog
     "dialog.cancel": "Cancel",
@@ -251,10 +253,12 @@ export const DICT = {
     "nav.chat": "聊天",
     "nav.diary": "日记",
     "nav.you": "你是谁",
+    "nav.admin": "后台管理",
     "nav.traces": "Traces",
     "nav.prompts": "Prompts",
     "nav.openMenu": "打开导航",
     "nav.closeMenu": "关闭导航",
+    "admin.tabsLabel": "后台管理功能",
 
     "dialog.cancel": "取消",
     "dialog.delete": "删除",
