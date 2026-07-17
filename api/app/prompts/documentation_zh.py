@@ -111,15 +111,27 @@ GUIDES = {
             "发布修改只影响以后生成的卡片，已有摘要不会自动重建。",
         ),
     ),
-    "memory.dossier": (
-        "维护一份紧凑的用户长期画像，涵盖价值观、反复出现的模式，以及常见的思考和决策方式。"
-        "每次会重写已有画像，而不是持续追加时间线日志。",
-        "达到 dossier 配置周期后由后台任务触发。它接收上一版 dossier、跨 Persona stream 的"
-        "新对话片段和长度上限；结果之后会作为用户背景注入聊天。",
+    "memory.dossier.evidence": (
+        "为 dossier 提取专用证据，将价值观、反复模式、决策方式、影响决策的当前状态与自我认知"
+        "整理为带来源的 portrait claim 变更集。",
+        "达到 dossier 周期后作为第一步运行，此时 eager facts 已先完成。它接收 active portrait "
+        "claims 和新的跨 Persona 对话；assistant 内容只帮助理解上下文，每项有效变更都必须引用用户原话。",
         (
-            "必须保留 {cap}、{prior}、{span}、严格 JSON 和规范字段 \"dossier\"。",
-            "助手解释只能作为上下文，未获用户确认时不能写成用户事实。",
-            "稳定模式要保守判断，否则错误推断会通过后续 prior 不断累积。",
+            "必须保留严格 JSON 以及规范的 update、retire、add 三个列表。",
+            "claim_type 与 basis 使用固定英文枚举；claim 文本和引用跟随用户语言。",
+            "不能削弱 user turn 引用、推断至少需要两个用户轮次，以及“考虑”和“决定”的区分。",
+        ),
+    ),
+    "memory.dossier.render": (
+        "根据已经验证的 portrait claims 与长期 facts 生成紧凑的叙事画像；不会读取 assistant 原文，"
+        "也不会把上一版 dossier 当作证据递归续写。",
+        "达到 dossier 周期后作为第二步运行。数据消息包含全部 active portrait claims 与 active "
+        "durable facts；成功结果会替换之后注入聊天的 dossier 文本。",
+        (
+            "必须保留严格 JSON、规范字段 \"dossier\"、语言跟随要求和紧凑篇幅限制。",
+            "解释应以 portrait claims 为主，facts 只作长期锚点；不能从单个事实推成反复模式。",
+            "必须保留对用户引用的语义复核；引用真实存在不等于 claim 的措辞一定被充分支持。",
+            "保留不确定性，并给 current state 加上情境边界，不能写成永久人格。",
         ),
     ),
     "memory.facts.integrate": (

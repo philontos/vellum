@@ -1,13 +1,15 @@
 // Reshape the flat trace list into the two views the panel shows:
 //   • Rounds      — chat + the facts it triggered, grouped by their shared turn
-//   • Background  — trait/summary/dossier passes, each spanning a turn *range*
+//   • Background  — trait/summary/dossier evidence+render passes over turn ranges
 // Pure functions (no React) so they can be unit-tested in isolation.
 import type { TraceSummary } from "../../api/client";
 
 const ROUND_STAGES = new Set(["chat", "facts"]);
 // compact is a periodic whole-board fact compaction (facts.py, every N turns) —
 // it covers a turn *range* like the other passes, so it belongs in Background.
-const BG_STAGES = new Set(["trait", "summary", "dossier", "compact"]);
+const BG_STAGES = new Set([
+  "trait", "summary", "dossier", "dossier_evidence", "dossier_render", "compact",
+]);
 const KNOWN_TRAIT_DIMENSIONS = ["ocean", "mbti", "schwartz", "regulatory_focus"] as const;
 
 /** One conversation round: its chat call plus the facts extraction(s) it triggered. */
@@ -21,7 +23,7 @@ export type Pass = TraceSummary & { from: number | null; to: number | null };
 export type BackgroundCategory = {
   key: string;
   count: number;
-  stage: "all" | "trait" | "summary" | "dossier" | "compact";
+  stage: "all" | "trait" | "summary" | "dossier_evidence" | "dossier_render" | "compact";
   dimension: string | null;
 };
 
@@ -77,6 +79,11 @@ export function filterBackgroundPasses(passes: Pass[], key: string): Pass[] {
       && (dimension === "unclassified" ? pass.dimension === null : pass.dimension === dimension)
     ));
   }
+  if (key === "dossier_render") {
+    return passes.filter((pass) => (
+      pass.stage === "dossier_render" || pass.stage === "dossier"
+    ));
+  }
   return passes.filter((pass) => pass.stage === key);
 }
 
@@ -108,7 +115,7 @@ export function backgroundCategories(passes: Pass[]): BackgroundCategory[] {
     });
   }
 
-  for (const stage of ["summary", "dossier", "compact"] as const) {
+  for (const stage of ["summary", "dossier_evidence", "dossier_render", "compact"] as const) {
     categories.push({
       key: stage,
       count: filterBackgroundPasses(passes, stage).length,

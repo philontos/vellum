@@ -120,3 +120,38 @@ async def test_run_concern_stamps_a_stage_scoped_batch_per_pass(migrated_db, mon
     row = next(r for r in traces.list_recent(limit=10) if r["stage"] == "dossier")
     batch = json.loads(row["params"])["batch"]
     assert batch and batch.startswith("dossier:")    # present, stage-scoped, non-empty
+
+
+@pytest.mark.asyncio
+async def test_one_dossier_pass_traces_evidence_and_render_with_the_same_batch(
+    migrated_db, monkeypatch,
+):
+    from app.llm.client import _record_llm_call
+    from app.store import memory
+
+    async def fake_job(start, end):
+        for stage in ("dossier_evidence", "dossier_render"):
+            _record_llm_call({
+                "stage": stage, "model": "m", "status": "ok",
+                "system_prompt": stage, "user_prompt": "data", "response": "{}",
+                "prompt_tokens": 1, "completion_tokens": 1, "duration_ms": 1,
+            })
+
+    async def noop(start, end):
+        return None
+
+    monkeypatch.setattr(runner.config, "dossier_batch_m", lambda: 1)
+    monkeypatch.setattr(runner.facts, "run", noop)
+    monkeypatch.setattr(runner.traits, "run", noop)
+    monkeypatch.setattr(runner.summary, "run", noop)
+    monkeypatch.setattr(runner.dossier, "run", fake_job)
+    memory.append_message("user", "x")
+
+    await runner.run_pending()
+
+    rows = [
+        row for row in traces.list_recent(limit=10)
+        if row["stage"] in {"dossier_evidence", "dossier_render"}
+    ]
+    assert {row["stage"] for row in rows} == {"dossier_evidence", "dossier_render"}
+    assert len({json.loads(row["params"])["batch"] for row in rows}) == 1

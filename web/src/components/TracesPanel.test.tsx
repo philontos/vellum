@@ -71,6 +71,8 @@ describe("TracesPanelView", () => {
     const rows: TraceSummary[] = [
       { ...trace, id: 8, stage: "trait", dimension: "ocean", model: "ocean-model" },
       { ...trace, id: 7, stage: "summary", model: "summary-model" },
+      { ...trace, id: 6, stage: "dossier_evidence", model: "evidence-model" },
+      { ...trace, id: 5, stage: "dossier_render", model: "render-model" },
     ];
 
     const html = renderView({ rows, tab: "background" });
@@ -80,7 +82,8 @@ describe("TracesPanelView", () => {
     expect(html).toContain("Values");
     expect(html).toContain("Regulatory focus");
     expect(html).toContain("Summary");
-    expect(html).toContain("Dossier");
+    expect(html).toContain("Dossier evidence");
+    expect(html).toContain("Dossier render");
     expect(html).toContain("Fact cleanup");
   });
 
@@ -94,5 +97,23 @@ describe("TracesPanelView", () => {
 
     expect(html).toContain("summary-model");
     expect(html).not.toContain("ocean-model");
+  });
+
+  it("shows legacy dossier rows together with the new render stage", () => {
+    const rows: TraceSummary[] = [
+      { ...trace, id: 9, stage: "dossier_render", model: "new-render" },
+      { ...trace, id: 8, stage: "dossier", model: "legacy-render" },
+      { ...trace, id: 7, stage: "dossier_evidence", model: "evidence" },
+    ];
+
+    const html = renderView({
+      rows,
+      tab: "background",
+      backgroundTab: "dossier_render",
+    });
+
+    expect(html).toContain("new-render");
+    expect(html).toContain("legacy-render");
+    expect(html).not.toContain(">evidence<");
   });
 });

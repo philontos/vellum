@@ -141,17 +141,37 @@ GUIDES = {
             "Changes affect future cards; existing summaries are not regenerated.",
         ),
     ),
-    "memory.dossier": (
-        "Maintains one compact narrative portrait of the user's values, recurring "
-        "patterns, and typical ways of thinking and deciding. It rewrites the prior "
-        "portrait instead of appending a chronological log.",
-        "Runs in the background at the dossier cadence. It receives the previous "
-        "dossier, a new cross-stream conversation span, and a size cap; the result "
-        "is later included as background in chat.",
+    "memory.dossier.evidence": (
+        "Extracts dossier-specific evidence about values, recurring patterns, "
+        "decision style, meaningful current states, and self-concept into a grounded "
+        "portrait-claim changeset.",
+        "Runs as the first call at the dossier cadence, after eager facts integration. "
+        "It sees the active portrait-claim board and the new cross-stream conversation; "
+        "assistant turns provide context, while every accepted change must cite user text.",
         (
-            "Keep {cap}, {prior}, {span}, strict JSON, and the canonical \"dossier\" key.",
-            "Assistant interpretations are context, not user facts unless confirmed.",
-            "Be conservative: unsupported claims can compound through later rewrites.",
+            "Keep strict JSON and the canonical update, retire, and add lists.",
+            "Keep the fixed English claim_type and basis enums; natural-language claim text "
+            "and quotes should match the user's language.",
+            "Do not weaken user-turn citations, the two-turn threshold for inferences, or "
+            "the distinction between considering and deciding.",
+        ),
+    ),
+    "memory.dossier.render": (
+        "Renders one compact narrative portrait from verified portrait claims and "
+        "durable facts, without reading raw assistant replies or recursively treating "
+        "the previous prose dossier as evidence.",
+        "Runs as the second call at the dossier cadence. Its data message contains all "
+        "active portrait claims and active durable facts; a successful result replaces "
+        "the prose dossier later supplied as background in chat.",
+        (
+            "Keep strict JSON, the canonical \"dossier\" key, language matching, and the "
+            "compact narrative size limit.",
+            "Use portrait claims for interpretation and facts only as durable anchors; "
+            "do not derive a recurring pattern from one fact.",
+            "Keep the semantic audit against cited user quotes; provenance validation "
+            "alone does not prove that a claim's wording is fully supported.",
+            "Preserve uncertainty and contextualize current states rather than turning "
+            "them into timeless traits.",
         ),
     ),
     "memory.facts.integrate": (

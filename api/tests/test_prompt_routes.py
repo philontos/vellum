@@ -28,7 +28,8 @@ def test_lists_every_builtin_prompt_as_an_unpublished_workspace(migrated_db):
         "chat.response_protocol",
         "chat.time_context",
         "memory.summary",
-        "memory.dossier",
+        "memory.dossier.evidence",
+        "memory.dossier.render",
         "memory.facts.integrate",
         "memory.facts.compact",
         "traits.ocean.extract",
@@ -48,6 +49,13 @@ def test_lists_every_builtin_prompt_as_an_unpublished_workspace(migrated_db):
     assert summary["documentation"]["en"]["usage"]
     assert summary["documentation"]["zh"]["runtime"]
     assert len(summary["documentation"]["en"]["editing_guidance"]) >= 2
+    assert "memory.dossier" not in keys
+    evidence = _prompt(body, "memory.dossier.evidence")
+    render = _prompt(body, "memory.dossier.render")
+    assert evidence["variables"] == []
+    assert render["variables"] == []
+    assert "evidence" in evidence["documentation"]["en"]["usage"].lower()
+    assert "active portrait claims" in render["documentation"]["en"]["runtime"].lower()
 
 
 def test_saves_a_draft_without_changing_runtime_then_publishes_one_atomic_release(migrated_db):

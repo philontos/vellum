@@ -1,7 +1,7 @@
 from app.auth import accounts
 from app.auth import legacy
 from app.data_scope import user_scope
-from app.store import db, memory, model, traces
+from app.store import db, memory, model, portrait_claims, traces
 
 
 def test_legacy_data_is_copied_into_owner_scope_and_source_is_retained(tmp_path, monkeypatch):
@@ -55,3 +55,25 @@ def test_legacy_adoption_treats_a_written_dossier_as_user_data(tmp_path, monkeyp
         pass
     else:
         raise AssertionError("expected adoption to preserve a written dossier")
+
+
+def test_legacy_adoption_treats_portrait_claims_as_user_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("VELLUM_AUTH_ENABLED", raising=False)
+    db.run_migrations()
+    user = accounts.create_user("owner", "Owner", "a sufficiently long password", role="owner")
+    with user_scope(user["id"]):
+        portrait_claims.add(
+            claim_type="value",
+            text="Values careful reasoning.",
+            basis="explicit",
+            evidence=[{"turn": 0, "quote": "Please analyze this fairly."}],
+            source_turn=0,
+        )
+
+    try:
+        legacy.adopt(user["id"])
+    except legacy.LegacyAdoptionError:
+        pass
+    else:
+        raise AssertionError("expected adoption to preserve portrait claims")

@@ -25,6 +25,7 @@ grounded). Convergence is by redundancy/contradiction, never by age — durable
 anchors (allergies, names, locations, identity) stay forever."""
 from app import config
 from app.llm.client import chat_json
+from app.model_loop import evidence as grounded_evidence
 from app.model_loop._span import span_asof_date, span_text
 from app.prompts import runtime
 from app.store import memory, model
@@ -170,51 +171,9 @@ async def extract_facts(span: str, as_of_date: str | None = None) -> list[str]:
     return _clean_texts(plan.get("add"))
 
 
-_CHANGE_BASES = {"explicit", "confirmed", "inferred"}
-_WEAK_CONFIRMATIONS = {
-    "yes", "yeah", "right", "correct", "maybe", "perhaps", "i guess",
-    "对", "是的", "嗯", "可能", "可能吧", "也许",
-}
-
-
-def _normalized(value: str) -> str:
-    return " ".join(value.split()).casefold()
-
-
-def _evidence_source_turn(item: dict, user_evidence: dict[int, str],
-                          allowed_bases: set[str]) -> int | None:
-    """Validate model-supplied provenance against raw USER rows. Every quote must
-    be verbatim after whitespace/case normalization; one bad/assistant/unknown
-    reference rejects the whole change. Inferences require repeated user evidence."""
-    if not isinstance(item, dict) or item.get("basis") not in allowed_bases:
-        return None
-    evidence = item.get("evidence")
-    if not isinstance(evidence, list) or not evidence:
-        return None
-    turns = []
-    quotes = []
-    for ref in evidence:
-        if not isinstance(ref, dict):
-            return None
-        turn = ref.get("turn")
-        quote = ref.get("quote")
-        if type(turn) is not int or turn not in user_evidence:
-            return None
-        if not isinstance(quote, str) or not quote.strip():
-            return None
-        normalized_quote = _normalized(quote)
-        if normalized_quote not in _normalized(user_evidence[turn]):
-            return None
-        turns.append(turn)
-        quotes.append(normalized_quote)
-    distinct_turns = set(turns)
-    if item.get("basis") == "inferred" and len(distinct_turns) < 2:
-        return None
-    if item.get("basis") == "confirmed" and all(
-        quote in _WEAK_CONFIRMATIONS for quote in quotes
-    ):
-        return None
-    return max(distinct_turns)
+_CHANGE_BASES = grounded_evidence.CHANGE_BASES
+_WEAK_CONFIRMATIONS = grounded_evidence.WEAK_CONFIRMATIONS
+_evidence_source_turn = grounded_evidence.source_turn
 
 
 def _apply_changeset(plan: dict, active: list[dict], source_turn: int | None,

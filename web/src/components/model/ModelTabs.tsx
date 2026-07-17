@@ -1,8 +1,8 @@
 import { useT } from "../../i18n";
 
-export type ModelSection = "dossier" | "facts" | "traits";
+export type ModelSection = "dossier" | "evidence" | "facts" | "traits";
 
-const SECTIONS: ModelSection[] = ["dossier", "facts", "traits"];
+const SECTIONS: ModelSection[] = ["dossier", "evidence", "facts", "traits"];
 
 export function ModelTabs({
   active,
@@ -14,6 +14,7 @@ export function ModelTabs({
   const { t } = useT();
   const labels: Record<ModelSection, string> = {
     dossier: t("model.tabDossier"),
+    evidence: t("model.tabEvidence"),
     facts: t("model.tabFacts"),
     traits: t("model.tabTraits"),
   };
