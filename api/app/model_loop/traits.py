@@ -35,7 +35,10 @@ async def extract_one(span: str, key: str, dim: dict, old_content: dict) -> dict
             rubric=rubric,
         )
         extracted = await chat_json(
-            system_prompt=prompt, user_prompt="", stage="trait",
+            system_prompt=prompt,
+            user_prompt="",
+            stage="trait",
+            context={"dimension": key},
         )
         return bayes.merge_subdims(key, old_content, extracted)
 

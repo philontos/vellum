@@ -18,6 +18,7 @@ const trace: TraceSummary = {
   created_at: "2026-07-17 12:00:00",
   params: null,
   snippet: "A visible question",
+  dimension: null,
   has_reasoning: true,
   has_tool_calls: false,
 };
@@ -28,9 +29,11 @@ function renderView(props: Partial<React.ComponentProps<typeof TracesPanelView>>
       <TracesPanelView
         rows={[]}
         tab="rounds"
+        backgroundTab="all"
         loading={false}
         error=""
         onTabChange={() => undefined}
+        onBackgroundTabChange={() => undefined}
         onRefresh={() => undefined}
         onPin={() => undefined}
         onNote={() => undefined}
@@ -62,5 +65,34 @@ describe("TracesPanelView", () => {
     expect(html).toContain("A visible question");
     expect(html).toContain("1 round");
     expect(html).not.toContain("No traces yet");
+  });
+
+  it("shows stable background category tabs with counts", () => {
+    const rows: TraceSummary[] = [
+      { ...trace, id: 8, stage: "trait", dimension: "ocean", model: "ocean-model" },
+      { ...trace, id: 7, stage: "summary", model: "summary-model" },
+    ];
+
+    const html = renderView({ rows, tab: "background" });
+
+    expect(html).toContain("OCEAN");
+    expect(html).toContain("MBTI");
+    expect(html).toContain("Values");
+    expect(html).toContain("Regulatory focus");
+    expect(html).toContain("Summary");
+    expect(html).toContain("Dossier");
+    expect(html).toContain("Fact cleanup");
+  });
+
+  it("renders only the selected background category", () => {
+    const rows: TraceSummary[] = [
+      { ...trace, id: 8, stage: "trait", dimension: "ocean", model: "ocean-model" },
+      { ...trace, id: 7, stage: "summary", model: "summary-model" },
+    ];
+
+    const html = renderView({ rows, tab: "background", backgroundTab: "summary" });
+
+    expect(html).toContain("summary-model");
+    expect(html).not.toContain("ocean-model");
   });
 });

@@ -1,11 +1,18 @@
 import { describe, it, expect } from "vitest";
 import type { TraceSummary } from "../../api/client";
-import { groupRounds, backgroundPasses, parseSpan, userSnippet } from "./group";
+import {
+  backgroundCategories,
+  backgroundPasses,
+  filterBackgroundPasses,
+  groupRounds,
+  parseSpan,
+  userSnippet,
+} from "./group";
 
 // Minimal summary factory — only the fields a test cares about; the rest default.
 function t(p: Partial<TraceSummary> & { id: number; stage: string }): TraceSummary {
   return {
-    turn: null, model: "m", snippet: null,
+    turn: null, model: "m", snippet: null, dimension: null,
     prompt_tokens: null, completion_tokens: null, duration_ms: null,
     pinned: 0, note: null, created_at: "2026-06-20 10:00:00", params: null,
     has_reasoning: false, has_tool_calls: false,
@@ -105,6 +112,54 @@ describe("backgroundPasses", () => {
     expect(passes[0].stage).toBe("compact");
     expect(passes[0].from).toBe(1);
     expect(passes[0].to).toBe(20);
+  });
+});
+
+describe("backgroundCategories", () => {
+  const passes = backgroundPasses([
+    t({ id: 8, stage: "trait", dimension: "ocean" }),
+    t({ id: 7, stage: "trait", dimension: "mbti" }),
+    t({ id: 6, stage: "trait", dimension: "ocean" }),
+    t({ id: 5, stage: "summary" }),
+    t({ id: 4, stage: "dossier" }),
+    t({ id: 3, stage: "compact" }),
+  ]);
+
+  it("provides stable tabs with per-category counts", () => {
+    const categories = backgroundCategories(passes);
+
+    expect(categories.map((category) => category.key)).toEqual([
+      "all",
+      "trait:ocean",
+      "trait:mbti",
+      "trait:schwartz",
+      "trait:regulatory_focus",
+      "summary",
+      "dossier",
+      "compact",
+    ]);
+    expect(categories.find((category) => category.key === "trait:ocean")?.count).toBe(2);
+    expect(categories.find((category) => category.key === "summary")?.count).toBe(1);
+    expect(categories.find((category) => category.key === "trait:schwartz")?.count).toBe(0);
+  });
+
+  it("filters one psychological dimension independently from other tasks", () => {
+    expect(filterBackgroundPasses(passes, "trait:ocean").map((pass) => pass.id)).toEqual([8, 6]);
+    expect(filterBackgroundPasses(passes, "summary").map((pass) => pass.id)).toEqual([5]);
+    expect(filterBackgroundPasses(passes, "all")).toEqual(passes);
+  });
+
+  it("keeps unclassified and future trait dimensions discoverable", () => {
+    const extended = backgroundPasses([
+      ...passes,
+      t({ id: 10, stage: "trait", dimension: null }),
+      t({ id: 9, stage: "trait", dimension: "future_dimension" }),
+    ]);
+    const categories = backgroundCategories(extended);
+
+    expect(categories.some((category) => category.key === "trait:future_dimension")).toBe(true);
+    expect(categories.some((category) => category.key === "trait:unclassified")).toBe(true);
+    expect(filterBackgroundPasses(extended, "trait:unclassified").map((pass) => pass.id)).toEqual([10]);
   });
 });
 

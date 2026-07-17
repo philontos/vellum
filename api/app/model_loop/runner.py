@@ -44,6 +44,15 @@ def _flush_traces(calls: list[dict], turn: int, start_turn: int | None = None,
         if c.get("user_prompt"):
             prompt += "\n\n[user]\n" + c["user_prompt"]
         params = {"status": c.get("status"), "error": c.get("error")}
+        context = c.get("context")
+        if isinstance(context, dict):
+            # Only persist stable, non-sensitive classification metadata. LLM
+            # callers may use context for richer internal diagnostics that do
+            # not belong in the durable trace index.
+            for key in ("dimension", "stream"):
+                value = context.get(key)
+                if isinstance(value, str) and value.strip():
+                    params[key] = value.strip()
         snapshot = runtime.current_snapshot()
         if snapshot is not None:
             params["prompt_release_id"] = snapshot.release_id

@@ -7,7 +7,9 @@ from app.store import memory, model
 @pytest.mark.asyncio
 async def test_trait_job_updates_current_and_history(migrated_db, monkeypatch):
     # one strong OCEAN-openness signal for every dimension extract
+    contexts = []
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
+        contexts.append(kw.get("context"))
         return {"O": {"score": 85, "confidence": 0.7, "evidence": "x"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr(traits, "chat_json", fake_chat_json)
@@ -21,6 +23,7 @@ async def test_trait_job_updates_current_and_history(migrated_db, monkeypatch):
     cur = model.get_trait("ocean")
     assert cur["content_json"]["O"]["score"] > 50
     assert len(model.get_trait_history("ocean")) == 1     # snapshot appended
+    assert contexts == [{"dimension": "ocean"}]
 
 
 @pytest.mark.asyncio

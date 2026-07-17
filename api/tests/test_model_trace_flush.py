@@ -19,6 +19,21 @@ def test_flush_records_covered_span_in_params(migrated_db):
     assert params["from"] == 8 and params["to"] == 14
 
 
+def test_flush_preserves_safe_background_context_in_params(migrated_db):
+    calls = [{
+        "stage": "trait", "model": "m", "status": "ok",
+        "system_prompt": "S", "user_prompt": "", "response": "R",
+        "prompt_tokens": 1, "completion_tokens": 1, "duration_ms": 1,
+        "context": {"dimension": "ocean", "ignored": "not trace metadata"},
+    }]
+
+    runner._flush_traces(calls, turn=14, start_turn=8)
+
+    params = json.loads(traces.list_recent(limit=1)[0]["params"])
+    assert params["dimension"] == "ocean"
+    assert "ignored" not in params
+
+
 def test_flush_stamps_one_batch_id_across_a_passs_calls(migrated_db):
     """A single pass can emit several LLM calls (e.g. one per trait dimension).
     All its trace rows must share one batch id so the pass is an unambiguous

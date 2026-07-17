@@ -86,6 +86,48 @@ def test_trace_list_is_lightweight_and_detail_is_loaded_separately(migrated_db):
     assert client.get("/inspect/traces/999999").status_code == 404
 
 
+def test_trace_list_classifies_legacy_trait_dimensions_from_structured_output(migrated_db):
+    from app.main import app
+    from app.store import traces
+
+    outputs = {
+        "ocean": {"O": None, "C": None, "E": None, "A": None, "N": None},
+        "mbti": {"E_I": None, "S_N": None, "T_F": None, "J_P": None},
+        "schwartz": {
+            "achievement": None, "power": None, "hedonism": None,
+            "stimulation": None, "self_direction": None, "universalism": None,
+            "benevolence": None, "tradition": None, "conformity": None,
+            "security": None,
+        },
+        "regulatory_focus": {"promotion": None, "prevention": None},
+    }
+    ids = {}
+    for dimension, output in outputs.items():
+        serialized = json.dumps(output)
+        if dimension == "mbti":
+            # Providers occasionally wrap otherwise valid JSON despite the
+            # prompt's JSON-only instruction; the runtime accepts this shape.
+            serialized = f"```json\n{serialized}\n```"
+        ids[dimension] = traces.record(
+            turn=3,
+            stage="trait",
+            model="m",
+            params={},  # legacy rows did not persist the dimension context
+            prompt="legacy configurable prompt",
+            output=serialized,
+            prompt_tokens=10,
+            completion_tokens=20,
+            duration_ms=30,
+        )
+
+    rows = TestClient(app).get("/inspect/traces?stage=trait").json()["traces"]
+    by_id = {row["id"]: row for row in rows}
+
+    for dimension, trace_id in ids.items():
+        assert by_id[trace_id]["dimension"] == dimension
+        assert "output" not in by_id[trace_id]
+
+
 def test_inspect_model_excludes_superseded_facts(migrated_db):
     from app.main import app
     from app.store import model

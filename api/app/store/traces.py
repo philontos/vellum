@@ -90,6 +90,65 @@ def _last_user_snippet(prompt: str | None) -> str | None:
     return None
 
 
+_TRAIT_OUTPUT_KEYS = {
+    "ocean": {"O", "C", "E", "A", "N"},
+    "mbti": {"E_I", "S_N", "T_F", "J_P"},
+    "schwartz": {
+        "achievement", "power", "hedonism", "stimulation", "self_direction",
+        "universalism", "benevolence", "tradition", "conformity", "security",
+    },
+    "regulatory_focus": {"promotion", "prevention"},
+}
+
+_TRAIT_PROMPT_MARKERS = {
+    "ocean": ("big five (ocean)", "ocean personality dimensions"),
+    "mbti": ("mbti axes", "myers-briggs"),
+    "schwartz": ("schwartz basic values", "schwartz values"),
+    "regulatory_focus": ("regulatory focus theory", "promotion focus and prevention"),
+}
+
+
+def _json_dict(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            value = json.loads(raw[start:end + 1])
+        except json.JSONDecodeError:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _trait_dimension(params: str | None, output: str | None,
+                     prompt: str | None) -> str | None:
+    """Read new dimension metadata, with structural fallback for legacy rows.
+
+    Trait prompts are editable, so the structured output key set is the primary
+    legacy signal. Prompt markers are only a final fallback for failed calls that
+    did not produce JSON output.
+    """
+    dimension = _json_dict(params).get("dimension")
+    if isinstance(dimension, str) and dimension.strip():
+        return dimension.strip()
+
+    output_keys = set(_json_dict(output))
+    for key, expected in _TRAIT_OUTPUT_KEYS.items():
+        if output_keys == expected:
+            return key
+
+    normalized_prompt = (prompt or "").lower()
+    for key, markers in _TRAIT_PROMPT_MARKERS.items():
+        if any(marker in normalized_prompt for marker in markers):
+            return key
+    return None
+
+
 def list_summaries(limit: int = 100, stage: str | None = None) -> list[dict]:
     """Return scan-friendly metadata without multi-megabyte trace bodies.
 
@@ -105,7 +164,9 @@ def list_summaries(limit: int = 100, stage: str | None = None) -> list[dict]:
     params.append(limit)
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, turn, stage, model, params, prompt, prompt_tokens, "
+            "SELECT id, turn, stage, model, params, "
+            "CASE WHEN stage IN ('chat', 'trait') THEN prompt END AS prompt, "
+            "CASE WHEN stage = 'trait' THEN output END AS output, prompt_tokens, "
             "completion_tokens, duration_ms, pinned, note, created_at, "
             "reasoning IS NOT NULL AS has_reasoning, "
             "tool_calls IS NOT NULL AS has_tool_calls "
@@ -115,7 +176,13 @@ def list_summaries(limit: int = 100, stage: str | None = None) -> list[dict]:
     summaries = []
     for row in rows:
         summary = dict(row)
-        summary["snippet"] = _last_user_snippet(summary.pop("prompt"))
+        prompt = summary.pop("prompt")
+        output = summary.pop("output")
+        summary["snippet"] = _last_user_snippet(prompt)
+        summary["dimension"] = (
+            _trait_dimension(summary.get("params"), output, prompt)
+            if summary.get("stage") == "trait" else None
+        )
         summary["has_reasoning"] = bool(summary["has_reasoning"])
         summary["has_tool_calls"] = bool(summary["has_tool_calls"])
         summaries.append(summary)

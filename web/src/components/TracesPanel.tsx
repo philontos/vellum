@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getTraces, patchTrace, type TraceSummary } from "../api/client";
 import { useT } from "../i18n";
-import { backgroundPasses, groupRounds } from "./traces/group";
+import {
+  backgroundCategories,
+  backgroundPasses,
+  filterBackgroundPasses,
+  groupRounds,
+} from "./traces/group";
+import { BackgroundTabs, DimensionBadge } from "./traces/BackgroundTabs";
 import { RoundCard } from "./traces/RoundCard";
 import { TraceRow } from "./traces/TraceRow";
 import { Tag } from "./ui/StatusChip";
@@ -16,6 +22,7 @@ function errorMessage(error: unknown): string {
 
 export function TracesPanel() {
   const [tab, setTab] = useState<TabKey>("rounds");
+  const [backgroundTab, setBackgroundTab] = useState("all");
   const [rows, setRows] = useState<TraceSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -78,9 +85,11 @@ export function TracesPanel() {
     <TracesPanelView
       rows={rows}
       tab={tab}
+      backgroundTab={backgroundTab}
       loading={loading}
       error={error}
       onTabChange={setTab}
+      onBackgroundTabChange={setBackgroundTab}
       onRefresh={() => void load()}
       onPin={pin}
       onNote={note}
@@ -91,18 +100,22 @@ export function TracesPanel() {
 export function TracesPanelView({
   rows,
   tab,
+  backgroundTab,
   loading,
   error,
   onTabChange,
+  onBackgroundTabChange,
   onRefresh,
   onPin,
   onNote,
 }: {
   rows: TraceSummary[];
   tab: TabKey;
+  backgroundTab: string;
   loading: boolean;
   error: string;
   onTabChange: (tab: TabKey) => void;
+  onBackgroundTabChange: (tab: string) => void;
   onRefresh: () => void;
   onPin: (trace: TraceSummary) => void;
   onNote: (trace: TraceSummary, value: string) => void;
@@ -110,12 +123,17 @@ export function TracesPanelView({
   const { t: tr } = useT();
   const rounds = groupRounds(rows);
   const passes = backgroundPasses(rows);
+  const categories = backgroundCategories(passes);
+  const activeBackgroundTab = categories.some((category) => category.key === backgroundTab)
+    ? backgroundTab
+    : "all";
+  const visiblePasses = filterBackgroundPasses(passes, activeBackgroundTab);
   const firstLoad = loading && rows.length === 0;
   const firstLoadFailed = Boolean(error) && rows.length === 0;
 
   return (
     <div className="v-canvas flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-3 text-sm sm:px-4">
+      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-line px-3 py-3 text-sm sm:px-4">
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           <TabButton active={tab === "rounds"} onClick={() => onTabChange("rounds")}>
             {tr("traces.tabRounds")}
@@ -137,13 +155,21 @@ export function TracesPanelView({
             ? rounds.length === 1
               ? tr("traces.roundCountOne")
               : tr("traces.roundCount", { n: rounds.length })
-            : passes.length === 1
+            : visiblePasses.length === 1
               ? tr("traces.passCountOne")
-              : tr("traces.passCount", { n: passes.length })}
+              : tr("traces.passCount", { n: visiblePasses.length })}
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {tab === "background" && (
+        <BackgroundTabs
+          categories={categories}
+          active={activeBackgroundTab}
+          onChange={onBackgroundTabChange}
+        />
+      )}
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {error && rows.length > 0 && (
           <LoadError error={error} onRetry={onRefresh} compact />
         )}
@@ -159,19 +185,28 @@ export function TracesPanelView({
           ) : (
             <div className="p-4 text-muted sm:p-8">{tr("traces.empty")}</div>
           )
-        ) : passes.length > 0 ? (
-          passes.map((p) => (
+        ) : visiblePasses.length > 0 ? (
+          visiblePasses.map((p) => (
             <div key={p.id} className="border-b border-line/70 px-3 py-3 sm:px-4">
               <TraceRow
                 trace={p}
                 onPin={onPin}
                 onNote={onNote}
-                badge={<SpanBadge from={p.from} to={p.to} />}
+                badge={(
+                  <>
+                    {p.stage === "trait" && <DimensionBadge dimension={p.dimension} />}
+                    <SpanBadge from={p.from} to={p.to} />
+                  </>
+                )}
               />
             </div>
           ))
         ) : (
-          <div className="p-4 text-muted sm:p-8">{tr("traces.emptyBackground")}</div>
+          <div className="p-4 text-muted sm:p-8">
+            {passes.length === 0
+              ? tr("traces.emptyBackground")
+              : tr("traces.emptyBackgroundCategory")}
+          </div>
         )}
       </div>
     </div>
