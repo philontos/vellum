@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getDiary, getDiaryMessages, type DiaryCard } from "../api/client";
 import { userStorageKey } from "../auth/storage";
@@ -10,8 +10,8 @@ import { DiaryTimeline } from "./diary/DiaryTimeline";
 const PAGE = 20;
 
 /**
- * The timeline and entry reader are separate browser-history pages. The controller
- * keeps fetched cards and scroll position alive while the route swaps components.
+ * Entry ids remain in browser history for deep links, while the reader is shown as
+ * a modal over the still-mounted timeline.
  */
 export function DiaryPanel({
   userId,
@@ -38,7 +38,6 @@ export function DiaryPanel({
   const loadingRef = useRef(false);
   const detailLoadingRef = useRef(new Set<number>());
   const returnFocusIdRef = useRef<number | null>(null);
-  const timelineScrollTopRef = useRef(0);
   const atEndRef = useRef(false);
   const cardsRef = useRef<DiaryCard[]>([]);
   const streamRef = useRef(stream);
@@ -106,7 +105,6 @@ export function DiaryPanel({
 
   function openDetail(card: DiaryCard) {
     returnFocusIdRef.current = card.id;
-    timelineScrollTopRef.current = scrollRef.current?.scrollTop ?? 0;
     setDetailCards((current) => ({ ...current, [card.id]: card }));
     onOpenEntry(card.id);
     const cached = details[card.id];
@@ -120,7 +118,6 @@ export function DiaryPanel({
     atEndRef.current = false;
     setCards([]);
     setAtEnd(false);
-    timelineScrollTopRef.current = 0;
     void loadMore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream]);
@@ -141,18 +138,6 @@ export function DiaryPanel({
   }, [atEnd, cards.length, entryId]);
 
   useEffect(() => {
-    if (entryId === null) return;
-    function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseEntry();
-      }
-    }
-    window.addEventListener("keydown", escape);
-    return () => window.removeEventListener("keydown", escape);
-  }, [entryId, onCloseEntry]);
-
-  useEffect(() => {
     if (entryId !== null) detailScrollRef.current?.scrollTo({ top: 0 });
   }, [entryId]);
 
@@ -167,12 +152,6 @@ export function DiaryPanel({
     return () => cancelAnimationFrame(frame);
   }, [entryId]);
 
-  useLayoutEffect(() => {
-    if (entryId === null && scrollRef.current) {
-      scrollRef.current.scrollTop = timelineScrollTopRef.current;
-    }
-  }, [entryId]);
-
   useEffect(() => {
     if (entryId === null) return;
     const cached = details[entryId];
@@ -182,36 +161,41 @@ export function DiaryPanel({
   }, [entryId]);
 
   const days = groupByDay(cards);
-  if (entryId !== null) {
-    const detailCard = detailCards[entryId] ?? cards.find((card) => card.id === entryId) ?? null;
-    return (
-      <div className="v-canvas flex h-full min-h-0 flex-col overflow-hidden">
+  const detailCard = entryId === null
+    ? null
+    : detailCards[entryId] ?? cards.find((card) => card.id === entryId) ?? null;
+
+  return (
+    <div className="v-canvas relative flex h-full min-h-0 flex-col overflow-hidden">
+      <div
+        data-diary-timeline="true"
+        aria-hidden={entryId !== null ? true : undefined}
+        className={"h-full min-h-0 " + (entryId !== null ? "pointer-events-none select-none" : "")}
+      >
+        <DiaryTimeline
+          days={days}
+          cardCount={cards.length}
+          stream={stream}
+          lang={lang}
+          loading={loading}
+          atEnd={atEnd}
+          scrollRef={scrollRef}
+          bottomRef={bottomRef}
+          onStreamChange={setStream}
+          onOpen={openDetail}
+        />
+      </div>
+      {entryId !== null && (
         <DiaryEntry
+          key={entryId}
           card={detailCard}
           state={details[entryId]}
           lang={lang}
           scrollRef={detailScrollRef}
-          onBack={onCloseEntry}
+          onClose={onCloseEntry}
           onRetry={() => void loadDetail(entryId)}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="v-canvas flex h-full min-h-0 flex-col overflow-hidden">
-      <DiaryTimeline
-        days={days}
-        cardCount={cards.length}
-        stream={stream}
-        lang={lang}
-        loading={loading}
-        atEnd={atEnd}
-        scrollRef={scrollRef}
-        bottomRef={bottomRef}
-        onStreamChange={setStream}
-        onOpen={openDetail}
-      />
+      )}
     </div>
   );
 }

@@ -16,7 +16,7 @@ const entry: DiaryCard = {
 };
 
 describe("DiaryEntry", () => {
-  it("uses a compact reader header with an accessible icon-only back action", () => {
+  it("renders as a responsive modal with an accessible icon-only close action", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>
         <DiaryEntry
@@ -24,25 +24,28 @@ describe("DiaryEntry", () => {
           state={{ status: "ready", messages: [] }}
           lang="en"
           scrollRef={createRef<HTMLDivElement>()}
-          onBack={() => undefined}
+          onClose={() => undefined}
           onRetry={() => undefined}
         />
       </I18nProvider>,
     );
 
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
+    expect(html).toContain("absolute inset-0");
+    expect(html).toContain("p-2");
+    expect(html).toContain("sm:p-6");
+    expect(html).toContain("h-full max-h-[48rem]");
+    expect(html).toContain("max-w-[58rem]");
+
     const header = html.match(/<header[\s\S]*?<\/header>/)?.[0] ?? "";
     expect(header).not.toBe("");
-    expect(header).toContain('aria-label="Back"');
-    expect(header).toContain('title="Back"');
+    expect(header).toContain('aria-label="Close diary entry"');
+    expect(header).toContain('title="Close diary entry"');
     expect(header).toContain('aria-hidden="true"');
-    expect(header).toContain("absolute left-0");
+    expect(header).toContain("absolute right-0");
     expect(header).toContain("h-10 w-10");
-    expect(header).toContain("bg-accent/10 text-accent-ink");
-    expect(header).toContain("hover:bg-accent/20");
-    expect(header).not.toContain(">Back</button>");
-    expect(header).toContain("max-w-[58rem]");
-    expect(header).toContain("text-center");
-    expect(header).toMatch(/<h1[^>]*tabindex="-1"/);
-    expect(header).not.toContain("border-l border-line pl-3");
+    expect(header).toContain("✕");
+    expect(header).not.toContain("←");
   });
 });
