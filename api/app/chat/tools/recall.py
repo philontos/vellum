@@ -27,9 +27,17 @@ _SCHEMA = {
 }
 
 
-def register_into(reg, stream: str = "neutral") -> None:
+def register_into(
+    reg, stream: str = "neutral", through_turn: int | None = None,
+) -> None:
     async def _handler(args: dict) -> str:
-        snips = await retrieval.retrieve(args.get("query", ""), stream=stream)
+        if through_turn is None:
+            snips = await retrieval.retrieve(args.get("query", ""), stream=stream)
+        else:
+            snips = await retrieval.retrieve(
+                args.get("query", ""), stream=stream,
+                through_turn=through_turn,
+            )
         if not snips:
             return "No relevant past conversations found."
         return "\n---\n".join(s["text"] for s in snips)

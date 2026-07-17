@@ -198,6 +198,47 @@ def get_by_id(trace_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def chat_for_turn(turn: int) -> dict | None:
+    """Newest production chat trace for one assistant turn, including its body."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM traces WHERE eval_run_id IS NULL AND stage = 'chat' "
+            "AND turn = ? ORDER BY id DESC LIMIT 1",
+            (turn,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def chat_metadata_by_turn(turns: list[int]) -> dict[int, dict]:
+    """Lightweight replay metadata keyed by assistant turn.
+
+    There can be more than one legacy trace for a turn; the latest is canonical.
+    The heavy prompt never leaves this DAO, only whether it is still available.
+    """
+    if not turns:
+        return {}
+    placeholders = ",".join("?" for _ in turns)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, turn, model, params, prompt IS NOT NULL AS replayable "
+            "FROM traces WHERE eval_run_id IS NULL AND stage = 'chat' "
+            f"AND turn IN ({placeholders}) ORDER BY id DESC",
+            tuple(turns),
+        ).fetchall()
+    result: dict[int, dict] = {}
+    for row in rows:
+        turn = row["turn"]
+        if turn in result:
+            continue
+        item = dict(row)
+        parsed = _json_dict(item.pop("params"))
+        item["prompt_release_id"] = parsed.get("prompt_release_id")
+        item["prompt_release_version"] = parsed.get("prompt_release_version")
+        item["replayable"] = bool(item["replayable"])
+        result[turn] = item
+    return result
+
+
 def set_note(trace_id: int, note: str) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE traces SET note = ? WHERE id = ?", (note, trace_id))

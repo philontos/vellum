@@ -37,6 +37,34 @@ def active_snapshot() -> PromptSnapshot:
     )
 
 
+def default_snapshot() -> PromptSnapshot:
+    """Code-owned baseline used by traces recorded before Prompt releases."""
+    return PromptSnapshot(
+        release_id=None,
+        release_version=None,
+        contents=MappingProxyType({
+            definition.key: definition.default_content
+            for definition in definitions()
+        }),
+    )
+
+
+def snapshot_for_release(release_id: int) -> PromptSnapshot:
+    """Pin an immutable historical release for a replay without activating it."""
+    release, released = service.load_release(release_id)
+    return PromptSnapshot(
+        release_id=release["id"],
+        release_version=release["version"],
+        contents=MappingProxyType({
+            definition.key: (
+                released.get(definition.key, definition.default_content)
+                if definition.editable else definition.default_content
+            )
+            for definition in definitions()
+        }),
+    )
+
+
 def current_snapshot() -> PromptSnapshot | None:
     return _current.get()
 

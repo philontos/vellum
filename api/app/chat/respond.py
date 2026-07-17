@@ -11,9 +11,13 @@ from app.llm import client as llm
 from app.prompts import runtime
 
 
-def _build_registry(stream: str) -> registry.ToolRegistry:
+def _build_registry(
+    stream: str, through_turn: int | None = None,
+) -> registry.ToolRegistry:
     reg = registry.ToolRegistry()
-    recall.register_into(reg, stream)   # recall is scoped to the active mode's stream
+    recall.register_into(
+        reg, stream, through_turn=through_turn,
+    )   # recall is scoped to the active mode's stream and replay cutoff
     # web_search is a standing capability — always offered to the model. Whether a
     # provider/key is actually wired up only affects execution (it fails gracefully
     # when not) and the prompt/hop tuning below, never whether the tool exists.
@@ -30,16 +34,28 @@ def _max_hops() -> int:
     return hops
 
 
-async def stream(messages: list[dict], stream: str = "neutral"):
+async def stream(
+    messages: list[dict], stream: str = "neutral",
+    through_turn: int | None = None,
+):
     # Tool descriptions and every hop of one answer must see the same release,
     # including direct callers outside the HTTP/Feishu turn wrappers.
     with runtime.ensure_snapshot():
-        async for event in _stream(messages, stream=stream):
+        async for event in _stream(
+            messages, stream=stream, through_turn=through_turn,
+        ):
             yield event
 
 
-async def _stream(messages: list[dict], stream: str = "neutral"):
-    reg = _build_registry(stream)
+async def _stream(
+    messages: list[dict], stream: str = "neutral",
+    through_turn: int | None = None,
+):
+    reg = (
+        _build_registry(stream)
+        if through_turn is None
+        else _build_registry(stream, through_turn=through_turn)
+    )
     tools = reg.schemas()
     convo = list(messages)
     content_parts: list[str] = []

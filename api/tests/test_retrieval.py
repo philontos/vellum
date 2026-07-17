@@ -205,6 +205,34 @@ async def test_retrieve_equals_explained_snippets(migrated_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_historical_cutoff_rejects_future_messages_and_summaries(
+    migrated_db, monkeypatch,
+):
+    """Replay retrieval cannot use an embedding built from later conversation,
+    even if its hydrated window could be clipped to older raw turns."""
+    async def fake_embed(text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
+    old = memory.append_message("user", "known at replay time")
+    future = memory.append_message("assistant", "future answer")
+    future_message_label = memory.add_vector_ref("message", future["id"])
+    VectorStore().add(future_message_label, [1.0, 0.0, 0.0])
+    summary_id = memory.add_summary(old["turn"], future["turn"], "future digest")
+    future_summary_label = memory.add_vector_ref("summary", summary_id)
+    VectorStore().add(future_summary_label, [1.0, 0.0, 0.0])
+
+    out = await retrieval.retrieve_explained(
+        "anything", k=5, min_sim=0.0, w=3, through_turn=old["turn"],
+    )
+
+    by_type = {hit["ref_type"]: hit for hit in out["hits"]}
+    assert by_type["message"]["kept"] is False
+    assert by_type["summary"]["kept"] is False
+    assert out["snippets"] == []
+
+
+@pytest.mark.asyncio
 async def test_retrieved_user_turns_include_time_metadata(migrated_db, monkeypatch):
     """Recalled history is model context too, so its user turns need the same
     temporal view as the recent tail instead of becoming timeless excerpts."""

@@ -16,15 +16,20 @@ def _format_window(rows: list[dict]) -> str:
 
 
 async def retrieve(query: str, stream: str = "neutral", k: int | None = None,
-                   min_sim: float | None = None, w: int | None = None) -> list[dict]:
+                   min_sim: float | None = None, w: int | None = None,
+                   through_turn: int | None = None) -> list[dict]:
     """Return reference snippets for `query`, scoped to `stream`. Each snippet:
     {start, end, text}."""
-    return (await retrieve_explained(query, stream=stream, k=k, min_sim=min_sim, w=w))["snippets"]
+    return (await retrieve_explained(
+        query, stream=stream, k=k, min_sim=min_sim, w=w,
+        through_turn=through_turn,
+    ))["snippets"]
 
 
 async def retrieve_explained(query: str, stream: str = "neutral", k: int | None = None,
                              min_sim: float | None = None,
-                             w: int | None = None) -> dict:
+                             w: int | None = None,
+                             through_turn: int | None = None) -> dict:
     """Read-only retrieval with the scoring kept visible (for the probe panel).
 
     Same pipeline as retrieve(), but returns per-hit detail — including
@@ -50,7 +55,9 @@ async def retrieve_explained(query: str, stream: str = "neutral", k: int | None 
                "ref_type": ref["ref_type"] if ref else None,
                "anchor_turn": None, "window": None, "digest": None, "rows": []}
         if kept and ref:
-            window, anchor_turn = _window_for(ref, w, stream)
+            window, anchor_turn = _window_for(
+                ref, w, stream, through_turn=through_turn,
+            )
             if window is None:
                 rec["kept"] = False      # anchor gone, or in another stream — can't recall
             else:
@@ -75,7 +82,9 @@ async def retrieve_explained(query: str, stream: str = "neutral", k: int | None 
             "hits": detail, "snippets": snippets}
 
 
-def _window_for(ref: dict, w: int, stream: str) -> tuple[tuple[int, int] | None, int | None]:
+def _window_for(
+    ref: dict, w: int, stream: str, through_turn: int | None = None,
+) -> tuple[tuple[int, int] | None, int | None]:
     """Resolve a vector ref to (turn window, anchor turn), scoped to `stream`. The
     window is None if the anchor is gone (soft-deleted) OR belongs to another stream
     — so a hit from a different mode's transcript never bleeds into this one. Anchor
@@ -85,10 +94,18 @@ def _window_for(ref: dict, w: int, stream: str) -> tuple[tuple[int, int] | None,
         if anchor is None or anchor["stream"] != stream:
             return None, None
         t = anchor["turn"]
-        return (max(0, t - w), t + w), t
+        if through_turn is not None and t > through_turn:
+            return None, None
+        end = min(t + w, through_turn) if through_turn is not None else t + w
+        return (max(0, t - w), end), t
     if ref["ref_type"] == "summary":
         s = memory.get_summary(ref["ref_id"])
         if s and s["stream"] == stream:
+            # A summary embedding represents its whole span. If any part of that
+            # span is in the replay's future, even using it only to choose an old
+            # raw window would leak information through retrieval ranking.
+            if through_turn is not None and s["end_turn"] > through_turn:
+                return None, None
             return (s["start_turn"], s["end_turn"]), None
     return None, None
 
