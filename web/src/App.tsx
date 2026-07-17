@@ -2,10 +2,7 @@ import { useEffect, useState } from "react";
 import { ChatLayout } from "./components/ChatLayout";
 import { DiaryPanel } from "./components/DiaryPanel";
 import { ModelPanel } from "./components/ModelPanel";
-import { TracesPanel } from "./components/TracesPanel";
-import { EvalPanel } from "./components/EvalPanel";
-import { ProbePanel } from "./components/ProbePanel";
-import { PromptsPanel } from "./components/PromptsPanel";
+import { AdminPanel } from "./components/AdminPanel";
 import { AppShell, type View } from "./components/ui/AppShell";
 import { useChat } from "./hooks/useChat";
 import type { AuthUser } from "./auth/client";
@@ -19,7 +16,7 @@ export function allowViewChange(
   promptDirty: boolean,
   confirmDiscard: () => boolean,
 ): boolean {
-  return currentView !== "prompts" || !promptDirty || confirmDiscard();
+  return currentView !== "admin" || !promptDirty || confirmDiscard();
 }
 
 export default function App({
@@ -147,10 +144,13 @@ export default function App({
         />
       )}
       {view === "model" && <ModelPanel />}
-      {view === "traces" && <TracesPanel />}
-      {view === "probe" && <ProbePanel />}
-      {view === "prompts" && <PromptsPanel onDirtyChange={setPromptDirty} />}
-      {view === "evals" && <EvalPanel />}
+      {view === "admin" && (
+        <AdminPanel
+          user={user}
+          promptDirty={promptDirty}
+          onPromptDirtyChange={setPromptDirty}
+        />
+      )}
     </AppShell>
   );
 }
