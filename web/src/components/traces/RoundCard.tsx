@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Trace } from "../../api/client";
+import type { TraceSummary } from "../../api/client";
 import { useT } from "../../i18n";
 import { type Round, userSnippet } from "./group";
 import { TraceRow } from "./TraceRow";
@@ -13,13 +13,13 @@ export function RoundCard({
   round, onPin, onNote,
 }: {
   round: Round;
-  onPin: (t: Trace) => void;
-  onNote: (t: Trace, value: string) => void;
+  onPin: (t: TraceSummary) => void;
+  onNote: (t: TraceSummary, value: string) => void;
 }) {
   const { t: tr } = useT();
   const [open, setOpen] = useState(true);
   const snippet = userSnippet(round.chat);
-  const rows: Trace[] = [...(round.chat ? [round.chat] : []), ...round.facts];
+  const rows: TraceSummary[] = [...(round.chat ? [round.chat] : []), ...round.facts];
 
   return (
     <div className="border-b border-line/70">

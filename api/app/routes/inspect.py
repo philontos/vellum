@@ -42,7 +42,15 @@ def inspect_model():
 
 @router.get("/inspect/traces")
 def inspect_traces(limit: int = 100, stage: str | None = None):
-    return {"traces": traces.list_recent(limit=limit, stage=stage)}
+    return {"traces": traces.list_summaries(limit=limit, stage=stage)}
+
+
+@router.get("/inspect/traces/{trace_id}")
+def inspect_trace(trace_id: int):
+    trace = traces.get_by_id(trace_id)
+    if trace is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return {"trace": trace}
 
 
 @router.get("/inspect/probe")

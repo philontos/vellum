@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
-import type { Trace } from "../../api/client";
+import type { TraceSummary } from "../../api/client";
 import { groupRounds, backgroundPasses, parseSpan, userSnippet } from "./group";
 
-// Minimal Trace factory — only the fields a test cares about; the rest default.
-function t(p: Partial<Trace> & { id: number; stage: string }): Trace {
+// Minimal summary factory — only the fields a test cares about; the rest default.
+function t(p: Partial<TraceSummary> & { id: number; stage: string }): TraceSummary {
   return {
-    turn: null, model: "m", prompt: null, output: null, reasoning: null,
+    turn: null, model: "m", snippet: null,
     prompt_tokens: null, completion_tokens: null, duration_ms: null,
     pinned: 0, note: null, created_at: "2026-06-20 10:00:00", params: null,
-    tool_calls: null,
+    has_reasoning: false, has_tool_calls: false,
     ...p,
   };
 }
@@ -120,20 +120,16 @@ describe("parseSpan", () => {
 });
 
 describe("userSnippet", () => {
-  it("extracts the last user message from the chat prompt JSON", () => {
-    const prompt = JSON.stringify([
-      { role: "system", content: "reference" },
-      { role: "user", content: "what is the capital of France?" },
-    ]);
-    expect(userSnippet(t({ id: 1, stage: "chat", prompt }))).toBe("what is the capital of France?");
+  it("uses the lightweight snippet derived by the server", () => {
+    expect(userSnippet(t({
+      id: 1,
+      stage: "chat",
+      snippet: "what is the capital of France?",
+    }))).toBe("what is the capital of France?");
   });
 
-  it("returns null when the prompt was pruned (null)", () => {
-    expect(userSnippet(t({ id: 1, stage: "chat", prompt: null }))).toBeNull();
-  });
-
-  it("returns null when the prompt is not the expected message array", () => {
-    expect(userSnippet(t({ id: 1, stage: "chat", prompt: "garbage" }))).toBeNull();
+  it("returns null when no snippet is available", () => {
+    expect(userSnippet(t({ id: 1, stage: "chat", snippet: null }))).toBeNull();
   });
 
   it("returns null for a null chat (round with no chat trace)", () => {

@@ -71,6 +71,66 @@ def list_recent(limit: int = 100, stage: str | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def _last_user_snippet(prompt: str | None) -> str | None:
+    if not prompt:
+        return None
+    try:
+        messages = json.loads(prompt)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(messages, list):
+        return None
+    for message in reversed(messages):
+        if (
+            isinstance(message, dict)
+            and message.get("role") == "user"
+            and isinstance(message.get("content"), str)
+        ):
+            return message["content"]
+    return None
+
+
+def list_summaries(limit: int = 100, stage: str | None = None) -> list[dict]:
+    """Return scan-friendly metadata without multi-megabyte trace bodies.
+
+    The full prompt/output/reasoning/tool payload is fetched only when one row is
+    expanded. ``prompt`` is selected locally solely to derive the latest user
+    snippet and is removed before the response leaves the process.
+    """
+    where = "eval_run_id IS NULL"
+    params: list[object] = []
+    if stage:
+        where += " AND stage = ?"
+        params.append(stage)
+    params.append(limit)
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, turn, stage, model, params, prompt, prompt_tokens, "
+            "completion_tokens, duration_ms, pinned, note, created_at, "
+            "reasoning IS NOT NULL AS has_reasoning, "
+            "tool_calls IS NOT NULL AS has_tool_calls "
+            f"FROM traces WHERE {where} ORDER BY id DESC LIMIT ?",
+            tuple(params),
+        ).fetchall()
+    summaries = []
+    for row in rows:
+        summary = dict(row)
+        summary["snippet"] = _last_user_snippet(summary.pop("prompt"))
+        summary["has_reasoning"] = bool(summary["has_reasoning"])
+        summary["has_tool_calls"] = bool(summary["has_tool_calls"])
+        summaries.append(summary)
+    return summaries
+
+
+def get_by_id(trace_id: int) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM traces WHERE id = ? AND eval_run_id IS NULL",
+            (trace_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def set_note(trace_id: int, note: str) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE traces SET note = ? WHERE id = ?", (note, trace_id))

@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getHistory, getDiary, getDiaryMessages, deleteMessage, streamChat, streamEvalRun } from "./client";
+import {
+  deleteMessage,
+  getDiary,
+  getDiaryMessages,
+  getHistory,
+  getTrace,
+  getTraces,
+  streamChat,
+  streamEvalRun,
+} from "./client";
 
 /** Stub fetch with a JSON body; captures the requested URLs for assertions. */
 function stubJson(body: unknown): string[] {
@@ -133,6 +142,31 @@ describe("deleteMessage", () => {
   it("throws on a non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response));
     await expect(deleteMessage(3)).rejects.toThrow(/delete failed: 500/);
+  });
+});
+
+describe("trace inspection", () => {
+  it("loads the lightweight trace index", async () => {
+    const row = {
+      id: 7,
+      turn: 3,
+      stage: "chat",
+      snippet: "question",
+      has_reasoning: true,
+      has_tool_calls: false,
+    };
+    const urls = stubJson({ traces: [row] });
+
+    await expect(getTraces()).resolves.toEqual([row]);
+    expect(urls[0]).toBe("/inspect/traces?limit=100");
+  });
+
+  it("loads one heavy trace only when requested", async () => {
+    const row = { id: 7, stage: "chat", prompt: "large prompt", output: "large output" };
+    const urls = stubJson({ trace: row });
+
+    await expect(getTrace(7)).resolves.toEqual(row);
+    expect(urls[0]).toBe("/inspect/traces/7");
   });
 });
 

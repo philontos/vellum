@@ -2,7 +2,7 @@
 //   • Rounds      — chat + the facts it triggered, grouped by their shared turn
 //   • Background  — trait/summary/dossier passes, each spanning a turn *range*
 // Pure functions (no React) so they can be unit-tested in isolation.
-import type { Trace } from "../../api/client";
+import type { TraceSummary } from "../../api/client";
 
 const ROUND_STAGES = new Set(["chat", "facts"]);
 // compact is a periodic whole-board fact compaction (facts.py, every N turns) —
@@ -10,17 +10,17 @@ const ROUND_STAGES = new Set(["chat", "facts"]);
 const BG_STAGES = new Set(["trait", "summary", "dossier", "compact"]);
 
 /** One conversation round: its chat call plus the facts extraction(s) it triggered. */
-export type Round = { turn: number | null; chat: Trace | null; facts: Trace[] };
+export type Round = { turn: number | null; chat: TraceSummary | null; facts: TraceSummary[] };
 
 /** A background pass, annotated with the turn range it actually covered. */
-export type Pass = Trace & { from: number | null; to: number | null };
+export type Pass = TraceSummary & { from: number | null; to: number | null };
 
 /**
  * Group chat + facts traces by turn into rounds, newest turn first. Legacy
  * chat traces with no turn (recorded before rounds were anchored) fall into a
  * single trailing `turn: null` bucket so they're never lost.
  */
-export function groupRounds(traces: Trace[]): Round[] {
+export function groupRounds(traces: TraceSummary[]): Round[] {
   const byTurn = new Map<number | null, Round>();
   for (const tr of traces) {
     if (!ROUND_STAGES.has(tr.stage)) continue;
@@ -40,7 +40,7 @@ export function groupRounds(traces: Trace[]): Round[] {
 }
 
 /** The covered turn span of a pass, read from its params JSON. */
-export function parseSpan(trace: Trace): { from: number | null; to: number | null } {
+export function parseSpan(trace: TraceSummary): { from: number | null; to: number | null } {
   if (!trace.params) return { from: null, to: null };
   try {
     const p = JSON.parse(trace.params) as { from?: number; to?: number };
@@ -51,7 +51,7 @@ export function parseSpan(trace: Trace): { from: number | null; to: number | nul
 }
 
 /** trait/summary/dossier passes, newest first, each with its covered span. */
-export function backgroundPasses(traces: Trace[]): Pass[] {
+export function backgroundPasses(traces: TraceSummary[]): Pass[] {
   return traces
     .filter((tr) => BG_STAGES.has(tr.stage))
     .sort((a, b) => b.id - a.id)
@@ -59,18 +59,6 @@ export function backgroundPasses(traces: Trace[]): Pass[] {
 }
 
 /** The last user message inside a chat trace's prompt, for a scannable round title. */
-export function userSnippet(chat: Trace | null): string | null {
-  if (!chat?.prompt) return null;
-  try {
-    const msgs = JSON.parse(chat.prompt) as { role?: string; content?: string }[];
-    if (!Array.isArray(msgs)) return null;
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i]?.role === "user" && typeof msgs[i].content === "string") {
-        return msgs[i].content as string;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
+export function userSnippet(chat: TraceSummary | null): string | null {
+  return chat?.snippet ?? null;
 }
