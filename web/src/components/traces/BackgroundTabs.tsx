@@ -29,7 +29,8 @@ export function BackgroundTabs({
     "trait:regulatory_focus": tr("traces.bgRegulatoryFocus"),
     "trait:unclassified": tr("traces.bgUnclassified"),
     summary: tr("traces.bgSummary"),
-    dossier: tr("traces.bgDossier"),
+    dossier_evidence: tr("traces.bgDossierEvidence"),
+    dossier_render: tr("traces.bgDossierRender"),
     compact: tr("traces.bgCompact"),
   };
 

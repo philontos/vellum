@@ -5,9 +5,13 @@ from fastapi.testclient import TestClient
 
 def test_inspect_model_and_traces(migrated_db):
     from app.main import app
-    from app.store import model, traces
+    from app.store import model, portrait_claims, traces
     model.set_dossier("who you are")
     model.add_fact("allergic to penicillin")
+    portrait_claims.add(
+        claim_type="value", text="Values accuracy.", basis="explicit",
+        evidence=[{"turn": 1, "quote": "be accurate"}], source_turn=1,
+    )
     model.set_trait("ocean", {"O": {"score": 72}}, 1)
     tid = traces.record(turn=1, stage="trait", model="m", params={}, prompt="p",
                         output="o", prompt_tokens=1, completion_tokens=1, duration_ms=1)
@@ -16,6 +20,8 @@ def test_inspect_model_and_traces(migrated_db):
     m = c.get("/inspect/model").json()
     assert m["dossier"] == "who you are"
     assert any(f["text"] == "allergic to penicillin" for f in m["facts"])
+    assert m["portrait_claims"][0]["text"] == "Values accuracy."
+    assert m["portrait_claims"][0]["evidence"][0]["turn"] == 1
     assert m["traits"][0]["dimension"] == "ocean"
     assert "history" in m["traits"][0]
 

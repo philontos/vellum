@@ -14,7 +14,9 @@ const STAGE_DOT: Record<string, string> = {
   compact: "bg-status-pass-fg", // facts-family green; never shares a tab with facts
   trait: "bg-status-info-fg",
   summary: "bg-gold",
-  dossier: "bg-status-warn-fg",
+  dossier: "bg-status-warn-fg", // legacy single-step dossier traces
+  dossier_evidence: "bg-status-info-fg",
+  dossier_render: "bg-status-warn-fg",
 };
 
 /**

@@ -17,7 +17,7 @@ from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
 from app.evaluation import conversation as conversation_eval
 from app.llm.client import resolve_structured_llm_config
-from app.store import model, observability as obs, traces
+from app.store import model, observability as obs, portrait_claims, traces
 from evals.config import eval_gen_config
 from evals.suites import SUITES
 
@@ -38,6 +38,7 @@ def inspect_model():
         # Active only — consolidation retires merged/contradicted facts, and the
         # superseded tail would otherwise grow without bound on this page.
         "facts": model.active_facts(),
+        "portrait_claims": portrait_claims.active(),
         "traits": traits,
     }
 

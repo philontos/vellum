@@ -4,6 +4,7 @@ import { TraitChart } from "../TraitChart";
 import { SectionHeader } from "../ui/SectionHeader";
 import { FactCard } from "./FactCard";
 import type { ModelSection } from "./ModelTabs";
+import { PortraitClaimCard } from "./PortraitClaimCard";
 
 export function ModelSections({
   model,
@@ -18,6 +19,7 @@ export function ModelSections({
 }) {
   const { t } = useT();
   const facts = model.facts.filter((fact) => fact.status === "active");
+  const claims = model.portrait_claims ?? [];
 
   return (
     <>
@@ -36,6 +38,24 @@ export function ModelSections({
         ) : (
           <p className="font-serif text-[17px] text-muted">{t("model.dossierEmpty")}</p>
         )}
+      </section>
+
+      <section
+        id="model-panel-evidence"
+        role="tabpanel"
+        aria-labelledby="model-tab-evidence"
+        hidden={active !== "evidence"}
+        className="max-w-4xl lg:mt-8"
+      >
+        <SectionHeader label={t("model.evidenceTitle")} />
+        <ul className="space-y-2.5">
+          {claims.map((claim) => (
+            <PortraitClaimCard key={claim.id} claim={claim} />
+          ))}
+          {claims.length === 0 && (
+            <li className="text-sm text-muted">{t("model.evidenceEmpty")}</li>
+          )}
+        </ul>
       </section>
 
       <section

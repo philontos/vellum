@@ -40,13 +40,15 @@ describe("groupRounds", () => {
     expect(rounds.map((r) => r.turn)).toEqual([3, 1]);
   });
 
-  it("ignores background stages (trait/summary/dossier/compact)", () => {
+  it("ignores background stages", () => {
     const rounds = groupRounds([
       t({ id: 1, stage: "chat", turn: 1 }),
       t({ id: 2, stage: "trait", turn: 1 }),
       t({ id: 3, stage: "summary", turn: 1 }),
       t({ id: 4, stage: "dossier", turn: 1 }),
       t({ id: 5, stage: "compact", turn: 1 }),
+      t({ id: 6, stage: "dossier_evidence", turn: 1 }),
+      t({ id: 7, stage: "dossier_render", turn: 1 }),
     ]);
     expect(rounds).toHaveLength(1);
     expect(rounds[0].chat?.id).toBe(1);
@@ -73,16 +75,18 @@ describe("groupRounds", () => {
 });
 
 describe("backgroundPasses", () => {
-  it("selects only trait/summary/dossier and parses the covered span", () => {
+  it("selects the background stages and parses the covered span", () => {
     const passes = backgroundPasses([
       t({ id: 1, stage: "chat", turn: 1 }),
       t({ id: 2, stage: "facts", turn: 1 }),
       t({ id: 3, stage: "trait", turn: 14, params: JSON.stringify({ from: 8, to: 14 }) }),
+      t({ id: 4, stage: "dossier_evidence", turn: 14 }),
+      t({ id: 5, stage: "dossier_render", turn: 14 }),
     ]);
-    expect(passes).toHaveLength(1);
-    expect(passes[0].stage).toBe("trait");
-    expect(passes[0].from).toBe(8);
-    expect(passes[0].to).toBe(14);
+    expect(passes).toHaveLength(3);
+    const trait = passes.find((pass) => pass.stage === "trait");
+    expect(trait?.from).toBe(8);
+    expect(trait?.to).toBe(14);
   });
 
   it("orders passes newest-first by id", () => {
@@ -123,6 +127,8 @@ describe("backgroundCategories", () => {
     t({ id: 5, stage: "summary" }),
     t({ id: 4, stage: "dossier" }),
     t({ id: 3, stage: "compact" }),
+    t({ id: 2, stage: "dossier_evidence" }),
+    t({ id: 1, stage: "dossier_render" }),
   ]);
 
   it("provides stable tabs with per-category counts", () => {
@@ -135,12 +141,22 @@ describe("backgroundCategories", () => {
       "trait:schwartz",
       "trait:regulatory_focus",
       "summary",
-      "dossier",
+      "dossier_evidence",
+      "dossier_render",
       "compact",
     ]);
     expect(categories.find((category) => category.key === "trait:ocean")?.count).toBe(2);
     expect(categories.find((category) => category.key === "summary")?.count).toBe(1);
+    expect(categories.find((category) => category.key === "dossier_evidence")?.count).toBe(1);
+    expect(categories.find((category) => category.key === "dossier_render")?.count).toBe(2);
     expect(categories.find((category) => category.key === "trait:schwartz")?.count).toBe(0);
+  });
+
+  it("groups legacy dossier traces into the render category", () => {
+    expect(filterBackgroundPasses(passes, "dossier_render").map((pass) => pass.stage)).toEqual([
+      "dossier",
+      "dossier_render",
+    ]);
   });
 
   it("filters one psychological dimension independently from other tasks", () => {

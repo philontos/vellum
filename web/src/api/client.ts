@@ -104,7 +104,22 @@ export type TraitDim = {
   meta: TraitMeta | null;
 };
 export type Fact = { id: number; text: string; status: string; source_turn: number | null };
-export type ModelView = { dossier: string; facts: Fact[]; traits: TraitDim[] };
+export type PortraitEvidence = { turn: number; quote: string };
+export type PortraitClaim = {
+  id: number;
+  claim_type: "value" | "pattern" | "decision_style" | "current_state" | "self_concept";
+  text: string;
+  basis: "explicit" | "confirmed" | "inferred";
+  evidence: PortraitEvidence[];
+  status: string;
+  source_turn: number | null;
+};
+export type ModelView = {
+  dossier: string;
+  portrait_claims: PortraitClaim[];
+  facts: Fact[];
+  traits: TraitDim[];
+};
 export type TraceMeta = {
   id: number; turn: number | null; stage: string; model: string | null;
   prompt_tokens: number | null;

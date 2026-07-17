@@ -15,7 +15,7 @@ class LegacyAdoptionError(RuntimeError):
 
 _MAIN_TABLES = (
     "messages", "summaries", "vector_refs", "embeddings", "facts",
-    "trait_current", "trait_history",
+    "trait_current", "trait_history", "portrait_claims",
 )
 _OBS_TABLES = ("traces", "eval_runs", "eval_results")
 

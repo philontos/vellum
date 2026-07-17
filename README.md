@@ -235,14 +235,16 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
 
 ## Inspecting your model
 
-- **You** — live dossier, facts, and trait dimensions, with per-dimension
-  history curves as they shift over the conversation.
-- **Traces** — every LLM call (chat + facts/trait/summary/dossier), with the full
-  prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
+- **You** — live dossier, its grounded portrait claims and user citations, facts,
+  and trait dimensions, with per-dimension history curves as they shift over the
+  conversation.
+- **Traces** — every LLM call (chat + facts/trait/summary/dossier evidence/render),
+  with the full prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
   it from rolling pruning; add a note to mark good/bad results while you tune.
 - **Prompts** (owner only) — production chat, memory-modeling, trait, and tool
   prompts; per-Prompt usage guides plus an explicit draft/save/publish workflow
-  with immutable release history.
+  with immutable release history. Dossier evidence extraction and final portrait
+  rendering are independently editable prompts.
 - **Evals** (owner only) — pick one completed conversation turn, replay it with
   its original Prompt, any immutable release, or a named on-the-spot system
   Prompt, and compare the original answer with repeated generations side by side.

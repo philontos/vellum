@@ -114,10 +114,17 @@ def definitions() -> tuple[PromptDefinition, ...]:
             required_fragments=('"summary"', "Match the user's language"),
         ),
         _managed(
-            "memory.dossier", "Dossier rewrite", "Maintains the running user portrait.",
-            "memory", dossier._PROMPT,
-            template_format="format",
-            variables=("cap", "prior", "span"),
+            "memory.dossier.evidence", "Dossier evidence",
+            "Grounds portrait claims in cited user evidence.",
+            "memory", dossier._EVIDENCE_PROMPT,
+            required_fragments=(
+                '"update"', '"retire"', '"add"', "Match the user's language",
+            ),
+        ),
+        _managed(
+            "memory.dossier.render", "Dossier render",
+            "Renders the running portrait from verified claims and facts.",
+            "memory", dossier._RENDER_PROMPT,
             required_fragments=('"dossier"', "Match the user's language"),
         ),
         _managed(
