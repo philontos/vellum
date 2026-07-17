@@ -132,6 +132,9 @@ describe("ConversationEvalView", () => {
     expect(html).toContain("Release v4");
     expect(html).toContain("More direct");
     expect(html).toContain('data-scroll-region="eval-history"');
+    expect(html).toMatch(
+      /data-scroll-region="eval-selected-input"[^>]*class="[^"]*overflow-y-auto[^"]*whitespace-pre-wrap[^"]*break-words/,
+    );
     expect(html).toContain('data-scroll-region="eval-comparison"');
     expect(html).toContain("Run again");
     expect(html).toContain("Load earlier");
@@ -168,5 +171,10 @@ describe("ConversationEvalView", () => {
     expect(html).toContain("Trial prompt");
     expect(html).toContain("Still generating");
     expect(html).toContain("Generating…");
+    expect(html).toContain('data-editor="eval-system-prompt"');
+    expect(html).toContain('rows="14"');
+    expect(html).toContain("Reset to original");
+    expect(html).toContain("This is the complete System Prompt used for this replay");
+    expect(html).toContain("26 characters");
   });
 });
