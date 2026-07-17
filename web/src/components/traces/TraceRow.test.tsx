@@ -20,6 +20,7 @@ describe("TraceRow", () => {
       created_at: "2026-07-17 12:00:00",
       params: null,
       snippet: "question",
+      dimension: null,
       has_reasoning: true,
       has_tool_calls: true,
     };

@@ -117,6 +117,7 @@ export type TraceMeta = {
  * are deliberately absent and fetched only when the row is expanded. */
 export type TraceSummary = TraceMeta & {
   snippet: string | null;
+  dimension: string | null; // trait subtype (ocean/mbti/…); null for other stages or unknown legacy rows
   has_reasoning: boolean;
   has_tool_calls: boolean;
 };
