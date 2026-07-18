@@ -17,7 +17,10 @@ _MAIN_TABLES = (
     "messages", "summaries", "vector_refs", "embeddings", "facts",
     "trait_current", "trait_history", "portrait_claims",
 )
-_OBS_TABLES = ("traces", "eval_runs", "eval_results")
+_OBS_TABLES = (
+    "traces", "eval_runs", "eval_results", "conversation_eval_prompt_versions",
+    "conversation_eval_records", "conversation_eval_runs",
+)
 
 
 def _has_rows(path: Path, tables: tuple[str, ...]) -> bool:

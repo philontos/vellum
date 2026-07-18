@@ -91,7 +91,7 @@ def test_round_detail_exposes_original_and_saved_prompt_versions(migrated_db):
     assert body["round"]["user_content"] == "What should I do?"
     assert body["round"]["original_content"] == "Original answer"
     assert body["original_system_prompt"] == "ORIGINAL SYSTEM"
-    assert body["runs"] == []
+    assert "runs" not in body
 
 
 def test_replay_streams_and_persists_multiple_results_without_chat_writes(
@@ -123,11 +123,14 @@ def test_replay_streams_and_persists_multiple_results_without_chat_writes(
 
     monkeypatch.setattr(conversation.respond, "stream", fake_stream)
     client = TestClient(app)
+    record = client.post(
+        "/inspect/conversation-evals/records",
+        json={"assistant_turn": answer["turn"], "prompt_kind": "original"},
+    ).json()
     for _ in range(2):
         with client.stream(
             "POST",
-            "/inspect/conversation-evals/run",
-            json={"assistant_turn": answer["turn"], "prompt_kind": "original"},
+            f"/inspect/conversation-evals/records/{record['id']}/runs",
         ) as response:
             assert response.status_code == 200
             stream_body = "".join(response.iter_text())
@@ -136,12 +139,12 @@ def test_replay_streams_and_persists_multiple_results_without_chat_writes(
         assert "[DONE]" in stream_body
 
     detail = client.get(
-        f"/inspect/conversation-evals/rounds/{answer['turn']}"
+        f"/inspect/conversation-evals/records/{record['id']}"
     ).json()
     assert len(detail["runs"]) == 2
     assert all(run["output"] == "New answer" for run in detail["runs"])
     assert all(run["status"] == "done" for run in detail["runs"])
-    assert detail["round"]["original_content"] == "Original"
+    assert detail["baseline_output"] == "Original"
     assert memory.max_turn() == max_turn
     assert calls[0][1:] == ("neutral", answer["turn"] - 1)
 
@@ -170,15 +173,18 @@ def test_custom_prompt_version_replaces_system_for_the_replay(migrated_db, monke
         "/inspect/conversation-evals/prompt-versions",
         json={"name": "On-the-spot v1", "content": "MATCH USER LANGUAGE\nCUSTOM"},
     ).json()
-
-    with client.stream(
-        "POST",
-        "/inspect/conversation-evals/run",
+    record = client.post(
+        "/inspect/conversation-evals/records",
         json={
             "assistant_turn": answer["turn"],
             "prompt_kind": "custom",
             "prompt_version_id": version["id"],
         },
+    ).json()
+
+    with client.stream(
+        "POST",
+        f"/inspect/conversation-evals/records/{record['id']}/runs",
     ) as response:
         assert response.status_code == 200
         list(response.iter_text())
@@ -187,7 +193,7 @@ def test_custom_prompt_version_replaces_system_for_the_replay(migrated_db, monke
         "role": "system", "content": "MATCH USER LANGUAGE\nCUSTOM",
     }
     detail = client.get(
-        f"/inspect/conversation-evals/rounds/{answer['turn']}"
+        f"/inspect/conversation-evals/records/{record['id']}"
     ).json()
     assert detail["runs"][0]["prompt_label"] == "On-the-spot v1"
     assert detail["runs"][0]["prompt_kind"] == "custom"

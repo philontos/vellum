@@ -7,7 +7,8 @@ no separate migration runner for this DB. Columns added to an existing table
 (CREATE IF NOT EXISTS can't grow one) are reconciled by `_ensure_columns` on the
 same first-connect path. The `traces` table lives here (the raw trace DAO in
 app.store.traces opens its connection through this module); offline suite runs
-and conversation replay runs are the eval panel's durable records."""
+and standalone conversation-evaluation archives are the eval panel's durable
+records."""
 import json
 from contextlib import contextmanager
 
@@ -72,8 +73,36 @@ CREATE TABLE IF NOT EXISTS conversation_eval_prompt_versions (
   created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS conversation_eval_records (
+  id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_user_turn            INTEGER NOT NULL,
+  source_assistant_turn       INTEGER NOT NULL,
+  stream                      TEXT    NOT NULL,
+  source_created_at           TEXT,
+  source_user_content         TEXT    NOT NULL,
+  baseline_output             TEXT    NOT NULL,
+  baseline_prompt_release_id  INTEGER,
+  baseline_prompt_release_version INTEGER,
+  baseline_prompt_label       TEXT    NOT NULL,
+  baseline_system_prompt      TEXT,
+  baseline_input_json         TEXT,
+  prompt_kind                 TEXT    NOT NULL,
+  prompt_release_id           INTEGER,
+  prompt_release_version      INTEGER,
+  prompt_version_id           INTEGER,
+  prompt_label                TEXT    NOT NULL,
+  system_prompt               TEXT    NOT NULL,
+  input_json                  TEXT    NOT NULL,
+  runtime_snapshot_json       TEXT    NOT NULL,
+  created_at                  TEXT    NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (prompt_version_id) REFERENCES conversation_eval_prompt_versions(id)
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_eval_records_created
+  ON conversation_eval_records(id);
+
 CREATE TABLE IF NOT EXISTS conversation_eval_runs (
   id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  record_id                INTEGER,
   source_user_turn         INTEGER NOT NULL,
   source_assistant_turn    INTEGER NOT NULL,
   stream                   TEXT    NOT NULL,
@@ -119,6 +148,107 @@ def _ensure_columns(conn) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(traces)")}
     if "tool_calls" not in cols:
         conn.execute("ALTER TABLE traces ADD COLUMN tool_calls TEXT")
+    run_cols = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(conversation_eval_runs)")
+    }
+    if "record_id" not in run_cols:
+        conn.execute("ALTER TABLE conversation_eval_runs ADD COLUMN record_id INTEGER")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversation_eval_runs_record "
+        "ON conversation_eval_runs(record_id, id)"
+    )
+
+
+def _valid_json_object(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _baseline_from_trace(conn, assistant_turn: int) -> dict:
+    trace = conn.execute(
+        "SELECT params, prompt FROM traces WHERE eval_run_id IS NULL "
+        "AND stage = 'chat' AND turn = ? ORDER BY id DESC LIMIT 1",
+        (assistant_turn,),
+    ).fetchone()
+    if trace is None:
+        return {
+            "release_id": None, "release_version": None,
+            "label": "Original Prompt", "system_prompt": None, "input_json": None,
+        }
+    params = _valid_json_object(trace["params"])
+    version = params.get("prompt_release_version")
+    label = f"Original · v{version}" if version is not None else "Original Prompt"
+    input_json = trace["prompt"]
+    system = None
+    if input_json:
+        try:
+            messages = json.loads(input_json)
+        except (TypeError, json.JSONDecodeError):
+            messages = None
+        if (
+            isinstance(messages, list) and messages
+            and isinstance(messages[0], dict)
+            and messages[0].get("role") == "system"
+            and isinstance(messages[0].get("content"), str)
+        ):
+            system = messages[0]["content"]
+        else:
+            input_json = None
+    return {
+        "release_id": params.get("prompt_release_id"),
+        "release_version": version,
+        "label": label,
+        "system_prompt": system,
+        "input_json": input_json,
+    }
+
+
+def _backfill_conversation_eval_records(conn) -> None:
+    """Turn pre-archive replay runs into standalone records once, in place."""
+    rows = conn.execute(
+        "SELECT * FROM conversation_eval_runs WHERE record_id IS NULL ORDER BY id"
+    ).fetchall()
+    grouped: dict[tuple, int] = {}
+    for row in rows:
+        key = (
+            row["source_assistant_turn"], row["prompt_kind"],
+            row["prompt_release_id"], row["prompt_version_id"], row["system_prompt"],
+        )
+        record_id = grouped.get(key)
+        if record_id is None:
+            baseline = _baseline_from_trace(conn, row["source_assistant_turn"])
+            cursor = conn.execute(
+                "INSERT INTO conversation_eval_records("
+                "source_user_turn, source_assistant_turn, stream, source_created_at, "
+                "source_user_content, baseline_output, baseline_prompt_release_id, "
+                "baseline_prompt_release_version, baseline_prompt_label, "
+                "baseline_system_prompt, baseline_input_json, prompt_kind, "
+                "prompt_release_id, prompt_release_version, prompt_version_id, "
+                "prompt_label, system_prompt, input_json, runtime_snapshot_json, created_at"
+                ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    row["source_user_turn"], row["source_assistant_turn"], row["stream"],
+                    row["created_at"], row["source_user_content"], row["original_content"],
+                    baseline["release_id"], baseline["release_version"],
+                    baseline["label"], baseline["system_prompt"], baseline["input_json"],
+                    row["prompt_kind"], row["prompt_release_id"],
+                    row["prompt_release_version"], row["prompt_version_id"],
+                    row["prompt_label"], row["system_prompt"], row["input_json"],
+                    "{}", row["created_at"],
+                ),
+            )
+            record_id = cursor.lastrowid
+            grouped[key] = record_id
+        conn.execute(
+            "UPDATE conversation_eval_runs SET record_id = ? WHERE id = ?",
+            (record_id, row["id"]),
+        )
 
 
 def _connect() -> _sqlite.Connection:
@@ -131,6 +261,7 @@ def _connect() -> _sqlite.Connection:
     if key not in _initialized:
         conn.executescript(_SCHEMA)
         _ensure_columns(conn)
+        _backfill_conversation_eval_records(conn)
         conn.commit()
         _initialized.add(key)
     return conn
@@ -240,112 +371,3 @@ def traces_for_run(run_id: int) -> list[dict]:
             "SELECT * FROM traces WHERE eval_run_id = ? ORDER BY id", (run_id,)
         ).fetchall()
     return [dict(r) for r in rows]
-
-
-# --- conversation replay evals --------------------------------------------
-
-def create_conversation_prompt_version(name: str, content: str) -> dict:
-    with get_conn() as conn:
-        cursor = conn.execute(
-            "INSERT INTO conversation_eval_prompt_versions(name, content) "
-            "VALUES (?, ?)",
-            (name, content),
-        )
-        row = conn.execute(
-            "SELECT * FROM conversation_eval_prompt_versions WHERE id = ?",
-            (cursor.lastrowid,),
-        ).fetchone()
-    return dict(row)
-
-
-def list_conversation_prompt_versions() -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM conversation_eval_prompt_versions ORDER BY id DESC"
-        ).fetchall()
-    return [dict(row) for row in rows]
-
-
-def get_conversation_prompt_version(version_id: int) -> dict | None:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM conversation_eval_prompt_versions WHERE id = ?",
-            (version_id,),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def create_conversation_run(record: dict) -> int:
-    fields = (
-        "source_user_turn", "source_assistant_turn", "stream",
-        "source_user_content", "original_content", "prompt_kind",
-        "prompt_release_id", "prompt_release_version", "prompt_version_id",
-        "prompt_label", "system_prompt", "input_json", "model",
-    )
-    with get_conn() as conn:
-        cursor = conn.execute(
-            "INSERT INTO conversation_eval_runs(" + ",".join(fields) + ") "
-            "VALUES (" + ",".join("?" for _ in fields) + ")",
-            tuple(record.get(field) for field in fields),
-        )
-        return cursor.lastrowid
-
-
-def finish_conversation_run(
-    run_id: int, *, output: str, reasoning: str | None,
-    tool_calls: list[dict] | None, prompt_tokens: int | None,
-    completion_tokens: int | None, duration_ms: int | None,
-) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE conversation_eval_runs SET status = 'done', output = ?, "
-            "reasoning = ?, tool_calls_json = ?, prompt_tokens = ?, "
-            "completion_tokens = ?, duration_ms = ?, error = NULL, "
-            "finished_at = datetime('now') WHERE id = ?",
-            (
-                output, reasoning,
-                json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None,
-                prompt_tokens, completion_tokens, duration_ms, run_id,
-            ),
-        )
-
-
-def fail_conversation_run(run_id: int, error: str) -> None:
-    with get_conn() as conn:
-        conn.execute(
-            "UPDATE conversation_eval_runs SET status = 'error', error = ?, "
-            "finished_at = datetime('now') WHERE id = ?",
-            (error, run_id),
-        )
-
-
-def _conversation_run_row(row: _sqlite.Row) -> dict:
-    item = dict(row)
-    raw_tools = item.pop("tool_calls_json")
-    item["tool_calls"] = json.loads(raw_tools) if raw_tools else None
-    # The exact system/input snapshot remains durable for reproducibility, but
-    # comparison cards do not need to transfer it on every refresh.
-    item.pop("system_prompt", None)
-    item.pop("input_json", None)
-    item.pop("source_user_content", None)
-    item.pop("original_content", None)
-    item.pop("reasoning", None)
-    return item
-
-
-def get_conversation_run(run_id: int) -> dict | None:
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM conversation_eval_runs WHERE id = ?", (run_id,)
-        ).fetchone()
-    return _conversation_run_row(row) if row else None
-
-
-def conversation_runs_for_turn(assistant_turn: int) -> list[dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM conversation_eval_runs "
-            "WHERE source_assistant_turn = ? ORDER BY id DESC",
-            (assistant_turn,),
-        ).fetchall()
-    return [_conversation_run_row(row) for row in rows]

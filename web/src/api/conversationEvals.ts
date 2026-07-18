@@ -31,6 +31,7 @@ export type ConversationPromptVersion = {
 
 export type ConversationEvalRun = {
   id: number;
+  record_id: number | null;
   source_user_turn: number;
   source_assistant_turn: number;
   stream: string;
@@ -60,7 +61,47 @@ export type ConversationEvalWorkspace = {
 export type ConversationEvalRoundDetail = {
   round: ConversationEvalRound;
   original_system_prompt: string | null;
+};
+
+export type ConversationPromptMessage = {
+  role: string;
+  content: string;
+  name?: string;
+};
+
+export type ConversationEvalRecordSummary = {
+  id: number;
+  source_user_turn: number;
+  source_assistant_turn: number;
+  stream: string;
+  source_user_content: string;
+  baseline_output: string;
+  baseline_prompt_label: string;
+  prompt_kind: "original" | "release" | "custom";
+  prompt_release_id: number | null;
+  prompt_release_version: number | null;
+  prompt_version_id: number | null;
+  prompt_label: string;
+  run_count: number;
+  latest_status: ConversationEvalRun["status"] | null;
+  latest_output: string | null;
+  created_at: string;
+};
+
+export type ConversationEvalRecordDetail = ConversationEvalRecordSummary & {
+  source_created_at: string | null;
+  baseline_prompt_release_id: number | null;
+  baseline_prompt_release_version: number | null;
+  baseline_system_prompt: string | null;
+  baseline_input: ConversationPromptMessage[] | null;
+  system_prompt: string;
+  input: ConversationPromptMessage[];
   runs: ConversationEvalRun[];
+};
+
+export type ConversationEvalRecordPage = {
+  records: ConversationEvalRecordSummary[];
+  has_more: boolean;
 };
 
 export type ConversationEvalRunRequest = {
@@ -100,6 +141,41 @@ export async function getConversationEvalRound(
     { cache: "no-store" },
   );
   if (!response.ok) throw await responseError(response, "load conversation round");
+  return response.json();
+}
+
+export async function getConversationEvalRecords(
+  opts: { limit?: number; before?: number } = {},
+): Promise<ConversationEvalRecordPage> {
+  const query = new URLSearchParams({ limit: String(opts.limit ?? 50) });
+  if (opts.before !== undefined) query.set("before", String(opts.before));
+  const response = await fetch(`/inspect/conversation-evals/records?${query}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) throw await responseError(response, "load evaluation archives");
+  return response.json();
+}
+
+export async function getConversationEvalRecord(
+  recordId: number,
+): Promise<ConversationEvalRecordDetail> {
+  const response = await fetch(
+    `/inspect/conversation-evals/records/${recordId}`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) throw await responseError(response, "load evaluation archive");
+  return response.json();
+}
+
+export async function createConversationEvalRecord(
+  request: ConversationEvalRunRequest,
+): Promise<ConversationEvalRecordDetail> {
+  const response = await fetch("/inspect/conversation-evals/records", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw await responseError(response, "create evaluation archive");
   return response.json();
 }
 
@@ -143,16 +219,19 @@ function parseFrame(frame: string): {
   return null;
 }
 
-export async function streamConversationEvalRun(
-  request: ConversationEvalRunRequest,
+async function streamConversationEvalAt(
+  url: string,
+  request: ConversationEvalRunRequest | null,
   handlers: RunHandlers,
   opts: { idleTimeoutMs?: number } = {},
 ): Promise<void> {
   const controller = new AbortController();
-  const response = await fetch("/inspect/conversation-evals/run", {
+  const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
+    ...(request ? {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    } : {}),
     signal: controller.signal,
   });
   if (!response.ok || !response.body) {
@@ -199,4 +278,24 @@ export async function streamConversationEvalRun(
   } finally {
     controller.abort();
   }
+}
+
+export async function streamConversationEvalRun(
+  request: ConversationEvalRunRequest,
+  handlers: RunHandlers,
+  opts: { idleTimeoutMs?: number } = {},
+): Promise<void> {
+  return streamConversationEvalAt(
+    "/inspect/conversation-evals/run", request, handlers, opts,
+  );
+}
+
+export async function streamConversationEvalRecordRun(
+  recordId: number,
+  handlers: RunHandlers,
+  opts: { idleTimeoutMs?: number } = {},
+): Promise<void> {
+  return streamConversationEvalAt(
+    `/inspect/conversation-evals/records/${recordId}/runs`, null, handlers, opts,
+  );
 }

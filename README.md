@@ -245,8 +245,10 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   prompts; per-Prompt usage guides plus an explicit draft/save/publish workflow
   with immutable release history. Dossier evidence extraction and final portrait
   rendering are independently editable prompts.
-- **Evals** (owner only) — pick one completed conversation turn, replay it with
-  its original Prompt, any immutable release, or a named on-the-spot system
-  Prompt, and compare the original answer with repeated generations side by side.
-  Replays are stored in the per-account observability database and never append to
-  conversation history or trigger background modeling.
+- **Evals** (owner only) — fork any completed conversation turn into an independent
+  evaluation archive using its original Prompt, an immutable release, or a named
+  on-the-spot system Prompt. Each archive freezes the source, baseline Prompt,
+  evaluated Prompt, and complete model inputs; its detail view shows a line diff
+  plus every repeated result side by side. Archives live in the per-account
+  observability database, remain available independently of conversation history,
+  and never append chat messages or trigger background modeling.
