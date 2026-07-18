@@ -17,6 +17,10 @@ class UnknownCandidateError(CandidateAdminError):
     pass
 
 
+class UnknownScenarioError(CandidateAdminError):
+    pass
+
+
 class CandidateValidationError(CandidateAdminError):
     pass
 
@@ -57,7 +61,10 @@ def _full_config(candidate_id: str, raw: dict[str, str]) -> dict[str, str]:
     api_key = (raw.get("api_key") or "").strip()
     if not api_key:
         stored = candidate_store.get_config(candidate_id)
-        api_key = stored["api_key"] if stored is not None else ""
+        if stored is not None:
+            api_key = stored["api_key"]
+        else:
+            api_key = candidates.environment_config(candidate_id)["api_key"]
     if not api_key:
         raise CandidateAdminError("API key is required for the first validation.")
     if len(api_key) > 8192:
@@ -138,7 +145,9 @@ def _public_candidate(definition: dict[str, str]) -> dict:
         ),
         "source": source,
         "has_saved_key": stored is not None and bool(stored["api_key"]),
+        "has_api_key": bool(config["api_key"]),
         "verified_at": stored["verified_at"] if stored is not None else None,
+        "editable": True,
     }
 
 
@@ -147,8 +156,41 @@ def workspace() -> dict:
         "candidates": [
             _public_candidate(definition)
             for definition in candidates.manageable_candidates()
-        ]
+        ],
+        "routes": [
+            candidates.route_for_scenario(scenario)
+            for scenario in candidates.MODEL_SCENARIOS
+        ],
     }
+
+
+def reveal_api_key(candidate_id: str, actor_user_id: str | None) -> str:
+    normalized_id = _definition(candidate_id)["id"]
+    api_key = candidates.resolve(normalized_id)["api_key"]
+    if not api_key:
+        raise CandidateAdminError("This model integration has no API key configured.")
+    candidate_store.record_key_reveal(normalized_id, actor_user_id)
+    return api_key
+
+
+def save_route(
+    scenario: str,
+    candidate_id: str,
+    actor_user_id: str | None,
+) -> dict[str, str]:
+    normalized_scenario = (scenario or "").strip().lower()
+    if normalized_scenario not in candidates.MODEL_SCENARIOS:
+        raise UnknownScenarioError(f"Unknown model scenario {scenario!r}")
+    normalized_id = _definition(candidate_id)["id"]
+    config = candidates.resolve(normalized_id)
+    if not all(config.values()):
+        raise CandidateAdminError(
+            "Configure and validate this model before selecting it for a scenario."
+        )
+    candidate_store.save_route(
+        normalized_scenario, normalized_id, actor_user_id,
+    )
+    return candidates.route_for_scenario(normalized_scenario)
 
 
 async def validate(

@@ -47,6 +47,9 @@ def workspace(limit: int = 50, before: int | None = None) -> dict:
         "releases": prompt_service.list_releases(),
         "prompt_versions": eval_store.list_prompt_versions(),
         "model_candidates": candidates.public_candidates(),
+        "default_model_candidate": candidates.route_for_scenario(
+            "evaluation"
+        )["candidate_id"],
         "has_more": len(rows) > limit,
     }
 
@@ -85,7 +88,7 @@ def start_run(
     prepared: PreparedReplay, *, record_id: int | None = None,
     llm_config: dict[str, str] | None = None,
 ) -> dict:
-    config = llm_config or llm.resolve_structured_llm_config()
+    config = llm_config or llm.resolve_structured_llm_config(stage="eval")
     model_name = config.get("model") or None
     run_id = eval_store.create_run({
         "record_id": record_id,
@@ -112,7 +115,7 @@ async def run_events(
 ):
     final: dict | None = None
     try:
-        config = llm_config or llm.resolve_structured_llm_config()
+        config = llm_config or llm.resolve_structured_llm_config(stage="eval")
         with llm.use_llm_config(config), runtime.use_snapshot(prepared.snapshot):
             async for event in respond.stream(
                 prepared.messages,

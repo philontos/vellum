@@ -8,13 +8,14 @@ import type {
   ConversationEvalWorkspace,
 } from "../api/conversationEvals";
 import { I18nProvider } from "../i18n";
-import { ConversationEvalView } from "./EvalPanel";
+import { ConversationEvalView, defaultModelCandidate } from "./EvalPanel";
 import { ConversationEvalArchiveList } from "./evals/ConversationEvalArchiveList";
 import { ConversationEvalRecordView } from "./evals/ConversationEvalRecordView";
 
 const WORKSPACE: ConversationEvalWorkspace = {
+  default_model_candidate: "glm",
   model_candidates: [
-    { id: "primary", name: "Current model", model: "model-a", configured: true },
+    { id: "primary", name: "Primary model", model: "model-a", configured: true },
     { id: "glm", name: "GLM", model: "glm-5.2", configured: true },
     { id: "kimi", name: "Kimi K3", model: "kimi-k3", configured: false },
   ],
@@ -120,6 +121,10 @@ const SUMMARY: ConversationEvalRecordSummary = {
 };
 
 describe("conversation evaluation views", () => {
+  it("uses the evaluation scenario route as the initial candidate", () => {
+    expect(defaultModelCandidate(WORKSPACE)).toBe("glm");
+  });
+
   it("keeps the historical source picker focused on starting an archive", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>

@@ -17,7 +17,8 @@ import asyncio
 import json
 import sys
 
-from app.llm.client import capture_llm_calls
+from app.llm import candidates
+from app.llm.client import capture_llm_calls, use_llm_config
 from app.prompts import runtime
 from app.store import db, vectors
 from evals import suites as S
@@ -61,7 +62,8 @@ async def _run_one(suite: S.Suite, case, seq: int) -> dict:
     # affect the next case, never split this case across two Prompt releases.
     with runtime.use_snapshot() as snapshot:
         try:
-            with capture_llm_calls(calls):
+            llm_config = candidates.resolve_for_scenario("evaluation")
+            with capture_llm_calls(calls), use_llm_config(llm_config):
                 if suite.needs_scratch:
                     with db.memory_scratch(
                         f"eval_{suite.key}_{seq}"

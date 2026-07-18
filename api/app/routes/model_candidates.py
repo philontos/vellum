@@ -1,5 +1,6 @@
 """Owner-only model credential validation and persistence endpoints."""
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.auth.dependencies import require_owner
@@ -7,6 +8,7 @@ from app.llm import candidate_service, candidate_store
 
 
 router = APIRouter(prefix="/admin/model-candidates")
+route_router = APIRouter(prefix="/admin/model-routes")
 
 
 class CandidateConfigIn(BaseModel):
@@ -19,12 +21,22 @@ class CandidateSaveIn(CandidateConfigIn):
     validation_token: str
 
 
+class ModelRouteIn(BaseModel):
+    candidate_id: str
+
+
 def _actor(owner: dict | None) -> str | None:
     return owner["id"] if owner is not None else None
 
 
 def _translate(exc: Exception):
-    if isinstance(exc, candidate_service.UnknownCandidateError):
+    if isinstance(
+        exc,
+        (
+            candidate_service.UnknownCandidateError,
+            candidate_service.UnknownScenarioError,
+        ),
+    ):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if isinstance(
         exc,
@@ -40,6 +52,21 @@ def _translate(exc: Exception):
 @router.get("")
 def get_workspace(owner: dict | None = Depends(require_owner)):
     return candidate_service.workspace()
+
+
+@router.get("/{candidate_id}/api-key")
+def reveal_candidate_api_key(
+    candidate_id: str,
+    owner: dict | None = Depends(require_owner),
+):
+    try:
+        api_key = candidate_service.reveal_api_key(candidate_id, _actor(owner))
+        return JSONResponse(
+            {"api_key": api_key},
+            headers={"Cache-Control": "no-store"},
+        )
+    except Exception as exc:
+        return _translate(exc)
 
 
 @router.post("/{candidate_id}/validate")
@@ -67,6 +94,20 @@ def save_candidate(
         token = values.pop("validation_token")
         return candidate_service.save(
             candidate_id, values, token, _actor(owner),
+        )
+    except Exception as exc:
+        return _translate(exc)
+
+
+@route_router.put("/{scenario}")
+def save_model_route(
+    scenario: str,
+    body: ModelRouteIn,
+    owner: dict | None = Depends(require_owner),
+):
+    try:
+        return candidate_service.save_route(
+            scenario, body.candidate_id, _actor(owner),
         )
     except Exception as exc:
         return _translate(exc)

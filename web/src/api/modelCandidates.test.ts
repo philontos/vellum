@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   getModelCandidates,
+  revealModelCandidateApiKey,
   saveModelCandidate,
+  saveModelRoute,
   validateModelCandidate,
 } from "./modelCandidates";
 
@@ -60,5 +62,31 @@ describe("model candidate admin API", () => {
         body: JSON.stringify({ ...config, validation_token: "ticket" }),
       },
     );
+  });
+
+  it("retrieves a key only through the explicit owner reveal request", async () => {
+    fetchMock.mockResolvedValue(ok({ api_key: "revealed-secret" }));
+
+    expect(await revealModelCandidateApiKey("primary")).toBe("revealed-secret");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/admin/model-candidates/primary/api-key",
+      { cache: "no-store" },
+    );
+  });
+
+  it("saves one scenario route without changing the others", async () => {
+    const route = {
+      scenario: "background" as const,
+      candidate_id: "glm",
+      source: "stored" as const,
+    };
+    fetchMock.mockResolvedValue(ok(route));
+
+    expect(await saveModelRoute("background", "glm")).toEqual(route);
+    expect(fetchMock).toHaveBeenCalledWith("/admin/model-routes/background", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidate_id: "glm" }),
+    });
   });
 });

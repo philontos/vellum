@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 
 import {
   getModelCandidates,
+  revealModelCandidateApiKey,
   saveModelCandidate,
+  saveModelRoute,
   validateModelCandidate,
   type ManagedModelCandidate,
   type ModelCandidateDraft,
   type ModelCandidateWorkspace,
+  type ModelScenario,
 } from "../api/modelCandidates";
 import { useT } from "../i18n";
+import { ModelRouteSettings } from "./models/ModelRouteSettings";
 
 
-type CandidateBusy = "validate" | "save" | null;
+type CandidateBusy = "reveal" | "validate" | "save" | null;
 type ValidationState = { token: string; fingerprint: string };
 
 
@@ -41,6 +45,9 @@ export function ModelCandidatesPanel() {
   const [validations, setValidations] = useState<Record<string, ValidationState>>({});
   const [busy, setBusy] = useState<Record<string, CandidateBusy>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [apiKeyVisible, setApiKeyVisible] = useState<Record<string, boolean>>({});
+  const [busyScenario, setBusyScenario] = useState<ModelScenario | null>(null);
+  const [routeError, setRouteError] = useState("");
   const [loadError, setLoadError] = useState("");
 
   function install(next: ModelCandidateWorkspace) {
@@ -72,6 +79,50 @@ export function ModelCandidatesPanel() {
       return updated;
     });
     setErrors((current) => ({ ...current, [candidateId]: "" }));
+  }
+
+  async function toggleApiKey(candidateId: string) {
+    if (apiKeyVisible[candidateId]) {
+      setApiKeyVisible((current) => ({ ...current, [candidateId]: false }));
+      return;
+    }
+    const candidate = workspace?.candidates.find((item) => item.id === candidateId);
+    const draft = drafts[candidateId];
+    if (!candidate || !draft || busy[candidateId]) return;
+    if (draft.api_key || !candidate.has_api_key) {
+      setApiKeyVisible((current) => ({ ...current, [candidateId]: true }));
+      return;
+    }
+    setBusy((current) => ({ ...current, [candidateId]: "reveal" }));
+    setErrors((current) => ({ ...current, [candidateId]: "" }));
+    try {
+      const apiKey = await revealModelCandidateApiKey(candidateId);
+      changeDraft(candidateId, { ...draft, api_key: apiKey });
+      setApiKeyVisible((current) => ({ ...current, [candidateId]: true }));
+    } catch (error) {
+      setErrors((current) => ({ ...current, [candidateId]: message(error) }));
+    } finally {
+      setBusy((current) => ({ ...current, [candidateId]: null }));
+    }
+  }
+
+  async function changeRoute(scenario: ModelScenario, candidateId: string) {
+    if (!workspace || busyScenario) return;
+    setBusyScenario(scenario);
+    setRouteError("");
+    try {
+      const saved = await saveModelRoute(scenario, candidateId);
+      setWorkspace((current) => current ? {
+        ...current,
+        routes: current.routes.map(
+          (route) => route.scenario === scenario ? saved : route,
+        ),
+      } : current);
+    } catch (error) {
+      setRouteError(message(error));
+    } finally {
+      setBusyScenario(null);
+    }
   }
 
   async function validate(candidateId: string) {
@@ -116,11 +167,12 @@ export function ModelCandidatesPanel() {
       const saved = await saveModelCandidate(
         candidateId, draft, validation.token,
       );
-      setWorkspace({
-        candidates: workspace.candidates.map(
+      setWorkspace((current) => current ? {
+        ...current,
+        candidates: current.candidates.map(
           (candidate) => candidate.id === candidateId ? saved : candidate,
         ),
-      });
+      } : current);
       setDrafts((current) => ({
         ...current,
         [candidateId]: initialDraft(saved),
@@ -130,6 +182,7 @@ export function ModelCandidatesPanel() {
         delete next[candidateId];
         return next;
       });
+      setApiKeyVisible((current) => ({ ...current, [candidateId]: false }));
     } catch (error) {
       setErrors((current) => ({ ...current, [candidateId]: message(error) }));
     } finally {
@@ -151,6 +204,15 @@ export function ModelCandidatesPanel() {
         <h2 className="font-serif text-2xl text-ink">{t("models.title")}</h2>
         <p className="mt-1 max-w-3xl text-sm text-muted">{t("models.subtitle")}</p>
       </header>
+      <ModelRouteSettings
+        candidates={workspace.candidates}
+        routes={workspace.routes}
+        busyScenario={busyScenario}
+        error={routeError}
+        onChange={(scenario, candidateId) => {
+          void changeRoute(scenario, candidateId);
+        }}
+      />
       <div className="grid gap-4 p-5 xl:grid-cols-2">
         {workspace.candidates.map((candidate) => (
           <ModelCandidateEditor
@@ -160,7 +222,9 @@ export function ModelCandidatesPanel() {
             validationFingerprint={validations[candidate.id]?.fingerprint ?? ""}
             busy={busy[candidate.id] ?? null}
             error={errors[candidate.id] ?? ""}
+            apiKeyVisible={apiKeyVisible[candidate.id] ?? false}
             onDraftChange={(draft) => changeDraft(candidate.id, draft)}
+            onApiKeyVisibilityChange={() => void toggleApiKey(candidate.id)}
             onValidate={() => void validate(candidate.id)}
             onSave={() => void save(candidate.id)}
           />
@@ -177,7 +241,9 @@ export function ModelCandidateEditor({
   validationFingerprint,
   busy,
   error,
+  apiKeyVisible,
   onDraftChange,
+  onApiKeyVisibilityChange,
   onValidate,
   onSave,
 }: {
@@ -186,7 +252,9 @@ export function ModelCandidateEditor({
   validationFingerprint: string;
   busy: CandidateBusy;
   error: string;
+  apiKeyVisible: boolean;
   onDraftChange: (draft: ModelCandidateDraft) => void;
+  onApiKeyVisibilityChange: () => void;
   onValidate: () => void;
   onSave: () => void;
 }) {
@@ -195,9 +263,13 @@ export function ModelCandidateEditor({
     validationFingerprint !== ""
     && validationFingerprint === candidateDraftFingerprint(draft)
   );
-  const hasKey = Boolean(draft.api_key.trim() || candidate.has_saved_key);
+  const hasKey = Boolean(draft.api_key.trim() || candidate.has_api_key);
   const canValidate = Boolean(
-    draft.base_url.trim() && draft.model.trim() && hasKey && !busy,
+    candidate.editable
+    && draft.base_url.trim()
+    && draft.model.trim()
+    && hasKey
+    && !busy,
   );
   const sourceLabel = candidate.source === "stored"
     ? t("models.sourceStored")
@@ -230,7 +302,7 @@ export function ModelCandidateEditor({
           <input
             type="url"
             value={draft.base_url}
-            disabled={busy !== null}
+            disabled={!candidate.editable || busy !== null}
             onChange={(event) => onDraftChange({
               ...draft, base_url: event.target.value,
             })}
@@ -244,31 +316,45 @@ export function ModelCandidateEditor({
           <input
             type="text"
             value={draft.model}
-            disabled={busy !== null}
+            disabled={!candidate.editable || busy !== null}
             onChange={(event) => onDraftChange({
               ...draft, model: event.target.value,
             })}
             className="min-h-10 w-full rounded-lg border border-line bg-well px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
           />
         </label>
-        <label className="block text-sm text-ink-soft">
-          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
+        <div className="block text-sm text-ink-soft">
+          <label
+            htmlFor={`model-api-key-${candidate.id}`}
+            className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted"
+          >
             {t("models.apiKey")}
-          </span>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={draft.api_key}
-            placeholder={candidate.has_saved_key
-              ? t("models.keepSavedKey")
-              : t("models.enterApiKey")}
-            disabled={busy !== null}
-            onChange={(event) => onDraftChange({
-              ...draft, api_key: event.target.value,
-            })}
-            className="min-h-10 w-full rounded-lg border border-line bg-well px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
-          />
-        </label>
+          </label>
+          <div className="flex gap-2">
+            <input
+              id={`model-api-key-${candidate.id}`}
+              type={apiKeyVisible ? "text" : "password"}
+              autoComplete="new-password"
+              value={draft.api_key}
+              placeholder={candidate.has_api_key
+                ? t("models.keepSavedKey")
+                : t("models.enterApiKey")}
+              disabled={!candidate.editable || busy !== null}
+              onChange={(event) => onDraftChange({
+                ...draft, api_key: event.target.value,
+              })}
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-line bg-well px-3 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/20"
+            />
+            <button
+              type="button"
+              disabled={!candidate.editable || busy !== null}
+              onClick={onApiKeyVisibilityChange}
+              className="min-h-10 rounded-lg border border-line bg-well px-3 text-sm text-ink-soft disabled:opacity-50"
+            >
+              {apiKeyVisible ? t("models.hideApiKey") : t("models.showApiKey")}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 min-h-5 text-xs">
@@ -292,7 +378,7 @@ export function ModelCandidateEditor({
         >{busy === "validate" ? t("models.validating") : t("models.validate")}</button>
         <button
           type="button"
-          disabled={!exactDraftValidated || busy !== null}
+          disabled={!candidate.editable || !exactDraftValidated || busy !== null}
           onClick={onSave}
           className="min-h-10 rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg disabled:bg-well disabled:text-muted"
         >{busy === "save" ? t("models.saving") : t("models.save")}</button>

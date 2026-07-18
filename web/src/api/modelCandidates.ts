@@ -8,11 +8,22 @@ export type ManagedModelCandidate = {
   configured: boolean;
   source: ModelCandidateSource;
   has_saved_key: boolean;
+  has_api_key: boolean;
   verified_at: string | null;
+  editable: boolean;
+};
+
+export type ModelScenario = "chat" | "background" | "evaluation";
+
+export type ModelRoute = {
+  scenario: ModelScenario;
+  candidate_id: string;
+  source: "stored" | "environment";
 };
 
 export type ModelCandidateWorkspace = {
   candidates: ManagedModelCandidate[];
+  routes: ModelRoute[];
 };
 
 export type ModelCandidateDraft = {
@@ -75,4 +86,31 @@ export async function saveModelCandidate(
   );
   if (!response.ok) throw await responseError(response, "save model candidate");
   return response.json() as Promise<ManagedModelCandidate>;
+}
+
+export async function revealModelCandidateApiKey(
+  candidateId: string,
+): Promise<string> {
+  const response = await fetch(
+    `/admin/model-candidates/${encodeURIComponent(candidateId)}/api-key`,
+    { cache: "no-store" },
+  );
+  if (!response.ok) throw await responseError(response, "reveal model API key");
+  const body = await response.json() as { api_key?: unknown };
+  if (typeof body.api_key !== "string") {
+    throw new Error("reveal model API key failed: invalid response");
+  }
+  return body.api_key;
+}
+
+export async function saveModelRoute(
+  scenario: ModelScenario,
+  candidateId: string,
+): Promise<ModelRoute> {
+  const response = await fetch(
+    `/admin/model-routes/${encodeURIComponent(scenario)}`,
+    jsonRequest("PUT", { candidate_id: candidateId }),
+  );
+  if (!response.ok) throw await responseError(response, "save model route");
+  return response.json() as Promise<ModelRoute>;
 }

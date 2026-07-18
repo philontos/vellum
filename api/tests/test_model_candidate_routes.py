@@ -22,6 +22,47 @@ def _payload(**overrides) -> dict:
     }
 
 
+def test_admin_workspace_lists_the_primary_model_without_eagerly_exposing_its_key(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "deepseek-server-secret")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+
+    response = _client().get("/admin/model-candidates")
+
+    assert response.status_code == 200
+    assert "deepseek-server-secret" not in response.text
+    items = response.json()["candidates"]
+    assert [item["id"] for item in items] == ["primary", "glm", "kimi"]
+    assert items[0] == {
+        "id": "primary",
+        "name": "Primary model",
+        "base_url": "https://api.deepseek.com",
+        "model": "deepseek-chat",
+        "configured": True,
+        "source": "environment",
+        "has_saved_key": False,
+        "has_api_key": True,
+        "verified_at": None,
+        "editable": True,
+    }
+
+    revealed = _client().get("/admin/model-candidates/primary/api-key")
+    assert revealed.status_code == 200
+    assert revealed.json() == {"api_key": "deepseek-server-secret"}
+    assert revealed.headers["cache-control"] == "no-store"
+    with get_conn() as conn:
+        audit = conn.execute(
+            "SELECT action, candidate_id FROM model_candidate_audit_events "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert dict(audit) == {
+        "action": "key_revealed",
+        "candidate_id": "primary",
+    }
+
+
 def test_candidate_admin_api_is_owner_only(tmp_path, monkeypatch):
     monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("VELLUM_AUTH_ENABLED", "1")
@@ -44,6 +85,9 @@ def test_candidate_admin_api_is_owner_only(tmp_path, monkeypatch):
 
     assert owner.get("/admin/model-candidates").status_code == 200
     assert member.get("/admin/model-candidates").status_code == 403
+    assert member.get(
+        "/admin/model-candidates/primary/api-key"
+    ).status_code == 403
     assert member.post(
         "/admin/model-candidates/glm/validate", json=_payload(),
     ).status_code == 403
@@ -51,6 +95,97 @@ def test_candidate_admin_api_is_owner_only(tmp_path, monkeypatch):
         "/admin/model-candidates/glm",
         json={**_payload(), "validation_token": "not-a-ticket"},
     ).status_code == 403
+    assert member.put(
+        "/admin/model-routes/chat", json={"candidate_id": "glm"},
+    ).status_code == 403
+
+
+def test_primary_model_can_be_validated_and_saved_over_its_environment_fallback(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "old-deepseek-key")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+    seen = []
+
+    async def accept(candidate_id: str, config: dict[str, str]) -> None:
+        seen.append((candidate_id, config))
+
+    monkeypatch.setattr(candidate_service, "_probe_candidate", accept)
+    payload = {
+        "base_url": "https://deepseek-proxy.example/v1",
+        "api_key": "new-deepseek-key",
+        "model": "deepseek-reasoner",
+    }
+    client = _client()
+
+    checked = client.post(
+        "/admin/model-candidates/primary/validate", json=payload,
+    )
+    saved = client.put(
+        "/admin/model-candidates/primary",
+        json={**payload, "validation_token": checked.json()["validation_token"]},
+    )
+
+    assert checked.status_code == 200
+    assert saved.status_code == 200
+    assert seen == [("primary", payload)]
+    assert saved.json()["source"] == "stored"
+    assert candidates.resolve("primary") == {
+        "base_url": "https://deepseek-proxy.example/v1",
+        "api_key": "new-deepseek-key",
+        "model": "deepseek-reasoner",
+    }
+
+
+def test_owner_can_route_chat_background_and_evaluation_independently(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setenv("LLM_API_KEY", "deepseek-key")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-chat")
+    monkeypatch.setenv("GLM_API_KEY", "glm-key")
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+    client = _client()
+
+    initial = client.get("/admin/model-candidates").json()
+    assert initial["routes"] == [
+        {"scenario": "chat", "candidate_id": "primary", "source": "environment"},
+        {
+            "scenario": "background",
+            "candidate_id": "primary",
+            "source": "environment",
+        },
+        {
+            "scenario": "evaluation",
+            "candidate_id": "primary",
+            "source": "environment",
+        },
+    ]
+
+    assert client.put(
+        "/admin/model-routes/chat", json={"candidate_id": "kimi"},
+    ).status_code == 200
+    assert client.put(
+        "/admin/model-routes/background", json={"candidate_id": "glm"},
+    ).status_code == 200
+    assert client.put(
+        "/admin/model-routes/evaluation", json={"candidate_id": "primary"},
+    ).status_code == 200
+
+    assert candidates.resolve_for_scenario("chat")["model"] == "kimi-k3"
+    assert candidates.resolve_for_scenario("background")["model"] == "glm-5.2"
+    assert candidates.resolve_for_scenario("evaluation")["model"] == "deepseek-chat"
+    assert resolve_structured_llm_config(stage="chat")["model"] == "kimi-k3"
+    assert resolve_structured_llm_config(stage="facts")["model"] == "glm-5.2"
+    assert resolve_structured_llm_config(stage="eval")["model"] == "deepseek-chat"
+    routed = client.get("/admin/model-candidates").json()["routes"]
+    assert [route["source"] for route in routed] == ["stored", "stored", "stored"]
+
+    missing = client.put(
+        "/admin/model-routes/not-a-scenario", json={"candidate_id": "glm"},
+    )
+    assert missing.status_code == 404
 
 
 def test_validation_must_succeed_before_exact_config_can_be_saved(

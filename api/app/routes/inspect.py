@@ -98,11 +98,17 @@ class ConversationReplayIn(BaseModel):
     prompt_kind: Literal["original", "release", "custom"]
     prompt_release_id: int | None = None
     prompt_version_id: int | None = None
-    model_candidate: str = "primary"
+    model_candidate: str | None = None
 
 
 class ConversationModelCandidateIn(BaseModel):
-    model_candidate: str = "primary"
+    model_candidate: str | None = None
+
+
+def _conversation_model_config(candidate_id: str | None) -> dict[str, str]:
+    if candidate_id:
+        return model_candidates.resolve(candidate_id)
+    return model_candidates.resolve_for_scenario("evaluation")
 
 
 def _conversation_eval_error(exc: Exception):
@@ -190,7 +196,7 @@ async def run_conversation_eval(
     _owner: dict | None = Depends(require_owner),
 ):
     try:
-        llm_config = model_candidates.resolve(body.model_candidate)
+        llm_config = _conversation_model_config(body.model_candidate)
         record = await conversation_archive.create_record(
             body.assistant_turn,
             body.prompt_kind,
@@ -214,8 +220,8 @@ async def run_conversation_eval_record(
     _owner: dict | None = Depends(require_owner),
 ):
     try:
-        llm_config = model_candidates.resolve(
-            body.model_candidate if body is not None else "primary"
+        llm_config = _conversation_model_config(
+            body.model_candidate if body is not None else None
         )
         prepared = conversation_archive.prepared_for_record(record_id)
         run = conversation_eval.start_run(
@@ -297,7 +303,7 @@ async def run_eval(suite: str, _owner: dict | None = Depends(require_owner)):
             {"error": f"unknown suite {suite!r}; choose from {', '.join(SUITES)}"},
             status_code=422,
         )
-    cfg = resolve_structured_llm_config()
+    cfg = resolve_structured_llm_config(stage="eval")
     eval_model = eval_gen_config().get("model") or None
     run_id = obs.create_run(suite, total=0, model=cfg.get("model") or None,
                             eval_model=eval_model)

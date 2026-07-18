@@ -46,7 +46,7 @@ async def chat(body: ChatIn):
         pname = body.persona if body.persona in persona.available() else config.persona_name()
         await ingest.persist_user(body.message, stream=pname)
         messages = await assemble.build_messages(query=body.message, persona_name=pname)
-        cfg = resolve_structured_llm_config()
+        cfg = resolve_structured_llm_config(stage="chat")
 
     async def _gen():
         final = ""
