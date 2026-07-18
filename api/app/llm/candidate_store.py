@@ -47,6 +47,55 @@ def get_config(candidate_id: str) -> dict | None:
     return dict(row) if row is not None else None
 
 
+def get_route(scenario: str) -> dict | None:
+    db.run_migrations()
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM model_routes WHERE scenario = ?", (scenario,),
+        ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def save_route(
+    scenario: str,
+    candidate_id: str,
+    actor_user_id: str | None,
+) -> dict:
+    db.run_migrations()
+    with db.get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "INSERT INTO model_routes(scenario, candidate_id, updated_by) "
+            "VALUES (?, ?, ?) ON CONFLICT(scenario) DO UPDATE SET "
+            "candidate_id = excluded.candidate_id, "
+            "updated_by = excluded.updated_by, updated_at = datetime('now')",
+            (scenario, candidate_id, actor_user_id),
+        )
+        conn.execute(
+            "INSERT INTO model_candidate_audit_events"
+            "(action, candidate_id, actor_user_id, details_json) VALUES (?, ?, ?, ?)",
+            (
+                "route_saved", candidate_id, actor_user_id,
+                json.dumps({"scenario": scenario}, ensure_ascii=False),
+            ),
+        )
+        saved = conn.execute(
+            "SELECT * FROM model_routes WHERE scenario = ?", (scenario,),
+        ).fetchone()
+    return dict(saved)
+
+
+def record_key_reveal(candidate_id: str, actor_user_id: str | None) -> None:
+    """Audit an explicit owner secret read without recording the secret."""
+    db.run_migrations()
+    with db.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO model_candidate_audit_events"
+            "(action, candidate_id, actor_user_id) VALUES (?, ?, ?)",
+            ("key_revealed", candidate_id, actor_user_id),
+        )
+
+
 def issue_validation(
     candidate_id: str,
     config: dict[str, str],

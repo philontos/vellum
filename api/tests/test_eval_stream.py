@@ -29,6 +29,45 @@ def test_registry_has_all_suites():
 
 
 @pytest.mark.asyncio
+async def test_each_eval_case_uses_the_evaluation_model_route(
+    migrated_db, monkeypatch,
+):
+    from app.llm import candidates
+    from app.llm.client import resolve_structured_llm_config
+
+    evaluation_config = {
+        "base_url": "https://eval-model.test/v1",
+        "api_key": "eval-key",
+        "model": "eval-routed-model",
+    }
+    monkeypatch.setattr(
+        candidates,
+        "resolve_for_scenario",
+        lambda scenario: evaluation_config if scenario == "evaluation" else {},
+    )
+
+    async def run_case(_case):
+        return {
+            "model": resolve_structured_llm_config(stage="trait")["model"],
+        }
+
+    suite = suites.Suite(
+        key="route-test",
+        load=lambda: [{}],
+        run=run_case,
+        name_of=lambda _case, _seq: "route-test",
+        status_of=lambda _result: "pass",
+        aggregate=lambda results: {"total": len(results)},
+        needs_eval_gen=False,
+        needs_scratch=False,
+    )
+
+    result = await stream._run_one(suite, {}, 0)
+
+    assert result["result"]["model"] == "eval-routed-model"
+
+
+@pytest.mark.asyncio
 async def test_stream_traits_happy(migrated_db, monkeypatch):
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
         _record_ok(system_prompt)                       # mimic real client tracing

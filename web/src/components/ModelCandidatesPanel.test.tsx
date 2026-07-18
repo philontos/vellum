@@ -15,7 +15,9 @@ const candidate = {
   configured: false,
   source: "none" as const,
   has_saved_key: false,
+  has_api_key: false,
   verified_at: null,
+  editable: true,
 };
 const draft = {
   base_url: candidate.base_url,
@@ -32,7 +34,9 @@ function render(validationFingerprint: string) {
         validationFingerprint={validationFingerprint}
         busy={null}
         error=""
+        apiKeyVisible={false}
         onDraftChange={() => undefined}
+        onApiKeyVisibilityChange={() => undefined}
         onValidate={() => undefined}
         onSave={() => undefined}
       />
@@ -57,6 +61,7 @@ describe("ModelCandidateEditor", () => {
       configured: true,
       source: "stored" as const,
       has_saved_key: true,
+      has_api_key: true,
     };
     const html = renderToStaticMarkup(
       <I18nProvider>
@@ -66,7 +71,9 @@ describe("ModelCandidateEditor", () => {
           validationFingerprint=""
           busy={null}
           error=""
+          apiKeyVisible={false}
           onDraftChange={() => undefined}
+          onApiKeyVisibilityChange={() => undefined}
           onValidate={() => undefined}
           onSave={() => undefined}
         />
@@ -74,7 +81,30 @@ describe("ModelCandidateEditor", () => {
     );
 
     expect(html).toContain('type="password"');
-    expect(html).toContain("Leave blank to keep the saved key");
+    expect(html).toContain("Leave blank to keep the current key");
     expect(html).not.toContain("secret");
+  });
+
+  it("can render an explicitly revealed owner-only API key", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <ModelCandidateEditor
+          candidate={{ ...candidate, configured: true, has_api_key: true }}
+          draft={{ ...draft, api_key: "revealed-test-key" }}
+          validationFingerprint=""
+          busy={null}
+          error=""
+          apiKeyVisible
+          onDraftChange={() => undefined}
+          onApiKeyVisibilityChange={() => undefined}
+          onValidate={() => undefined}
+          onSave={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain('type="text"');
+    expect(html).toContain('value="revealed-test-key"');
+    expect(html).toContain("Hide");
   });
 });

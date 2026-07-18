@@ -1,4 +1,4 @@
-"""Named model candidates for production selection and replay evaluations.
+"""Named model integrations and scenario-specific production selection.
 
 Credentials come from owner-managed SQLite rows or environment fallbacks. The
 evaluation catalog deliberately contains only display metadata and readiness,
@@ -26,7 +26,7 @@ class _CandidateSpec:
 _SPECS = (
     _CandidateSpec(
         id="primary",
-        name="Current model",
+        name="Primary model",
         base_url_env="LLM_BASE_URL",
         api_key_envs=("LLM_API_KEY",),
         model_env="LLM_MODEL",
@@ -53,7 +53,8 @@ _SPECS = (
     ),
 )
 _BY_ID = {spec.id: spec for spec in _SPECS}
-_MANAGEABLE_IDS = ("glm", "kimi")
+_MANAGEABLE_IDS = tuple(spec.id for spec in _SPECS)
+MODEL_SCENARIOS = ("chat", "background", "evaluation")
 
 
 def _first_env(names: tuple[str, ...]) -> str:
@@ -77,16 +78,15 @@ def _environment_config(spec: _CandidateSpec) -> dict[str, str]:
 
 
 def _config(spec: _CandidateSpec) -> dict[str, str]:
-    if spec.id in _MANAGEABLE_IDS:
-        from app.llm import candidate_store
+    from app.llm import candidate_store
 
-        stored = candidate_store.get_config(spec.id)
-        if stored is not None:
-            return {
-                "base_url": stored["base_url"],
-                "api_key": stored["api_key"],
-                "model": stored["model"],
-            }
+    stored = candidate_store.get_config(spec.id)
+    if stored is not None:
+        return {
+            "base_url": stored["base_url"],
+            "api_key": stored["api_key"],
+            "model": stored["model"],
+        }
     return _environment_config(spec)
 
 
@@ -94,27 +94,11 @@ def _configured(config: dict[str, str]) -> bool:
     return bool(config["base_url"] and config["api_key"] and config["model"])
 
 
-def _effective_spec(spec: _CandidateSpec, *, strict: bool) -> _CandidateSpec:
-    """Make `primary` mean the model currently used by production."""
-    if spec.id != "primary":
-        return spec
-    selected = (os.getenv("LLM_CANDIDATE") or "").strip().lower() or "primary"
-    target = _BY_ID.get(selected)
-    if target is not None:
-        return target
-    if strict:
-        choices = ", ".join(item.id for item in _SPECS)
-        raise ModelCandidateError(
-            f"Unknown production model candidate {selected!r}; choose from {choices}"
-        )
-    return spec
-
-
 def public_candidates() -> list[dict]:
     """Return safe model metadata in stable UI order."""
     result = []
     for spec in _SPECS:
-        config = _config(_effective_spec(spec, strict=False))
+        config = _config(spec)
         result.append({
             "id": spec.id,
             "name": spec.name,
@@ -146,6 +130,45 @@ def environment_config(candidate_id: str) -> dict[str, str]:
     return _environment_config(spec)
 
 
+def _selected_fallback() -> str:
+    selected = (os.getenv("LLM_CANDIDATE") or "").strip().lower() or "primary"
+    if selected not in _BY_ID:
+        choices = ", ".join(item.id for item in _SPECS)
+        raise ModelCandidateError(
+            f"Unknown production model candidate {selected!r}; choose from {choices}"
+        )
+    return selected
+
+
+def route_for_scenario(scenario: str) -> dict[str, str]:
+    """Return the saved route or the legacy deployment-wide fallback."""
+    normalized = (scenario or "").strip().lower()
+    if normalized not in MODEL_SCENARIOS:
+        choices = ", ".join(MODEL_SCENARIOS)
+        raise ModelCandidateError(
+            f"Unknown model scenario {scenario!r}; choose from {choices}"
+        )
+    from app.llm import candidate_store
+
+    stored = candidate_store.get_route(normalized)
+    if stored is not None:
+        return {
+            "scenario": normalized,
+            "candidate_id": stored["candidate_id"],
+            "source": "stored",
+        }
+    return {
+        "scenario": normalized,
+        "candidate_id": _selected_fallback(),
+        "source": "environment",
+    }
+
+
+def resolve_for_scenario(scenario: str) -> dict[str, str]:
+    """Resolve the concrete model selected for one production scenario."""
+    return resolve(route_for_scenario(scenario)["candidate_id"])
+
+
 def resolve(candidate_id: str) -> dict[str, str]:
     """Resolve one candidate to a private request config.
 
@@ -159,11 +182,10 @@ def resolve(candidate_id: str) -> dict[str, str]:
         raise ModelCandidateError(
             f"Unknown model candidate {candidate_id!r}; choose from {choices}"
         )
-    effective = _effective_spec(spec, strict=True)
-    config = _config(effective)
-    if effective.id != "primary" and not _configured(config):
-        keys = " or ".join(effective.api_key_envs)
+    config = _config(spec)
+    if spec.id != "primary" and not _configured(config):
+        keys = " or ".join(spec.api_key_envs)
         raise ModelCandidateError(
-            f"{effective.name} candidate is not configured. Set {keys}."
+            f"{spec.name} candidate is not configured. Set {keys}."
         )
     return config

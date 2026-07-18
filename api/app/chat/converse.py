@@ -47,7 +47,7 @@ async def _reply(text: str, persona_name: str | None,
     pname = persona_name if persona_name in persona.available() else config.persona_name()
     await ingest.persist_user(text, stream=pname)
     messages = await assemble.build_messages(query=text, persona_name=pname)
-    cfg = resolve_structured_llm_config()
+    cfg = resolve_structured_llm_config(stage="chat")
 
     final = ""
     reasoning = None

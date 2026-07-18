@@ -20,7 +20,7 @@ def test_candidate_catalog_has_primary_glm_and_kimi_without_exposing_secrets(
     assert catalog == [
         {
             "id": "primary",
-            "name": "Current model",
+            "name": "Primary model",
             "model": "primary-model",
             "configured": True,
         },
@@ -97,17 +97,53 @@ def test_eval_request_override_wins_over_formal_candidate(monkeypatch):
     assert llm.resolve_structured_llm_config()["model"] == "glm-5.2"
 
 
-def test_eval_current_model_tracks_the_formal_selection(monkeypatch):
+def test_primary_integration_stays_distinct_from_the_formal_selection(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "https://primary.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "primary-key")
+    monkeypatch.setenv("LLM_MODEL", "primary-model")
     monkeypatch.setenv("LLM_CANDIDATE", "kimi")
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
 
-    assert candidates.resolve("primary")["model"] == "kimi-k3"
+    assert candidates.resolve("primary")["model"] == "primary-model"
+    assert candidates.resolve_for_scenario("chat")["model"] == "kimi-k3"
     assert candidates.public_candidates()[0] == {
         "id": "primary",
-        "name": "Current model",
-        "model": "kimi-k3",
+        "name": "Primary model",
+        "model": "primary-model",
         "configured": True,
     }
+
+
+def test_llm_stages_map_to_their_configured_scenarios(monkeypatch):
+    seen = []
+
+    def resolve(scenario: str) -> dict[str, str]:
+        seen.append(scenario)
+        return {
+            "base_url": f"https://{scenario}.test/v1",
+            "api_key": f"{scenario}-key",
+            "model": f"{scenario}-model",
+        }
+
+    monkeypatch.setattr(candidates, "resolve_for_scenario", resolve)
+
+    assert llm.resolve_structured_llm_config()["model"] == "chat-model"
+    assert llm.resolve_structured_llm_config(stage="chat")["model"] == "chat-model"
+    assert llm.resolve_structured_llm_config(stage="summary")["model"] == (
+        "background-model"
+    )
+    assert llm.resolve_structured_llm_config(stage="trait")["model"] == (
+        "background-model"
+    )
+    assert llm.resolve_structured_llm_config(stage="eval")["model"] == (
+        "evaluation-model"
+    )
+    assert llm.resolve_structured_llm_config(stage="evaluation")["model"] == (
+        "evaluation-model"
+    )
+    assert seen == [
+        "chat", "chat", "background", "background", "evaluation", "evaluation",
+    ]
 
 
 @pytest.mark.asyncio

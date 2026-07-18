@@ -208,26 +208,35 @@ _JSON_ONLY_HINT = (
 )
 
 
-def resolve_structured_llm_config() -> dict[str, str]:
-    """Resolve the request-local, named, or primary production LLM config."""
+def _scenario_for_stage(stage: str | None) -> str:
+    normalized = (stage or "").strip().lower()
+    if not normalized or normalized == "chat":
+        return "chat"
+    if (
+        normalized in {"eval", "evaluation"}
+        or normalized.startswith("eval_")
+    ):
+        return "evaluation"
+    return "background"
+
+
+def resolve_structured_llm_config(*, stage: str | None = None) -> dict[str, str]:
+    """Resolve the request-local override or the route for this LLM stage."""
     override = _llm_config_override.get()
     if override is not None:
         return dict(override)
-    selected = (os.getenv("LLM_CANDIDATE") or "").strip().lower() or "primary"
-    if selected != "primary":
-        # Local import keeps the generic client usable without making the
-        # candidate catalog responsible for client state.
-        from app.llm import candidates
-        return candidates.resolve(selected)
-    return {
-        "base_url": (os.getenv("LLM_BASE_URL") or "").strip().rstrip("/"),
-        "api_key": (os.getenv("LLM_API_KEY") or "").strip(),
-        "model": (os.getenv("LLM_MODEL") or "").strip(),
-    }
+    # Local import keeps the generic client usable without making the
+    # candidate catalog responsible for request-local client state.
+    from app.llm import candidates
+    return candidates.resolve_for_scenario(_scenario_for_stage(stage))
 
 
-def is_structured_llm_configured() -> bool:
-    config = resolve_structured_llm_config()
+def is_structured_llm_configured(
+    config: dict[str, str] | None = None,
+    *,
+    stage: str | None = None,
+) -> bool:
+    config = config or resolve_structured_llm_config(stage=stage)
     return bool(config["api_key"] and config["base_url"] and config["model"])
 
 
@@ -342,8 +351,8 @@ async def chat_json(
       4. Always extract JSON via _extract_json_object so markdown fences /
          leading prose don't kill us.
     """
-    config = resolve_structured_llm_config()
-    if not is_structured_llm_configured():
+    config = resolve_structured_llm_config(stage=stage)
+    if not is_structured_llm_configured(config):
         raise StructuredLLMError(
             "LLM is not configured. Set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL."
         )
@@ -484,8 +493,8 @@ async def chat_with_tools(
     (finish_reason="stop"). Callers append the returned message to their messages
     list, then append role="tool" results before the next round.
     """
-    config = resolve_structured_llm_config()
-    if not is_structured_llm_configured():
+    config = resolve_structured_llm_config(stage=stage)
+    if not is_structured_llm_configured(config):
         raise StructuredLLMError("LLM not configured.")
 
     payload = {
@@ -579,8 +588,8 @@ async def chat_with_tools_stream(
     The final "message" follows the OpenAI assistant-message shape and is ready
     to be appended back to the messages list before the next round.
     """
-    config = resolve_structured_llm_config()
-    if not is_structured_llm_configured():
+    config = resolve_structured_llm_config(stage=stage)
+    if not is_structured_llm_configured(config):
         raise StructuredLLMError("LLM not configured.")
 
     payload = {
@@ -738,8 +747,8 @@ async def chat_text_stream(
     stage: str = "", context: dict | None = None,
 ) -> AsyncIterator[str]:
     """流式文本补全，按 OpenAI-compatible SSE 协议解析 delta。yield 文本增量。"""
-    config = resolve_structured_llm_config()
-    if not is_structured_llm_configured():
+    config = resolve_structured_llm_config(stage=stage)
+    if not is_structured_llm_configured(config):
         raise StructuredLLMError(
             "Structured extraction LLM is not configured."
         )

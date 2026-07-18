@@ -228,6 +228,7 @@ def test_replay_runs_can_select_isolated_glm_and_kimi_candidates(
     migrated_db, monkeypatch,
 ):
     from app.evaluation import conversation
+    from app.llm import candidate_store
     from app.llm.client import resolve_structured_llm_config
     from app.main import app
     from app.store import memory
@@ -237,6 +238,7 @@ def test_replay_runs_can_select_isolated_glm_and_kimi_candidates(
     monkeypatch.setenv("LLM_MODEL", "primary-model")
     monkeypatch.setenv("GLM_API_KEY", "glm-key")
     monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+    candidate_store.save_route("evaluation", "kimi", None)
     memory.append_message("user", "Compare providers")
     answer = memory.append_message("assistant", "Original")
     _chat_trace(answer["turn"], "Compare providers", "Original")
@@ -257,27 +259,33 @@ def test_replay_runs_can_select_isolated_glm_and_kimi_candidates(
     assert [item["id"] for item in workspace["model_candidates"]] == [
         "primary", "glm", "kimi",
     ]
+    assert workspace["default_model_candidate"] == "kimi"
     record = client.post(
         "/inspect/conversation-evals/records",
         json={"assistant_turn": answer["turn"], "prompt_kind": "original"},
     ).json()
 
-    for candidate in ("glm", "kimi"):
-        with client.stream(
-            "POST",
-            f"/inspect/conversation-evals/records/{record['id']}/runs",
-            json={"model_candidate": candidate},
-        ) as response:
-            assert response.status_code == 200
-            assert "[DONE]" in "".join(response.iter_text())
+    with client.stream(
+        "POST",
+        f"/inspect/conversation-evals/records/{record['id']}/runs",
+    ) as response:
+        assert response.status_code == 200
+        assert "[DONE]" in "".join(response.iter_text())
+    with client.stream(
+        "POST",
+        f"/inspect/conversation-evals/records/{record['id']}/runs",
+        json={"model_candidate": "glm"},
+    ) as response:
+        assert response.status_code == 200
+        assert "[DONE]" in "".join(response.iter_text())
 
     detail = client.get(
         f"/inspect/conversation-evals/records/{record['id']}"
     ).json()
-    assert [run["model"] for run in detail["runs"]] == ["kimi-k3", "glm-5.2"]
+    assert [run["model"] for run in detail["runs"]] == ["glm-5.2", "kimi-k3"]
     assert [config["base_url"] for config in seen] == [
-        "https://open.bigmodel.cn/api/paas/v4",
         "https://api.moonshot.cn/v1",
+        "https://open.bigmodel.cn/api/paas/v4",
     ]
     assert resolve_structured_llm_config()["model"] == "primary-model"
 

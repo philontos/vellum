@@ -44,7 +44,13 @@ function defaultChoice(
   return "new";
 }
 
-function defaultModelCandidate(workspace: ConversationEvalWorkspace): string {
+export function defaultModelCandidate(workspace: ConversationEvalWorkspace): string {
+  const routed = workspace.model_candidates.find(
+    (candidate) => (
+      candidate.id === workspace.default_model_candidate && candidate.configured
+    ),
+  );
+  if (routed) return routed.id;
   const primary = workspace.model_candidates.find(
     (candidate) => candidate.id === "primary" && candidate.configured,
   );
@@ -82,7 +88,7 @@ export function EvalPanel() {
   const [activeRecord, setActiveRecord] = useState<ConversationEvalRecordDetail | null>(null);
   const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
   const [promptChoice, setPromptChoice] = useState("");
-  const [modelCandidate, setModelCandidate] = useState("primary");
+  const [modelCandidate, setModelCandidate] = useState("");
   const [customName, setCustomName] = useState("");
   const [customContent, setCustomContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -384,6 +390,7 @@ export function EvalPanel() {
   }
 
   const emptyWorkspace: ConversationEvalWorkspace = {
+    default_model_candidate: "primary",
     model_candidates: [], rounds: [], releases: [], prompt_versions: [],
     has_more: false,
   };

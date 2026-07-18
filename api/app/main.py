@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(fact_routes.router, dependencies=protected)
     app.include_router(inspect_routes.router, dependencies=protected)
     app.include_router(model_candidate_routes.router)
+    app.include_router(model_candidate_routes.route_router)
     app.include_router(prompt_routes.router)
 
     @app.get("/health")

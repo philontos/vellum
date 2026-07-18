@@ -98,7 +98,7 @@ Copy `api/.env.example` to `api/.env` and fill it in.
 | Variable | Required | What it is |
 |---|---|---|
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | yes* | The primary chat model — any OpenAI-compatible `/chat/completions` endpoint. *Required when `LLM_CANDIDATE=primary`. |
-| `LLM_CANDIDATE` | no | Production model selection: `primary` (default), `glm`, or `kimi`. Applies consistently to web chat and all background modeling. |
+| `LLM_CANDIDATE` | no | Legacy/default production selection: `primary` (default), `glm`, or `kimi`. Each Admin model route falls back to this value until that scenario is saved. |
 | `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` | yes* | The embedding model (`/embeddings`). *Falls back to `LLM_*` if unset — but set it explicitly when your chat provider has no embeddings. |
 | `GLM_BASE_URL` / `GLM_API_KEY` / `GLM_MODEL` | no | Environment fallback for the named GLM candidate. URL and model default to the official endpoint and `glm-5.2`; setting the key enables it. |
 | `KIMI_BASE_URL` / `KIMI_API_KEY` / `KIMI_MODEL` | no | Environment fallback for the named Kimi candidate. URL and model default to the official endpoint and `kimi-k3`; `MOONSHOT_API_KEY` is also accepted. |
@@ -120,10 +120,9 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `VELLUM_TIMEZONE` | `Asia/Shanghai` | Local timezone attached to model-facing user turns for relative-time and conversation-gap reasoning. Stored messages remain UTC and unchanged. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
-To promote a named candidate into the production path, configure its credentials
-in Admin (described below) or in the environment, set the selection, then restart
-the API process. The selection covers the web reply and every background modeling
-call; embeddings remain on `EMBED_*`:
+To set the fallback production model, configure its credentials in Admin
+(described below) or in the environment, set the selection, then restart the API
+process. Embeddings remain on `EMBED_*`:
 
 ```bash
 # GLM
@@ -138,15 +137,21 @@ KIMI_API_KEY=...       # MOONSHOT_API_KEY also works
 Set `LLM_CANDIDATE=primary` to return to `LLM_BASE_URL` / `LLM_API_KEY` /
 `LLM_MODEL`.
 
-An owner can configure GLM and Kimi without putting their credentials in `.env`:
-open **Admin → Models**, enter the Base URL, model, and API key, then choose
-**Validate**. **Save** remains disabled until that exact configuration succeeds;
-changing any field invalidates the check. Saved keys stay server-side in the
-deployment-wide `prompts.db`, are never returned to the browser, and inherit the
-database's SQLCipher-at-rest setting. A saved Admin configuration takes precedence
-over the corresponding named environment block. In family mode these endpoints
-and the Models tab are owner-only; legacy single-user mode retains its existing
-owner-equivalent Admin behavior.
+An owner can manage the primary integration (for example DeepSeek), GLM, and Kimi
+without editing `.env`: open **Admin → Models**, enter the Base URL, model, and API
+key, then choose **Validate**. **Save** remains disabled until that exact
+configuration succeeds; changing any field invalidates the check. Keys are masked
+by default and are returned only after an owner explicitly chooses **Show**. Saved
+credentials live in the deployment-wide `prompts.db` and inherit its
+SQLCipher-at-rest setting. A saved Admin configuration takes precedence over the
+corresponding environment block.
+
+The same page independently routes **Chat replies**, **Background modeling**, and
+the **Evaluation default** to any configured integration. Route changes take
+effect without a process restart; a scenario without a saved route follows
+`LLM_CANDIDATE`. In family mode the page and every credential/route endpoint are
+owner-only; legacy single-user mode retains its existing owner-equivalent Admin
+behavior.
 
 ---
 
@@ -281,10 +286,11 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   rendering are independently editable prompts.
 - **Evals** (owner only) — fork any completed conversation turn into an independent
   evaluation archive using its original Prompt, an immutable release, or a named
-  on-the-spot system Prompt. Each run can use the current chat model, GLM, or Kimi
-  K3; candidate credentials remain server-side and changing a candidate never
-  changes live chat. Each archive freezes the source, baseline Prompt, evaluated
-  Prompt, and complete model inputs; its detail view shows a line diff plus every
+  on-the-spot system Prompt. Each run can use the primary model, GLM, or Kimi K3;
+  its initial selection follows the Admin evaluation route, while an explicit
+  per-run choice does not change the live-chat route. Each archive freezes the
+  source, baseline Prompt, evaluated Prompt, and complete model inputs; its detail
+  view shows a line diff plus every
   repeated result side by side. Archives live in the per-account observability
   database, remain available independently of conversation history, and never
   append chat messages or trigger background modeling.

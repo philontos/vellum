@@ -29,7 +29,7 @@ def require_eval_gen() -> None:
             "Eval generator not configured. Set EVAL_GEN_BASE_URL / EVAL_GEN_API_KEY "
             "/ EVAL_GEN_MODEL."
         )
-    system_model = resolve_structured_llm_config().get("model", "")
+    system_model = resolve_structured_llm_config(stage="eval").get("model", "")
     if system_model and eval_gen_config()["model"] == system_model:
         print(
             f"[evals] note: EVAL_GEN_MODEL == LLM_MODEL ({system_model!r}); the model "

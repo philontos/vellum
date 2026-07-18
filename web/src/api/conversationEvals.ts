@@ -60,6 +60,7 @@ export type ConversationEvalRun = {
 
 export type ConversationEvalWorkspace = {
   model_candidates: ConversationModelCandidate[];
+  default_model_candidate: string;
   rounds: ConversationEvalRound[];
   releases: ConversationPromptRelease[];
   prompt_versions: ConversationPromptVersion[];
