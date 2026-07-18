@@ -93,15 +93,71 @@ export async function getDiaryMessages(id: number): Promise<{ summary: DiaryCard
  * bipolar — the UI renders a centered diverging bar; its absence means unipolar. */
 export type SubDimMeta = { key: string; name: string; poles?: [string, string] };
 export type TraitMeta = {
-  name: string; label: string; sort_by_score: boolean; sub_dimensions: SubDimMeta[];
+  name: string; label: string; sort_by_score: boolean; visualization?: string;
+  sub_dimensions: SubDimMeta[];
+};
+export type SchwartzValueKey =
+  | "self_direction" | "stimulation" | "hedonism" | "achievement" | "power"
+  | "security" | "conformity" | "tradition" | "benevolence" | "universalism";
+export type SchwartzStance = "support" | "oppose" | "yielding" | "mixed" | "unobserved";
+export type SchwartzStatus =
+  | "core_priority" | "higher_priority" | "context_dependent"
+  | "relative_yielding" | "explicit_opposition" | "unobserved";
+export type SchwartzEvidence = {
+  quote: string;
+  episode?: string;
+  direction: "support" | "oppose" | "sacrifice";
+  basis: string;
+  counterpart: SchwartzValueKey | null;
+  start_turn: number | null;
+  end_turn: number | null;
+};
+export type SchwartzValue = {
+  priority: number | null;
+  interval: [number, number] | null;
+  confidence: number;
+  stance: SchwartzStance;
+  explicit_opposition: boolean;
+  evidence_count: number;
+  effective_evidence: number;
+  activation: number;
+  status: SchwartzStatus;
+  evidence: string | null;
+  latest_evidence: SchwartzEvidence[];
+};
+export type SchwartzAxis = {
+  key: "openness_conservation" | "transcendence_enhancement";
+  left: "openness_to_change" | "self_transcendence";
+  right: "conservation" | "self_enhancement";
+  score: number | null;
+  confidence: number;
+};
+export type SchwartzProfile = {
+  kind: "schwartz_circumplex";
+  model_version: string;
+  calibration: "conversation_evidence" | "legacy_bridge" | "mixed_evidence";
+  scale: { minimum: -1; center: 0; maximum: 1; meaning: "within_person_relative_priority" };
+  coverage: { assessed: number; total: number; evidence_count: number };
+  values: Record<SchwartzValueKey, SchwartzValue>;
+  axes: SchwartzAxis[];
+};
+export type TraitValue = {
+  score?: number;
+  confidence?: number;
+  evidence?: string | null;
+  priority?: number | null;
+  interval?: [number, number] | null;
+  stance?: SchwartzStance;
+  status?: SchwartzStatus;
 };
 export type TraitDim = {
   dimension: string;
-  content_json: Record<string, { score?: number; confidence?: number; evidence?: string }>;
+  content_json: Record<string, TraitValue>;
   sample_count: number;
   updated_at: string;
   history: { taken_at: string; content_json: Record<string, { score?: number }> }[];
   meta: TraitMeta | null;
+  profile?: SchwartzProfile;
 };
 export type Fact = { id: number; text: string; status: string; source_turn: number | null };
 export type PortraitEvidence = { turn: number; quote: string };

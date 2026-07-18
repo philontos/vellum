@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app import config
 from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
+from app.model_loop import schwartz
 from app.evaluation import archive as conversation_archive
 from app.evaluation import conversation as conversation_eval
 from app.llm import candidates as model_candidates
@@ -34,6 +35,12 @@ def inspect_model():
     for t in traits:
         t["history"] = model.get_trait_history(t["dimension"])
         t["meta"] = dimension_meta(t["dimension"])   # names + pole labels for the UI
+        if t["dimension"] == "schwartz":
+            t["profile"] = schwartz.profile_payload(
+                t["content_json"],
+                t["history"],
+                model.get_trait_evidence("schwartz"),
+            )
     return {
         "dossier": model.get_dossier(),
         "dossier_meta": model.get_dossier_row(),

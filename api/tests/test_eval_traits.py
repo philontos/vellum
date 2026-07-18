@@ -28,3 +28,37 @@ def test_direction_check_pure():
     assert et.direction_ok("low", 30) is True
     assert et.direction_ok("mid", 50) is True
     assert et.direction_ok("mid", 80) is False
+
+
+@pytest.mark.asyncio
+async def test_schwartz_eval_reads_centered_priority_instead_of_a_0_100_score(
+    migrated_db, monkeypatch,
+):
+    async def fake_chat_json(system_prompt, user_prompt="", **kw):
+        return {
+            "self_direction": {
+                "direction": "support", "strength": 0.9, "confidence": 0.8,
+                "basis": "tradeoff", "evidence": "chose freedom",
+                "counterpart": "security",
+            },
+            "security": {
+                "direction": "sacrifice", "strength": 0.8, "confidence": 0.8,
+                "basis": "tradeoff", "evidence": "accepted risk",
+                "counterpart": "self_direction",
+            },
+        }
+
+    monkeypatch.setattr(et.traits_job, "chat_json", fake_chat_json)
+    case = {
+        "dimension": "schwartz",
+        "target": {"sub": "self_direction", "direction": "high"},
+        "allowed_crosstalk": ["security"],
+        "crosstalk_tolerance": 25,
+        "conversation": ["I chose freedom and accepted the risk."],
+    }
+
+    result = await et.run_case(case)
+
+    assert result["target_priority"] > 0
+    assert result["direction_ok"] is True
+    assert result["crosstalk_ok"] is True

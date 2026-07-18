@@ -28,26 +28,37 @@ async def run_case(case: dict) -> dict:
     target_sub = case["target"]["sub"]
     direction = case["target"]["direction"]
     tol = case.get("crosstalk_tolerance", 25)
+    allowed_crosstalk = set(case.get("allowed_crosstalk", []))
 
     prior = DIMENSION_MAP[dim].get("score_range", [0, 100])
     prior_mid = (prior[0] + prior[1]) / 2
+    comparison_mid = 50 if dim == "schwartz" else prior_mid
 
     # user-only span built directly from the case — no DB, cold start (empty prior)
     span = "\n".join(f"user: {line}" for line in case["conversation"])
     merged = await traits_job.extract_one(span, dim, DIMENSION_MAP[dim], {})
 
-    target_score = (merged.get(target_sub) or {}).get("score")
+    target_item = merged.get(target_sub) or {}
+    target_priority = target_item.get("priority")
+    target_score = target_item.get("score")
+    if target_score is None and isinstance(target_priority, (int, float)):
+        # Preserve the suite's historical 0–100 aggregate only as an adapter.
+        # The production Schwartz model and its UI remain centered on 0.
+        target_score = 50 + 50 * target_priority
 
     crosstalk_ok = True
     for sub, val in merged.items():
-        if sub == target_sub or not isinstance(val, dict) or "score" not in val:
+        if sub == target_sub or sub in allowed_crosstalk or not isinstance(val, dict):
             continue
-        if abs(val["score"] - prior_mid) > tol:
+        score = val.get("score")
+        if score is None and isinstance(val.get("priority"), (int, float)):
+            score = 50 + 50 * val["priority"]
+        if score is not None and abs(score - comparison_mid) > tol:
             crosstalk_ok = False
 
     return {
         "dimension": dim, "target_sub": target_sub, "direction": direction,
-        "target_score": target_score,
+        "target_score": target_score, "target_priority": target_priority,
         "direction_ok": target_score is not None and direction_ok(direction, target_score),
         "crosstalk_ok": crosstalk_ok,
     }

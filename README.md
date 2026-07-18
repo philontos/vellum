@@ -290,7 +290,52 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   its initial selection follows the Admin evaluation route, while an explicit
   per-run choice does not change the live-chat route. Each archive freezes the
   source, baseline Prompt, evaluated Prompt, and complete model inputs; its detail
-  view shows a line diff plus every
-  repeated result side by side. Archives live in the per-account observability
-  database, remain available independently of conversation history, and never
-  append chat messages or trigger background modeling.
+  view shows a line diff plus every repeated result side by side. Archives live in
+  the per-account observability database, remain available independently of
+  conversation history, and never append chat messages or trigger background
+  modeling.
+
+### Rebuilding Schwartz from message history
+
+Schwartz V2 is rebuildable from the canonical live user messages in SQLite; it
+does not depend on retained traces or the previous aggregate score. From `api/`,
+load the same environment (especially the database key) used by the service and
+preview the source range first:
+
+```bash
+set -a
+source .env
+set +a
+.venv/bin/python -m app.model_loop.rebuild schwartz --username owner
+```
+
+The command is read-only unless `--apply` is present. In family-auth mode,
+`--username` is required so one account is selected explicitly; omit it for the
+legacy single-user store. Before rebuilding a deployment with immutable Prompt
+releases, inspect and publish the guarded V2 Prompt upgrade. It refuses to publish
+when unrelated Prompt drafts are pending:
+
+```bash
+.venv/bin/python -m app.prompts.maintenance schwartz-v2 --username owner
+.venv/bin/python -m app.prompts.maintenance schwartz-v2 --username owner --apply
+```
+
+Then apply the rebuild with that same active Prompt snapshot:
+
+```bash
+.venv/bin/python -m app.model_loop.rebuild schwartz \
+  --username owner --batch-turns 6 --prompt-source active --apply
+```
+
+Use `--batch-turns 1` to extract each user turn independently, or a larger span to
+give the assessor more local context. Assistant messages and soft-deleted turns
+are never treated as trait evidence. All LLM results are staged in memory; only
+after every batch succeeds are Schwartz current/history/evidence rows replaced in
+one transaction. Other dimensions and the normal modeling cursor are untouched.
+If messages or the live Schwartz projection change during the run, the swap aborts
+and keeps the old model. Stop the chat service for the duration of `--apply`; this
+also excludes a background trait job that started before the maintenance command
+and could otherwise finish just after it. `--prompt-release ID` is available for
+controlled comparisons; the code-owned prompt remains the rebuild default, while
+the guarded workflow above deliberately pins rebuild and future online turns to
+the same active V2 release.

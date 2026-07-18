@@ -5,6 +5,7 @@ framed so the model leads with the answer and only leans on them when relevant
 from app import config
 from app.chat import persona, retrieval, temporal
 from app.config.dimensions_loader import dimension_meta
+from app.model_loop import schwartz
 from app.prompts import runtime
 from app.store import memory, model
 from app.store.db import get_conn
@@ -89,6 +90,34 @@ def _render_sub(sub: dict, score: float) -> str:
     return f"{sub['name']}: {_band(score)} ({s})"
 
 
+def _render_schwartz(content: dict, meta: dict) -> str:
+    """Compact V2 context: centered priorities must never read as absolutes."""
+    parts = []
+    for sub in meta["sub_dimensions"]:
+        item = content.get(sub["key"])
+        priority = item.get("priority") if isinstance(item, dict) else None
+        if not isinstance(priority, (int, float)):
+            continue
+        signed = f"{priority:+.2f}"
+        stance = item.get("stance")
+        if stance == "oppose":
+            reading = f"explicit opposition ({signed})"
+        elif priority > 0.02:
+            reading = f"above own average ({signed})"
+        elif priority < -0.02:
+            reading = f"below own average ({signed}; relative, not rejection)"
+        else:
+            reading = f"near own average ({signed})"
+        parts.append(f"{sub['name']}: {reading}")
+    if not parts:
+        return ""
+    return (
+        f"- {meta['name']} relative priorities (0=personal mean; "
+        "negative means relative yielding unless explicit opposition): "
+        + ", ".join(parts)
+    )
+
+
 def _trait_summary() -> str:
     with get_conn() as conn:
         rows = conn.execute("SELECT dimension FROM trait_current").fetchall()
@@ -98,11 +127,21 @@ def _trait_summary() -> str:
         t = model.get_trait(key)
         if not t:
             continue
+        meta = dimension_meta(key)
+        if key == "schwartz" and meta:
+            content = t["content_json"]
+            if not schwartz.is_v2(content):
+                content = schwartz.project_legacy(
+                    content, model.get_trait_history(key),
+                )
+            rendered = _render_schwartz(content, meta)
+            if rendered:
+                lines.append(rendered)
+            continue
         scores = {k: v.get("score") for k, v in t["content_json"].items()
                   if isinstance(v, dict) and v.get("score") is not None}
         if not scores:
             continue
-        meta = dimension_meta(key)
         if not meta:   # unknown/disabled dimension still on the board — render raw
             lines.append(f"- {key}: " +
                          ", ".join(f"{k}={round(v)}" for k, v in scores.items()))

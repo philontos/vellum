@@ -21,9 +21,14 @@ def test_ocean_subdimensions_are_unipolar():
     assert "poles" not in o               # unipolar → no poles → linear bar
 
 
-def test_schwartz_sorts_by_score():
+def test_schwartz_keeps_the_canonical_circumplex_order():
     m = dimension_meta("schwartz")
-    assert m["sort_by_score"] is True
+    assert m["sort_by_score"] is False
+    assert m["visualization"] == "circumplex"
+    assert [s["key"] for s in m["sub_dimensions"]] == [
+        "self_direction", "stimulation", "hedonism", "achievement", "power",
+        "security", "conformity", "tradition", "benevolence", "universalism",
+    ]
 
 
 def test_unknown_dimension_is_none():

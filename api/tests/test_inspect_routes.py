@@ -146,3 +146,28 @@ def test_inspect_model_excludes_superseded_facts(migrated_db):
     texts = {f["text"] for f in facts}
     assert "active fact" in texts
     assert "merged away" not in texts
+
+
+def test_inspect_model_exposes_complete_centered_schwartz_profile(migrated_db):
+    from app.main import app
+    from app.store import model
+
+    model.set_trait("schwartz", {
+        "achievement": {"score": 78, "tau": 8.0, "confidence": 0.7},
+        "security": {"score": 76, "tau": 7.0, "confidence": 0.7},
+        "conformity": {"score": 61, "tau": 3.0, "confidence": 0.4},
+    }, sample_count=41)
+
+    trait = next(
+        item for item in TestClient(app).get("/inspect/model").json()["traits"]
+        if item["dimension"] == "schwartz"
+    )
+    profile = trait["profile"]
+    assert profile["kind"] == "schwartz_circumplex"
+    assert profile["coverage"] == {"assessed": 3, "total": 10, "evidence_count": 3}
+    assert list(profile["values"]) == [
+        "self_direction", "stimulation", "hedonism", "achievement", "power",
+        "security", "conformity", "tradition", "benevolence", "universalism",
+    ]
+    assert profile["values"]["tradition"]["status"] == "unobserved"
+    assert len(profile["axes"]) == 2

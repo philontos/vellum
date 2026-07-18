@@ -43,5 +43,6 @@ def dimension_meta(key: str) -> dict | None:
         "name": d.get("name", key),
         "label": d.get("summary_label", key),
         "sort_by_score": bool(d.get("sort_by_score", False)),
+        "visualization": d.get("visualization", "bars"),
         "sub_dimensions": subs,
     }
