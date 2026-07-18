@@ -54,7 +54,7 @@ _SPECS = (
 )
 _BY_ID = {spec.id: spec for spec in _SPECS}
 _MANAGEABLE_IDS = tuple(spec.id for spec in _SPECS)
-MODEL_SCENARIOS = ("chat", "background", "evaluation")
+MODEL_SCENARIOS = ("chat", "inquiry", "background", "evaluation")
 
 
 def _first_env(names: tuple[str, ...]) -> str:
@@ -157,6 +157,14 @@ def route_for_scenario(scenario: str) -> dict[str, str]:
             "candidate_id": stored["candidate_id"],
             "source": "stored",
         }
+    if normalized == "inquiry":
+        inherited = candidate_store.get_route("chat")
+        if inherited is not None:
+            return {
+                "scenario": normalized,
+                "candidate_id": inherited["candidate_id"],
+                "source": "inherited",
+            }
     return {
         "scenario": normalized,
         "candidate_id": _selected_fallback(),

@@ -141,8 +141,12 @@ def test_llm_stages_map_to_their_configured_scenarios(monkeypatch):
     assert llm.resolve_structured_llm_config(stage="evaluation")["model"] == (
         "evaluation-model"
     )
+    assert llm.resolve_structured_llm_config(
+        stage="inquiry.decide", scenario="inquiry",
+    )["model"] == "inquiry-model"
     assert seen == [
         "chat", "chat", "background", "background", "evaluation", "evaluation",
+        "inquiry",
     ]
 
 

@@ -4,8 +4,11 @@ import {
   getDiary,
   getDiaryMessages,
   getHistory,
+  getInquiries,
+  getInquiry,
   getTrace,
   getTraces,
+  getTurnRuns,
   streamChat,
   streamEvalRun,
 } from "./client";
@@ -167,6 +170,26 @@ describe("trace inspection", () => {
 
     await expect(getTrace(7)).resolves.toEqual(row);
     expect(urls[0]).toBe("/inspect/traces/7");
+  });
+
+  it("loads correlated turn runs and Inquiry Ledgers", async () => {
+    let urls = stubJson({ runs: [{ id: "run-1", route: "inquire" }] });
+    await expect(getTurnRuns()).resolves.toEqual([
+      { id: "run-1", route: "inquire" },
+    ]);
+    expect(urls[0]).toBe("/inspect/turn-runs?limit=100");
+
+    urls = stubJson({ inquiries: [{ id: 4, status: "exploring" }] });
+    await expect(getInquiries()).resolves.toEqual([
+      { id: 4, status: "exploring" },
+    ]);
+    expect(urls[0]).toBe("/inspect/inquiries?limit=100");
+
+    urls = stubJson({ inquiry: { id: 4 }, events: [{ revision_after: 1 }] });
+    await expect(getInquiry(4)).resolves.toEqual({
+      inquiry: { id: 4 }, events: [{ revision_after: 1 }],
+    });
+    expect(urls[0]).toBe("/inspect/inquiries/4");
   });
 });
 

@@ -12,17 +12,18 @@ from app.store.observability import get_conn
 def record(*, turn, stage, model, params, prompt, output,
            prompt_tokens, completion_tokens, duration_ms, reasoning=None,
            pinned=False, eval_run_id=None, eval_case=None,
-           tool_calls=None) -> int:
+           tool_calls=None, run_id=None, scenario=None, attempt=None) -> int:
     with get_conn() as conn:
         cur = conn.execute(
             "INSERT INTO traces(turn, stage, model, params, prompt, output, "
             "reasoning, prompt_tokens, completion_tokens, duration_ms, pinned, "
-            "eval_run_id, eval_case, tool_calls) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "eval_run_id, eval_case, tool_calls, run_id, scenario, attempt) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (turn, stage, model, json.dumps(params, ensure_ascii=False),
              prompt, output, reasoning, prompt_tokens, completion_tokens,
              duration_ms, 1 if pinned else 0, eval_run_id, eval_case,
-             json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None),
+             json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None,
+             run_id, scenario, attempt),
         )
         return cur.lastrowid
 
@@ -71,16 +72,32 @@ def list_recent(limit: int = 100, stage: str | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _last_user_snippet(prompt: str | None) -> str | None:
-    if not prompt:
+def _snippet_from_payload(payload: object) -> str | None:
+    if isinstance(payload, dict):
+        current = payload.get("current_user_turn")
+        if (
+            isinstance(current, dict)
+            and current.get("role") == "user"
+            and isinstance(current.get("content"), str)
+        ):
+            return current["content"]
+        context = payload.get("context")
+        if isinstance(context, dict):
+            nested = _snippet_from_payload(context)
+            if nested is not None:
+                return nested
+        user_prompt = payload.get("user_prompt")
+        if isinstance(user_prompt, str):
+            try:
+                nested_payload = json.loads(user_prompt)
+            except json.JSONDecodeError:
+                nested_payload = None
+            if nested_payload is not None:
+                return _snippet_from_payload(nested_payload)
         return None
-    try:
-        messages = json.loads(prompt)
-    except (TypeError, json.JSONDecodeError):
+    if not isinstance(payload, list):
         return None
-    if not isinstance(messages, list):
-        return None
-    for message in reversed(messages):
+    for message in reversed(payload):
         if (
             isinstance(message, dict)
             and message.get("role") == "user"
@@ -88,6 +105,16 @@ def _last_user_snippet(prompt: str | None) -> str | None:
         ):
             return message["content"]
     return None
+
+
+def _last_user_snippet(prompt: str | None) -> str | None:
+    if not prompt:
+        return None
+    try:
+        payload = json.loads(prompt)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return _snippet_from_payload(payload)
 
 
 _TRAIT_OUTPUT_KEYS = {
@@ -164,8 +191,9 @@ def list_summaries(limit: int = 100, stage: str | None = None) -> list[dict]:
     params.append(limit)
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, turn, stage, model, params, "
-            "CASE WHEN stage IN ('chat', 'trait') THEN prompt END AS prompt, "
+            "SELECT id, turn, stage, model, params, run_id, scenario, attempt, "
+            "CASE WHEN stage IN ('chat', 'trait') OR stage LIKE 'inquiry.%' "
+            "THEN prompt END AS prompt, "
             "CASE WHEN stage = 'trait' THEN output END AS output, prompt_tokens, "
             "completion_tokens, duration_ms, pinned, note, created_at, "
             "reasoning IS NOT NULL AS has_reasoning, "

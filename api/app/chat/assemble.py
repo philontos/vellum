@@ -175,10 +175,10 @@ async def _build_messages(query: str | None = None,
     stream = p.name
     tail = (
         memory.recent_tail_through(
-            config.tail_size(), through_turn, stream=stream,
+            config.response_tail_size(), through_turn, stream=stream,
         )
         if through_turn is not None
-        else memory.recent_tail(config.tail_size(), stream=stream)
+        else memory.recent_tail(config.response_tail_size(), stream=stream)
     )
     if query is None:
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)

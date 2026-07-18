@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.chat import assemble, converse, persona, respond
+from app.chat import assemble, converse, orchestrator, persona, respond
 from app.data_scope import user_scope
 from app.llm.client import _record_llm_call
 from app.model_loop import runner, summary
@@ -143,8 +143,8 @@ async def test_chat_trace_keeps_the_release_that_started_the_turn(migrated_db, m
     async def no_background_work():
         return None
 
-    monkeypatch.setattr(converse.ingest, "embed", fake_embed)
-    monkeypatch.setattr(converse.assemble.retrieval, "retrieve", fake_retrieve)
+    monkeypatch.setattr(orchestrator.ingest, "embed", fake_embed)
+    monkeypatch.setattr(orchestrator.assemble.retrieval, "retrieve", fake_retrieve)
     monkeypatch.setattr(respond, "stream", publish_while_streaming)
     monkeypatch.setattr(runner, "run_pending", no_background_work)
 
@@ -190,7 +190,7 @@ async def test_runner_pins_one_release_and_records_it_on_every_batch_trace(
         record("facts")
         service.publish(pending["workspace_revision"], "publish during runner")
 
-    async def trait_job(start, end):
+    async def trait_job(start, end, dimension):
         record("trait")
 
     async def dossier_job(start, end):
@@ -200,7 +200,8 @@ async def test_runner_pins_one_release_and_records_it_on_every_batch_trace(
         record("summary")
 
     monkeypatch.setattr(runner.facts, "run", facts_job)
-    monkeypatch.setattr(runner.traits, "run", trait_job)
+    monkeypatch.setattr(runner.traits, "run_dimension", trait_job)
+    monkeypatch.setattr(runner, "DIMENSION_MAP", {"ocean": {}})
     monkeypatch.setattr(runner.dossier, "run", dossier_job)
     monkeypatch.setattr(runner.summary, "run", summary_job)
 

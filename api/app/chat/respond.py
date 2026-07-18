@@ -71,7 +71,9 @@ async def _stream(
     for _hop in range(_max_hops() + 1):
         assistant_msg = None
         finish = "stop"
-        async for ev in llm.chat_with_tools_stream(messages=convo, tools=tools, stage="chat"):
+        async for ev in llm.chat_with_tools_stream(
+            messages=convo, tools=tools, stage="chat", scenario="chat",
+        ):
             if ev["type"] == "content_delta":
                 content_parts.append(ev["delta"])
                 yield {"type": "delta", "text": ev["delta"]}

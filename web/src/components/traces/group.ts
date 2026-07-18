@@ -4,7 +4,9 @@
 // Pure functions (no React) so they can be unit-tested in isolation.
 import type { TraceSummary } from "../../api/client";
 
-const ROUND_STAGES = new Set(["chat", "facts"]);
+const ROUND_STAGES = new Set([
+  "inquiry.decide", "inquiry.repair", "chat", "facts",
+]);
 // compact is a periodic whole-board fact compaction (facts.py, every N turns) —
 // it covers a turn *range* like the other passes, so it belongs in Background.
 const BG_STAGES = new Set([
@@ -13,7 +15,12 @@ const BG_STAGES = new Set([
 const KNOWN_TRAIT_DIMENSIONS = ["ocean", "mbti", "schwartz", "regulatory_focus"] as const;
 
 /** One conversation round: its chat call plus the facts extraction(s) it triggered. */
-export type Round = { turn: number | null; chat: TraceSummary | null; facts: TraceSummary[] };
+export type Round = {
+  turn: number | null;
+  controller: TraceSummary[];
+  chat: TraceSummary | null;
+  facts: TraceSummary[];
+};
 
 /** A background pass, annotated with the turn range it actually covered. */
 export type Pass = TraceSummary & { from: number | null; to: number | null };
@@ -38,11 +45,17 @@ export function groupRounds(traces: TraceSummary[]): Round[] {
     if (!ROUND_STAGES.has(tr.stage)) continue;
     let round = byTurn.get(tr.turn);
     if (!round) {
-      round = { turn: tr.turn, chat: null, facts: [] };
+      round = { turn: tr.turn, controller: [], chat: null, facts: [] };
       byTurn.set(tr.turn, round);
     }
     if (tr.stage === "chat") round.chat = tr;
-    else round.facts.push(tr);
+    else if (tr.stage === "facts") round.facts.push(tr);
+    else round.controller.push(tr);
+  }
+  for (const round of byTurn.values()) {
+    round.controller.sort((a, b) => (
+      (a.attempt ?? a.id) - (b.attempt ?? b.id)
+    ));
   }
   return [...byTurn.values()].sort((a, b) => {
     if (a.turn === null) return 1; // ungrouped sinks to the bottom

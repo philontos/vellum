@@ -7,16 +7,22 @@ import {
   saveModelRoute,
   validateModelCandidate,
   type ManagedModelCandidate,
+  type ModelCapabilities,
   type ModelCandidateDraft,
   type ModelCandidateWorkspace,
   type ModelScenario,
 } from "../api/modelCandidates";
 import { useT } from "../i18n";
 import { ModelRouteSettings } from "./models/ModelRouteSettings";
+import { ModelCapabilityResults } from "./models/ModelCapabilities";
 
 
 type CandidateBusy = "reveal" | "validate" | "save" | null;
-type ValidationState = { token: string; fingerprint: string };
+type ValidationState = {
+  token: string;
+  fingerprint: string;
+  capabilities: ModelCapabilities;
+};
 
 
 export function candidateDraftFingerprint(draft: ModelCandidateDraft): string {
@@ -137,6 +143,7 @@ export function ModelCandidatesPanel() {
         [candidateId]: {
           token: result.validation_token,
           fingerprint: candidateDraftFingerprint(draft),
+          capabilities: result.capabilities,
         },
       }));
     } catch (error) {
@@ -217,7 +224,11 @@ export function ModelCandidatesPanel() {
         {workspace.candidates.map((candidate) => (
           <ModelCandidateEditor
             key={candidate.id}
-            candidate={candidate}
+            candidate={{
+              ...candidate,
+              capabilities: validations[candidate.id]?.capabilities
+                ?? candidate.capabilities,
+            }}
             draft={drafts[candidate.id] ?? initialDraft(candidate)}
             validationFingerprint={validations[candidate.id]?.fingerprint ?? ""}
             busy={busy[candidate.id] ?? null}
@@ -356,6 +367,8 @@ export function ModelCandidateEditor({
           </div>
         </div>
       </div>
+
+      <ModelCapabilityResults capabilities={candidate.capabilities} />
 
       <div className="mt-4 min-h-5 text-xs">
         {error && <p className="text-status-error-fg">{error}</p>}

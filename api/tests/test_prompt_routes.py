@@ -27,6 +27,8 @@ def test_lists_every_builtin_prompt_as_an_unpublished_workspace(migrated_db):
         "chat.neutral.voice",
         "chat.response_protocol",
         "chat.time_context",
+        "inquiry.controller",
+        "inquiry.repair",
         "memory.summary",
         "memory.dossier.evidence",
         "memory.dossier.render",

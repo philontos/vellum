@@ -111,6 +111,16 @@ def get_message(message_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def get_message_by_turn(turn: int) -> dict | None:
+    """A single live message by canonical turn number."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM messages WHERE turn = ? AND deleted_at IS NULL",
+            (turn,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def messages_in_turn_range(start_turn: int, end_turn: int,
                            stream: str | None = None) -> list[dict]:
     """Live messages whose turn is in [start, end]. Soft-deleted turns drop out of

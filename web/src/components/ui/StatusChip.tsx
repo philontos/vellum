@@ -8,6 +8,13 @@ const KIND: Record<string, string> = {
   error: "bg-status-warn-bg text-status-warn-fg",
   scored: "bg-status-info-bg text-status-info-fg",
   running: "bg-status-neutral-bg text-status-neutral-fg",
+  exploring: "bg-status-info-bg text-status-info-fg",
+  reviewing: "bg-status-warn-bg text-status-warn-fg",
+  paused: "bg-status-neutral-bg text-status-neutral-fg",
+  closed: "bg-status-pass-bg text-status-pass-fg",
+  resolved: "bg-status-pass-bg text-status-pass-fg",
+  open: "bg-status-warn-bg text-status-warn-fg",
+  degraded: "bg-status-warn-bg text-status-warn-fg",
 };
 
 const NEUTRAL = "bg-status-neutral-bg text-status-neutral-fg";

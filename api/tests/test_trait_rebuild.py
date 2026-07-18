@@ -9,7 +9,9 @@ def _all_null():
     return {key: None for key in schwartz.VALUE_KEYS}
 
 
-def _observation(key, *, direction="support", counterpart=None, episode=None):
+def _observation(
+    key, *, direction="support", counterpart=None, episode=None, evidence=None,
+):
     output = _all_null()
     output[key] = {
         "direction": direction,
@@ -17,7 +19,7 @@ def _observation(key, *, direction="support", counterpart=None, episode=None):
         "confidence": 0.8,
         "basis": "tradeoff",
         "episode": episode or f"episode for {key}",
-        "evidence": f"evidence for {key}",
+        "evidence": evidence or f"evidence for {key}",
         "counterpart": counterpart,
     }
     return output
@@ -141,8 +143,13 @@ async def test_rebuild_stages_everything_then_atomically_replaces_only_schwartz(
     model.set_trait("ocean", {"O": {"score": 70}}, sample_count=2)
     memory.advance_cursor("trait", 3)
     outputs = [
-        _observation("self_direction", counterpart="security", episode="choosing autonomy"),
-        _observation("benevolence", episode="helping family"),
+        _observation(
+            "self_direction", counterpart="security", episode="choosing autonomy",
+            evidence="first choice",
+        ),
+        _observation(
+            "benevolence", episode="helping family", evidence="second choice",
+        ),
     ]
     calls = []
 
@@ -174,6 +181,32 @@ async def test_rebuild_stages_everything_then_atomically_replaces_only_schwartz(
     assert result["assessed_values"] == 2
     assert "first choice" in calls[0][0]
     assert "second choice" in calls[1][0]
+
+
+@pytest.mark.asyncio
+async def test_rebuild_discards_hallucinated_schwartz_quotes(
+    migrated_db, monkeypatch,
+):
+    memory.append_message("user", "the actual choice")
+    _seed_old_schwartz()
+
+    async def fake_extract(span, key, dim, old_content):
+        return _observation(
+            "achievement", episode="invented episode", evidence="not in history",
+        )
+
+    monkeypatch.setattr(rebuild.traits, "_extract", fake_extract)
+
+    result = await rebuild.rebuild_schwartz(
+        batch_turns=1,
+        snapshot=runtime.default_snapshot(),
+    )
+
+    assert result["evidence_episodes"] == 0
+    assert model.get_trait_evidence("schwartz") == []
+    assert model.get_trait("schwartz")["content_json"]["achievement"][
+        "status"
+    ] == "unobserved"
 
 
 @pytest.mark.asyncio

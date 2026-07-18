@@ -35,10 +35,37 @@ CREATE TABLE IF NOT EXISTS traces (
   eval_run_id        INTEGER,           -- FK -> eval_runs.id; chat traces are NULL
   eval_case          TEXT,              -- case name for eval traces; chat traces NULL
   tool_calls         TEXT,              -- JSON [{name,args,result,ok}] for the turn; heavy, pruned
+  run_id             TEXT,
+  scenario           TEXT,
+  attempt            INTEGER,
   created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_traces_created  ON traces(created_at);
 CREATE INDEX IF NOT EXISTS idx_traces_eval_run ON traces(eval_run_id);
+
+CREATE TABLE IF NOT EXISTS turn_runs (
+  id                     TEXT PRIMARY KEY,
+  user_turn              INTEGER NOT NULL,
+  assistant_turn         INTEGER,
+  stream                 TEXT NOT NULL,
+  route                  TEXT CHECK (route IN ('direct','inquire','synthesize')),
+  status                 TEXT NOT NULL CHECK (
+                           status IN ('running','done','degraded','error')
+                         ),
+  inquiry_id             INTEGER,
+  revision_before        INTEGER,
+  revision_after         INTEGER,
+  controller_model       TEXT,
+  responder_model        TEXT,
+  decision_json          TEXT,
+  context_meta_json      TEXT NOT NULL DEFAULT '{}',
+  prompt_release_id      INTEGER,
+  prompt_release_version INTEGER,
+  error                  TEXT,
+  started_at             TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_turn_runs_started ON turn_runs(started_at, id);
 
 CREATE TABLE IF NOT EXISTS eval_runs (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,6 +175,15 @@ def _ensure_columns(conn) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(traces)")}
     if "tool_calls" not in cols:
         conn.execute("ALTER TABLE traces ADD COLUMN tool_calls TEXT")
+    if "run_id" not in cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN run_id TEXT")
+    if "scenario" not in cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN scenario TEXT")
+    if "attempt" not in cols:
+        conn.execute("ALTER TABLE traces ADD COLUMN attempt INTEGER")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_traces_run_id ON traces(run_id, id)"
+    )
     run_cols = {
         row["name"]
         for row in conn.execute("PRAGMA table_info(conversation_eval_runs)")

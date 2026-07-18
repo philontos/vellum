@@ -59,6 +59,28 @@ async def test_stream_plain(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_routes_every_hop_to_chat_scenario(monkeypatch):
+    scenarios = []
+
+    async def fake_stream(messages, tools, **kwargs):
+        scenarios.append(kwargs.get("scenario"))
+        yield {"type": "content_delta", "delta": "Hello"}
+        yield {
+            "type": "done", "finish_reason": "stop",
+            "message": {"role": "assistant", "content": "Hello"},
+            "usage": {}, "duration_ms": 1,
+        }
+
+    monkeypatch.setattr(respond.llm, "chat_with_tools_stream", fake_stream)
+
+    _ = [event async for event in respond.stream([
+        {"role": "system", "content": "s"},
+    ])]
+
+    assert scenarios == ["chat"]
+
+
+@pytest.mark.asyncio
 async def test_final_usage_none_when_provider_omits(monkeypatch):
     # Empty usage → None (renders as `?`), but measured duration still surfaces.
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", _fake_stream_no_usage)

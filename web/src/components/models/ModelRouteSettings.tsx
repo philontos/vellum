@@ -6,7 +6,7 @@ import type {
 import { useT } from "../../i18n";
 
 
-const SCENARIOS: ModelScenario[] = ["chat", "background", "evaluation"];
+const SCENARIOS: ModelScenario[] = ["chat", "inquiry", "background", "evaluation"];
 
 
 export function ModelRouteSettings({
@@ -26,6 +26,7 @@ export function ModelRouteSettings({
 
   function label(scenario: ModelScenario): string {
     if (scenario === "chat") return t("models.routeChat");
+    if (scenario === "inquiry") return t("models.routeInquiry");
     if (scenario === "background") return t("models.routeBackground");
     return t("models.routeEvaluation");
   }
@@ -36,7 +37,7 @@ export function ModelRouteSettings({
       <p className="mt-1 max-w-3xl text-sm text-muted">
         {t("models.routingSubtitle")}
       </p>
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         {SCENARIOS.map((scenario) => {
           const route = routes.find((item) => item.scenario === scenario);
           return (

@@ -170,6 +170,107 @@ def get_trait_evidence(dimension: str) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_trait_cursor(dimension: str) -> int:
+    """Per-dimension progress, falling back to the pre-migration cursor."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT through_turn FROM trait_cursors WHERE dimension = ?",
+            (dimension,),
+        ).fetchone()
+        if row is not None:
+            return row["through_turn"]
+        legacy = conn.execute(
+            "SELECT through_turn FROM cursors WHERE concern = 'trait'",
+        ).fetchone()
+    return legacy["through_turn"] if legacy is not None else -1
+
+
+def advance_trait_cursor(dimension: str, through_turn: int) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO trait_cursors(dimension, through_turn) VALUES (?, ?) "
+            "ON CONFLICT(dimension) DO UPDATE SET "
+            "through_turn = MAX(trait_cursors.through_turn, excluded.through_turn), "
+            "updated_at = datetime('now')",
+            (dimension, through_turn),
+        )
+
+
+def apply_trait_batch(
+    *, dimension: str, start_turn: int, end_turn: int,
+    observations: list[dict], content: dict | None, sample_count: int | None,
+    accepted_count: int | None = None,
+) -> bool:
+    """Atomically apply one dimension/span once and advance its cursor."""
+    with get_conn() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        exists = conn.execute(
+            "SELECT 1 FROM trait_batches WHERE dimension = ? "
+            "AND start_turn = ? AND end_turn = ?",
+            (dimension, start_turn, end_turn),
+        ).fetchone()
+        if exists is not None:
+            conn.execute(
+                "INSERT INTO trait_cursors(dimension, through_turn) VALUES (?, ?) "
+                "ON CONFLICT(dimension) DO UPDATE SET "
+                "through_turn = MAX(trait_cursors.through_turn, excluded.through_turn), "
+                "updated_at = datetime('now')",
+                (dimension, end_turn),
+            )
+            return False
+        for item in observations:
+            conn.execute(
+                "INSERT INTO trait_observations("
+                "dimension,sub_dimension,start_turn,end_turn,score,confidence,"
+                "evidence_turn,evidence_quote) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    dimension, item["sub_dimension"], start_turn, end_turn,
+                    item["score"], item["confidence"], item["evidence_turn"],
+                    item["evidence_quote"],
+                ),
+            )
+        if content is not None and sample_count is not None:
+            blob = json.dumps(content, ensure_ascii=False)
+            conn.execute(
+                "INSERT INTO trait_current(dimension, content_json, sample_count) "
+                "VALUES (?, ?, ?) ON CONFLICT(dimension) DO UPDATE SET "
+                "content_json = excluded.content_json, "
+                "sample_count = excluded.sample_count, updated_at = datetime('now')",
+                (dimension, blob, sample_count),
+            )
+            conn.execute(
+                "INSERT INTO trait_history(dimension, content_json) VALUES (?, ?)",
+                (dimension, blob),
+            )
+        conn.execute(
+            "INSERT INTO trait_batches("
+            "dimension,start_turn,end_turn,accepted_count) VALUES (?, ?, ?, ?)",
+            (
+                dimension, start_turn, end_turn,
+                len(observations) if accepted_count is None else accepted_count,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO trait_cursors(dimension, through_turn) VALUES (?, ?) "
+            "ON CONFLICT(dimension) DO UPDATE SET "
+            "through_turn = MAX(trait_cursors.through_turn, excluded.through_turn), "
+            "updated_at = datetime('now')",
+            (dimension, end_turn),
+        )
+    return True
+
+
+def list_trait_observations(
+    dimension: str, limit: int = 100,
+) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM trait_observations WHERE dimension = ? "
+            "ORDER BY id DESC LIMIT ?", (dimension, limit),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def _query_digest(conn, sql: str, args: tuple = ()) -> str:
     """Hash query rows without ever copying private text outside SQLite/process."""
     digest = hashlib.sha256()
@@ -318,7 +419,6 @@ def replace_active_fact(fact_id: int, text: str) -> dict | None:
     """Atomically replace one active Fact while preserving its source turn.
 
     The old row stays as lifecycle history (`superseded`), matching automatic
-    Fact updates and compaction. None means the requested row is no longer active.
     """
     with get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")

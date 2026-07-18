@@ -9,6 +9,8 @@ import { parseToolCalls } from "./toolcalls";
 
 // Stage → mark colour (echoes the chat ledger's page-edge marks).
 const STAGE_DOT: Record<string, string> = {
+  "inquiry.decide": "bg-status-info-fg",
+  "inquiry.repair": "bg-status-warn-fg",
   chat: "bg-accent",
   facts: "bg-status-pass-fg",
   compact: "bg-status-pass-fg", // facts-family green; never shares a tab with facts

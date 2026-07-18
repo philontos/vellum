@@ -1,0 +1,140 @@
+[
+  {
+    "id": "direct_factual",
+    "messages": [
+      {"turn": 10, "role": "user", "content": "法国的首都是什么？"}
+    ],
+    "expected_route": "direct",
+    "allowed_operations": ["none"]
+  },
+  {
+    "id": "direct_writing",
+    "messages": [
+      {"turn": 10, "role": "user", "content": "把这句话改得更礼貌：明天把报告给我。"}
+    ],
+    "expected_route": "direct",
+    "allowed_operations": ["none"]
+  },
+  {
+    "id": "open_high_stakes_personal_judgment",
+    "messages": [
+      {"turn": 10, "role": "user", "content": "我是不是应该辞职？领导明显在针对我。"}
+    ],
+    "expected_route": "inquire",
+    "allowed_operations": ["open"]
+  },
+  {
+    "id": "continue_unresolved_inquiry",
+    "messages": [
+      {"turn": 10, "role": "user", "content": "我是不是应该辞职？"},
+      {"turn": 11, "role": "assistant", "content": "最近发生的哪件事最让你觉得他在针对你？"},
+      {"turn": 12, "role": "user", "content": "他总是在会议上否定我。"}
+    ],
+    "inquiry": {
+      "id": 1,
+      "status": "exploring",
+      "revision": 1,
+      "parent_inquiry_id": null,
+      "ledger": {
+        "goal": {"text": "判断是否应该辞职", "evidence": [{"turn": 10, "quote": "我是不是应该辞职？"}]},
+        "observations": [],
+        "interpretations": [],
+        "hypotheses": [],
+        "blocking_unknowns": [
+          {"id": "u1", "question": "最近具体发生了什么？", "why_material": "需要区分选择性针对与普遍反馈", "status": "open", "resolved_after_turn": null}
+        ],
+        "asked_questions": [
+          {"unknown_id": "u1", "text": "最近发生的哪件事最让你觉得他在针对你？", "after_turn": 10}
+        ],
+        "provisional_conclusion": null
+      }
+    },
+    "expected_route": "inquire",
+    "allowed_operations": ["update"],
+    "expected_target_unknown_id": "u1"
+  },
+  {
+    "id": "synthesize_when_blockers_resolved",
+    "messages": [
+      {"turn": 20, "role": "user", "content": "我在考虑要不要辞职。"},
+      {"turn": 21, "role": "assistant", "content": "你最看重什么，现实约束是什么？"},
+      {"turn": 22, "role": "user", "content": "我最看重成长，存款够六个月，已经拿到另一个 offer。"},
+      {"turn": 23, "role": "user", "content": "现在请基于这些信息给我一个判断。"}
+    ],
+    "inquiry": {
+      "id": 2,
+      "status": "exploring",
+      "revision": 3,
+      "parent_inquiry_id": null,
+      "ledger": {
+        "goal": {"text": "判断是否应该辞职", "evidence": [{"turn": 20, "quote": "要不要辞职"}]},
+        "observations": [
+          {"id": "o1", "text": "有六个月存款并已获得另一个 offer", "evidence": [{"turn": 22, "quote": "存款够六个月，已经拿到另一个 offer"}]}
+        ],
+        "interpretations": [],
+        "hypotheses": [],
+        "blocking_unknowns": [
+          {"id": "u1", "question": "核心价值和现实约束是什么？", "why_material": "决定建议", "status": "resolved", "resolved_after_turn": 22}
+        ],
+        "asked_questions": [],
+        "provisional_conclusion": null
+      }
+    },
+    "expected_route": "synthesize",
+    "allowed_operations": ["update", "close"]
+  },
+  {
+    "id": "explicit_provisional_synthesis",
+    "messages": [
+      {"turn": 30, "role": "user", "content": "我没有更多信息了，请明确标注不确定性，先给我暂定判断。"}
+    ],
+    "inquiry": {
+      "id": 3,
+      "status": "exploring",
+      "revision": 2,
+      "parent_inquiry_id": null,
+      "ledger": {
+        "goal": {"text": "判断合作伙伴是否可信", "evidence": []},
+        "observations": [],
+        "interpretations": [],
+        "hypotheses": [],
+        "blocking_unknowns": [
+          {"id": "u1", "question": "是否有可核验的履约记录？", "why_material": "可信度判断的关键证据", "status": "open", "resolved_after_turn": null}
+        ],
+        "asked_questions": [],
+        "provisional_conclusion": null
+      }
+    },
+    "expected_route": "synthesize",
+    "allowed_operations": ["update", "pause"]
+  },
+  {
+    "id": "pause_on_topic_switch",
+    "messages": [
+      {"turn": 40, "role": "user", "content": "我在考虑要不要辞职。"},
+      {"turn": 41, "role": "assistant", "content": "最近具体发生了什么？"},
+      {"turn": 42, "role": "user", "content": "这个先放一放。法国的首都是什么？"}
+    ],
+    "inquiry": {
+      "id": 4,
+      "status": "exploring",
+      "revision": 1,
+      "parent_inquiry_id": null,
+      "ledger": {
+        "goal": {"text": "判断是否应该辞职", "evidence": [{"turn": 40, "quote": "要不要辞职"}]},
+        "observations": [],
+        "interpretations": [],
+        "hypotheses": [],
+        "blocking_unknowns": [
+          {"id": "u1", "question": "最近具体发生了什么？", "why_material": "需要具体事件才能判断", "status": "open", "resolved_after_turn": null}
+        ],
+        "asked_questions": [
+          {"unknown_id": "u1", "text": "最近具体发生了什么？", "after_turn": 40}
+        ],
+        "provisional_conclusion": null
+      }
+    },
+    "expected_route": "direct",
+    "allowed_operations": ["pause"]
+  }
+]

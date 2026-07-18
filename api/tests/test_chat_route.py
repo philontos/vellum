@@ -8,6 +8,8 @@ def _setup(monkeypatch):
     import app.chat.ingest as ingest
     import app.chat.retrieval as retrieval
     import app.chat.respond as respond
+    import app.chat.orchestrator as orchestrator
+    from app.inquiry.contracts import InquiryDecision
 
     async def _fake_embed(text):
         return [1.0, 0.0, 0.0]
@@ -22,6 +24,16 @@ def _setup(monkeypatch):
                "usage": {"prompt_tokens": 7, "completion_tokens": 5}, "duration_ms": 42,
                "reasoning": "greet the user"}
     monkeypatch.setattr(respond.llm, "chat_with_tools_stream", fake_stream)
+
+    async def direct(_context):
+        return InquiryDecision.model_validate({
+            "route": "direct", "operation": "none",
+            "expected_revision": None, "patch": {},
+            "next_question": None, "target_unknown_id": None,
+            "answer_brief": "Answer directly.", "provisional": False,
+        })
+
+    monkeypatch.setattr(orchestrator.controller, "decide", direct)
 
 
 def test_chat_streams_and_persists_both_turns(migrated_db, monkeypatch):
@@ -76,7 +88,7 @@ def test_chat_trace_is_tagged_with_the_assistant_turn(migrated_db, monkeypatch):
 
 def test_chat_uses_the_selected_production_model_candidate(migrated_db, monkeypatch):
     _setup(monkeypatch)
-    import app.routes.chat as chat_route
+    import app.chat.orchestrator as orchestrator
     from app.main import app
     from app.store.traces import get_conn
 
@@ -86,7 +98,7 @@ def test_chat_uses_the_selected_production_model_candidate(migrated_db, monkeypa
     async def no_background_modeling():
         return None
 
-    monkeypatch.setattr(chat_route.runner, "run_pending", no_background_modeling)
+    monkeypatch.setattr(orchestrator.runner, "run_pending", no_background_modeling)
     client = TestClient(app)
     with client.stream("POST", "/chat", json={"message": "hello"}) as response:
         assert response.status_code == 200

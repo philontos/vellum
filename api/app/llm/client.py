@@ -123,6 +123,10 @@ class StructuredLLMError(RuntimeError):
     pass
 
 
+class StructuredResponseParseError(StructuredLLMError):
+    """The provider replied, but its structured content was not parseable."""
+
+
 # --------------------------------------------------------------------------
 # Provider config — universal OpenAI-compatible interface.
 #
@@ -220,30 +224,42 @@ def _scenario_for_stage(stage: str | None) -> str:
     return "background"
 
 
-def resolve_structured_llm_config(*, stage: str | None = None) -> dict[str, str]:
-    """Resolve the request-local override or the route for this LLM stage."""
+def resolve_structured_llm_config(
+    *, stage: str | None = None, scenario: str | None = None,
+) -> dict[str, str]:
+    """Resolve an explicit scenario, or retain legacy stage-based routing.
+
+    ``stage`` is observability metadata. New orchestration code passes
+    ``scenario`` explicitly so a new trace stage cannot silently select the
+    background model.
+    """
     override = _llm_config_override.get()
     if override is not None:
         return dict(override)
     # Local import keeps the generic client usable without making the
     # candidate catalog responsible for request-local client state.
     from app.llm import candidates
-    return candidates.resolve_for_scenario(_scenario_for_stage(stage))
+    return candidates.resolve_for_scenario(scenario or _scenario_for_stage(stage))
 
 
 def is_structured_llm_configured(
     config: dict[str, str] | None = None,
     *,
     stage: str | None = None,
+    scenario: str | None = None,
 ) -> bool:
-    config = config or resolve_structured_llm_config(stage=stage)
+    config = config or resolve_structured_llm_config(
+        stage=stage, scenario=scenario,
+    )
     return bool(config["api_key"] and config["base_url"] and config["model"])
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
     text = (text or "").strip()
     if not text:
-        raise StructuredLLMError("Structured extraction model returned empty content.")
+        raise StructuredResponseParseError(
+            "Structured extraction model returned empty content."
+        )
 
     try:
         return json.loads(text)
@@ -251,11 +267,15 @@ def _extract_json_object(text: str) -> dict[str, Any]:
         start = text.find("{")
         end = text.rfind("}")
         if start == -1 or end == -1 or end <= start:
-            raise StructuredLLMError("Structured extraction model did not return valid JSON.")
+            raise StructuredResponseParseError(
+                "Structured extraction model did not return valid JSON."
+            )
         try:
             return json.loads(text[start : end + 1])
         except json.JSONDecodeError as exc:
-            raise StructuredLLMError("Structured extraction model returned malformed JSON.") from exc
+            raise StructuredResponseParseError(
+                "Structured extraction model returned malformed JSON."
+            ) from exc
 
 
 def _looks_like_json_format_rejection(status_code: int, body: str) -> bool:
@@ -339,6 +359,7 @@ def _extract_reasoning(d: Any) -> str:
 async def chat_json(
     *, system_prompt: str, user_prompt: str,
     stage: str = "", context: dict | None = None,
+    scenario: str | None = None,
 ) -> dict[str, Any]:
     """Get a JSON object back from the LLM, robust across providers.
 
@@ -351,7 +372,7 @@ async def chat_json(
       4. Always extract JSON via _extract_json_object so markdown fences /
          leading prose don't kill us.
     """
-    config = resolve_structured_llm_config(stage=stage)
+    config = resolve_structured_llm_config(stage=stage, scenario=scenario)
     if not is_structured_llm_configured(config):
         raise StructuredLLMError(
             "LLM is not configured. Set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL."
@@ -444,7 +465,9 @@ async def chat_json(
                 "user_prompt":   user_prompt or "",
                 "response":      str(data)[:4000],
             })
-            raise StructuredLLMError("Structured extraction LLM returned an unexpected response shape.") from exc
+            raise StructuredResponseParseError(
+                "Structured extraction LLM returned an unexpected response shape."
+            ) from exc
 
         _record_llm_call({
             "stage": stage or "unknown", "model": config["model"],
@@ -486,6 +509,7 @@ async def chat_with_tools(
     tools: list[dict],
     stage: str = "",
     context: dict | None = None,
+    scenario: str | None = None,
 ) -> dict:
     """Single non-streaming round with tool calling. Returns {"finish_reason", "message"}.
 
@@ -493,7 +517,7 @@ async def chat_with_tools(
     (finish_reason="stop"). Callers append the returned message to their messages
     list, then append role="tool" results before the next round.
     """
-    config = resolve_structured_llm_config(stage=stage)
+    config = resolve_structured_llm_config(stage=stage, scenario=scenario)
     if not is_structured_llm_configured(config):
         raise StructuredLLMError("LLM not configured.")
 
@@ -574,6 +598,7 @@ async def chat_with_tools_stream(
     temperature: float = 0.3,
     stage: str = "",
     context: dict | None = None,
+    scenario: str | None = None,
 ) -> AsyncIterator[dict]:
     """Streaming variant of chat_with_tools, OpenAI-compatible SSE.
 
@@ -588,7 +613,7 @@ async def chat_with_tools_stream(
     The final "message" follows the OpenAI assistant-message shape and is ready
     to be appended back to the messages list before the next round.
     """
-    config = resolve_structured_llm_config(stage=stage)
+    config = resolve_structured_llm_config(stage=stage, scenario=scenario)
     if not is_structured_llm_configured(config):
         raise StructuredLLMError("LLM not configured.")
 

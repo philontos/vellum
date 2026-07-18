@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { TraitDim } from "../api/client";
+import { useT } from "../i18n";
 import { Card } from "./ui/Card";
 import { traitRows, leaning, sparkline, type TraitRow } from "./traits/model";
 import { SchwartzChart } from "./SchwartzChart";
@@ -15,6 +16,7 @@ export function TraitChart({ dim }: { dim: TraitDim }) {
 }
 
 function BarTraitChart({ dim }: { dim: TraitDim }) {
+  const { t } = useT();
   const [expanded, setExpanded] = useState(false);
   const rows = traitRows(dim);
   const foldable = (dim.meta?.sort_by_score ?? false) && rows.length > COLLAPSED;
@@ -40,6 +42,23 @@ function BarTraitChart({ dim }: { dim: TraitDim }) {
         >
           {expanded ? "▴" : `+${rows.length - COLLAPSED} ▾`}
         </button>
+      )}
+      {(dim.observations?.length ?? 0) > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <div className="text-[10px] uppercase tracking-[0.1em] text-muted">
+            {t("model.traitEvidence")}
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {dim.observations?.slice(0, 3).map((observation) => (
+              <li key={observation.id} className="text-xs text-ink-soft">
+                <span className="mr-1.5 font-mono text-[10px] text-muted">
+                  turn {observation.evidence_turn} · {observation.sub_dimension}
+                </span>
+                “{observation.evidence_quote}”
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Card>
   );

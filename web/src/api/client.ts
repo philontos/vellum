@@ -150,12 +150,19 @@ export type TraitValue = {
   stance?: SchwartzStance;
   status?: SchwartzStatus;
 };
+export type TraitObservation = {
+  id: number; dimension: string; sub_dimension: string;
+  start_turn: number; end_turn: number;
+  score: number; confidence: number;
+  evidence_turn: number; evidence_quote: string; created_at: string;
+};
 export type TraitDim = {
   dimension: string;
   content_json: Record<string, TraitValue>;
   sample_count: number;
   updated_at: string;
   history: { taken_at: string; content_json: Record<string, { score?: number }> }[];
+  observations?: TraitObservation[];
   meta: TraitMeta | null;
   profile?: SchwartzProfile;
 };
@@ -182,6 +189,9 @@ export type TraceMeta = {
   completion_tokens: number | null; duration_ms: number | null; pinned: number;
   note: string | null; created_at: string;
   params: string | null; // JSON blob; background passes carry {from,to} covered-span
+  run_id?: string | null;
+  scenario?: string | null;
+  attempt?: number | null;
 };
 
 /** Scan-friendly trace metadata returned by the index. Heavy diagnostic bodies
@@ -227,6 +237,86 @@ export async function patchTrace(id: number, patch: { pinned?: boolean; note?: s
     body: JSON.stringify(patch),
   });
   if (!r.ok) throw new Error(`patch failed: ${r.status}`);
+}
+
+export type TurnRun = {
+  id: string;
+  user_turn: number;
+  assistant_turn: number | null;
+  stream: string;
+  route: "direct" | "inquire" | "synthesize" | null;
+  status: "running" | "done" | "degraded" | "error";
+  inquiry_id: number | null;
+  revision_before: number | null;
+  revision_after: number | null;
+  controller_model: string | null;
+  responder_model: string | null;
+  decision: Record<string, unknown> | null;
+  context_meta: Record<string, unknown>;
+  prompt_release_id: number | null;
+  prompt_release_version: number | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type InquiryEvidence = { turn: number; quote: string };
+export type InquiryGroundedItem = {
+  id: string; text: string; evidence: InquiryEvidence[];
+};
+export type InquiryHypothesis = {
+  id: string; text: string;
+  supporting_evidence: InquiryEvidence[];
+  disconfirming_evidence: InquiryEvidence[];
+};
+export type InquiryUnknown = {
+  id: string; question: string; why_material: string;
+  status: "open" | "resolved"; resolved_after_turn: number | null;
+};
+export type InquiryLedger = {
+  goal: { text: string; evidence: InquiryEvidence[] } | null;
+  observations: InquiryGroundedItem[];
+  interpretations: InquiryGroundedItem[];
+  hypotheses: InquiryHypothesis[];
+  blocking_unknowns: InquiryUnknown[];
+  asked_questions: Array<{
+    unknown_id: string; text: string; after_turn: number;
+  }>;
+  provisional_conclusion: string | null;
+};
+export type Inquiry = {
+  id: number; stream: string;
+  status: "exploring" | "reviewing" | "paused" | "closed";
+  revision: number; goal: string; ledger: InquiryLedger;
+  opened_turn: number; last_turn: number; closed_turn: number | null;
+  parent_inquiry_id: number | null;
+  created_at: string; updated_at: string;
+};
+export type InquiryEvent = {
+  id: number; inquiry_id: number; run_id: string | null; user_turn: number;
+  action: string; revision_before: number; revision_after: number;
+  status_after: Inquiry["status"]; ledger: InquiryLedger;
+  decision: Record<string, unknown>; created_at: string;
+};
+
+export async function getTurnRuns(limit = 100): Promise<TurnRun[]> {
+  const r = await fetch(`/inspect/turn-runs?limit=${limit}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`turn runs failed: ${r.status}`);
+  return (await r.json()).runs;
+}
+
+export async function getInquiries(limit = 100): Promise<Inquiry[]> {
+  const r = await fetch(`/inspect/inquiries?limit=${limit}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`inquiries failed: ${r.status}`);
+  return (await r.json()).inquiries;
+}
+
+export async function getInquiry(id: number): Promise<{
+  inquiry: Inquiry; events: InquiryEvent[];
+}> {
+  const r = await fetch(`/inspect/inquiries/${id}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`inquiry failed: ${r.status}`);
+  return r.json();
 }
 
 // --- evals ---------------------------------------------------------------
