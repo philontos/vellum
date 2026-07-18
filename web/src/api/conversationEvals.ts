@@ -29,6 +29,13 @@ export type ConversationPromptVersion = {
   created_at: string;
 };
 
+export type ConversationModelCandidate = {
+  id: string;
+  name: string;
+  model: string;
+  configured: boolean;
+};
+
 export type ConversationEvalRun = {
   id: number;
   record_id: number | null;
@@ -52,6 +59,7 @@ export type ConversationEvalRun = {
 };
 
 export type ConversationEvalWorkspace = {
+  model_candidates: ConversationModelCandidate[];
   rounds: ConversationEvalRound[];
   releases: ConversationPromptRelease[];
   prompt_versions: ConversationPromptVersion[];
@@ -109,6 +117,11 @@ export type ConversationEvalRunRequest = {
   prompt_kind: "original" | "release" | "custom";
   prompt_release_id?: number;
   prompt_version_id?: number;
+  model_candidate?: string;
+};
+
+type ConversationEvalRecordRunRequest = {
+  model_candidate: string;
 };
 
 async function responseError(response: Response, action: string): Promise<Error> {
@@ -221,7 +234,7 @@ function parseFrame(frame: string): {
 
 async function streamConversationEvalAt(
   url: string,
-  request: ConversationEvalRunRequest | null,
+  request: ConversationEvalRunRequest | ConversationEvalRecordRunRequest | null,
   handlers: RunHandlers,
   opts: { idleTimeoutMs?: number } = {},
 ): Promise<void> {
@@ -292,10 +305,14 @@ export async function streamConversationEvalRun(
 
 export async function streamConversationEvalRecordRun(
   recordId: number,
+  modelCandidate: string,
   handlers: RunHandlers,
   opts: { idleTimeoutMs?: number } = {},
 ): Promise<void> {
   return streamConversationEvalAt(
-    `/inspect/conversation-evals/records/${recordId}/runs`, null, handlers, opts,
+    `/inspect/conversation-evals/records/${recordId}/runs`,
+    { model_candidate: modelCandidate },
+    handlers,
+    opts,
   );
 }

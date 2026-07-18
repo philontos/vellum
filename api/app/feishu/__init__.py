@@ -1,3 +1,5 @@
-"""Feishu (Lark) adapter — bridges Feishu private chats to vellum's brain over a
-WebSocket long connection. See `adapter.py` for the runtime glue and `parse.py`
-for the SDK-free message shaping."""
+"""Deprecated Feishu (Lark) compatibility adapter.
+
+Existing private-chat deployments remain supported over the WebSocket long
+connection, but new entry-point work targets the web chat path.
+"""

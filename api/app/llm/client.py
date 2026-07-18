@@ -68,6 +68,9 @@ async def _post_with_retry(
 # --------------------------------------------------------------------------
 
 _llm_trace_sink: ContextVar[Optional[list]] = ContextVar("llm_trace_sink", default=None)
+_llm_config_override: ContextVar[Optional[dict[str, str]]] = ContextVar(
+    "llm_config_override", default=None,
+)
 
 
 @contextmanager
@@ -94,6 +97,25 @@ def _record_llm_call(record: dict) -> None:
         sink.append(record)
 
 
+@contextmanager
+def use_llm_config(config: dict[str, str]):
+    """Use one request-local provider config without mutating process env.
+
+    ContextVar keeps simultaneous evaluation streams isolated even when they
+    choose different providers.
+    """
+    normalized = {
+        "base_url": (config.get("base_url") or "").strip().rstrip("/"),
+        "api_key": (config.get("api_key") or "").strip(),
+        "model": (config.get("model") or "").strip(),
+    }
+    token = _llm_config_override.set(normalized)
+    try:
+        yield normalized
+    finally:
+        _llm_config_override.reset(token)
+
+
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS") or "60")
 
 
@@ -110,6 +132,7 @@ class StructuredLLMError(RuntimeError):
 #     LLM_BASE_URL   e.g. https://api.openai.com/v1
 #     LLM_API_KEY    your provider key
 #     LLM_MODEL      e.g. gpt-4.1, deepseek-chat, gemini-2.5-pro, ...
+#     LLM_CANDIDATE  primary (above), glm, or kimi
 #
 # Tool calling is on by default. Set LLM_SUPPORTS_TOOLS=0 for models that
 # can't tool-call (recall then degrades to framework-only / A).
@@ -149,6 +172,8 @@ _NO_TEMPERATURE_MODELS: tuple[str, ...] = (
     "o1-",      # o1-mini, o1-preview, o1-pro
     "o3-",      # o3-mini, o3-pro
     "o4-mini",
+    # Moonshot — Kimi K3 fixes temperature at 1.0 and recommends omitting it.
+    "kimi-k3",
 )
 
 
@@ -164,6 +189,19 @@ def _supports_temperature(model: str) -> bool:
     return not any(s in m for s in _NO_TEMPERATURE_MODELS)
 
 
+def _supports_stream_options(model: str) -> bool:
+    """GLM emits usage in its terminal SSE chunk without stream_options.
+
+    The field is absent from the official GLM request schema, so omit it for
+    GLM model IDs while retaining it for providers that require an explicit
+    include_usage opt-in.
+    """
+    m = (model or "").lower()
+    if "/" in m:
+        m = m.rsplit("/", 1)[-1]
+    return not m.startswith("glm-")
+
+
 _JSON_ONLY_HINT = (
     "\n\nIMPORTANT: Respond with a single valid JSON object only. "
     "No markdown fences, no prose, no explanation — JSON only."
@@ -171,7 +209,16 @@ _JSON_ONLY_HINT = (
 
 
 def resolve_structured_llm_config() -> dict[str, str]:
-    """Resolve LLM config from LLM_BASE_URL / LLM_API_KEY / LLM_MODEL."""
+    """Resolve the request-local, named, or primary production LLM config."""
+    override = _llm_config_override.get()
+    if override is not None:
+        return dict(override)
+    selected = (os.getenv("LLM_CANDIDATE") or "").strip().lower() or "primary"
+    if selected != "primary":
+        # Local import keeps the generic client usable without making the
+        # candidate catalog responsible for client state.
+        from app.llm import candidates
+        return candidates.resolve(selected)
     return {
         "base_url": (os.getenv("LLM_BASE_URL") or "").strip().rstrip("/"),
         "api_key": (os.getenv("LLM_API_KEY") or "").strip(),
@@ -539,9 +586,10 @@ async def chat_with_tools_stream(
     payload = {
         "model": config["model"],
         "stream": True,
-        "stream_options": {"include_usage": True},
         "messages": messages,
     }
+    if _supports_stream_options(config["model"]):
+        payload["stream_options"] = {"include_usage": True}
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
@@ -654,6 +702,10 @@ async def chat_with_tools_stream(
     duration_ms = int((time.monotonic() - start) * 1000)
     tool_calls_final = [tc_acc[i] for i in sorted(tc_acc.keys())] if tc_acc else None
     message: dict = {"role": "assistant", "content": content_buf or None}
+    if reasoning_buf:
+        # Thinking models such as Kimi K3 require the complete assistant message
+        # (including reasoning_content) to be replayed before tool results.
+        message["reasoning_content"] = reasoning_buf
     if tool_calls_final:
         message["tool_calls"] = tool_calls_final
 
@@ -697,12 +749,13 @@ async def chat_text_stream(
     payload = {
         "model": config["model"],
         "stream": True,
-        "stream_options": {"include_usage": True},
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
         ],
     }
+    if _supports_stream_options(config["model"]):
+        payload["stream_options"] = {"include_usage": True}
     if _supports_temperature(config["model"]):
         payload["temperature"] = temperature
     prompt_chars = len(system_prompt or "") + len(user_prompt or "")

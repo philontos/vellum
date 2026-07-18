@@ -48,3 +48,57 @@ async def test_stream_yields_reasoning_delta(monkeypatch):
     # content still streams as before
     content = "".join(e["delta"] for e in events if e["type"] == "content_delta")
     assert content == "answer"
+
+
+@pytest.mark.asyncio
+async def test_kimi_k3_omits_fixed_temperature_and_preserves_reasoning(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "https://api.moonshot.cn/v1")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "kimi-k3")
+    payloads = []
+    lines = [
+        'data: {"choices":[{"delta":{"reasoning_content":"kept thought"}}]}',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"lookup","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}',
+        "data: [DONE]",
+    ]
+
+    def fake_stream(self, method, url, headers=None, json=None):
+        payloads.append(json)
+        return _FakeStream(lines)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+    events = [event async for event in llm.chat_with_tools_stream(
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[{"type": "function", "function": {"name": "lookup"}}],
+    )]
+    done = next(event for event in events if event["type"] == "done")
+
+    assert "temperature" not in payloads[0]
+    assert done["message"]["reasoning_content"] == "kept thought"
+
+
+@pytest.mark.asyncio
+async def test_glm_stream_omits_unsupported_stream_options(monkeypatch):
+    monkeypatch.setenv("LLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+    monkeypatch.setenv("LLM_API_KEY", "k")
+    monkeypatch.setenv("LLM_MODEL", "glm-5.2")
+    payloads = []
+    lines = [
+        'data: {"choices":[{"delta":{"content":"answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1}}',
+        "data: [DONE]",
+    ]
+
+    def fake_stream(self, method, url, headers=None, json=None):
+        payloads.append(json)
+        return _FakeStream(lines)
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+    events = [event async for event in llm.chat_with_tools_stream(
+        messages=[{"role": "user", "content": "hi"}], tools=[],
+    )]
+
+    assert "stream_options" not in payloads[0]
+    done = next(event for event in events if event["type"] == "done")
+    assert done["usage"] == {"prompt_tokens": 2, "completion_tokens": 1}

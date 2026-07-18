@@ -3,7 +3,8 @@ import asyncio
 import json
 
 from app.chat import respond
-from app.llm.client import resolve_structured_llm_config
+from app.llm import candidates
+from app.llm import client as llm
 from app.prompts import runtime, service as prompt_service
 from app.store import conversation_evals as eval_store, memory, traces
 
@@ -45,6 +46,7 @@ def workspace(limit: int = 50, before: int | None = None) -> dict:
         "rounds": rounds,
         "releases": prompt_service.list_releases(),
         "prompt_versions": eval_store.list_prompt_versions(),
+        "model_candidates": candidates.public_candidates(),
         "has_more": len(rows) > limit,
     }
 
@@ -79,8 +81,12 @@ def create_prompt_version(name: str, content: str) -> dict:
     return eval_store.create_prompt_version(name, content)
 
 
-def start_run(prepared: PreparedReplay, *, record_id: int | None = None) -> dict:
-    model_name = resolve_structured_llm_config().get("model") or None
+def start_run(
+    prepared: PreparedReplay, *, record_id: int | None = None,
+    llm_config: dict[str, str] | None = None,
+) -> dict:
+    config = llm_config or llm.resolve_structured_llm_config()
+    model_name = config.get("model") or None
     run_id = eval_store.create_run({
         "record_id": record_id,
         "source_user_turn": prepared.round["user_turn"],
@@ -100,10 +106,14 @@ def start_run(prepared: PreparedReplay, *, record_id: int | None = None) -> dict
     return eval_store.get_run(run_id)
 
 
-async def run_events(run_id: int, prepared: PreparedReplay):
+async def run_events(
+    run_id: int, prepared: PreparedReplay, *,
+    llm_config: dict[str, str] | None = None,
+):
     final: dict | None = None
     try:
-        with runtime.use_snapshot(prepared.snapshot):
+        config = llm_config or llm.resolve_structured_llm_config()
+        with llm.use_llm_config(config), runtime.use_snapshot(prepared.snapshot):
             async for event in respond.stream(
                 prepared.messages,
                 stream=prepared.round["stream"],

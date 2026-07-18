@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -17,6 +17,7 @@ from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
 from app.evaluation import archive as conversation_archive
 from app.evaluation import conversation as conversation_eval
+from app.llm import candidates as model_candidates
 from app.llm.client import resolve_structured_llm_config
 from app.store import model, observability as obs, portrait_claims, traces
 from evals.config import eval_gen_config
@@ -97,6 +98,11 @@ class ConversationReplayIn(BaseModel):
     prompt_kind: Literal["original", "release", "custom"]
     prompt_release_id: int | None = None
     prompt_version_id: int | None = None
+    model_candidate: str = "primary"
+
+
+class ConversationModelCandidateIn(BaseModel):
+    model_candidate: str = "primary"
 
 
 def _conversation_eval_error(exc: Exception):
@@ -105,6 +111,8 @@ def _conversation_eval_error(exc: Exception):
     if isinstance(exc, conversation_archive.ConversationEvalRecordNotFoundError):
         raise HTTPException(status_code=404, detail="Evaluation record not found") from exc
     if isinstance(exc, conversation_eval.ReplayValidationError):
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if isinstance(exc, model_candidates.ModelCandidateError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     raise exc
 
@@ -182,6 +190,7 @@ async def run_conversation_eval(
     _owner: dict | None = Depends(require_owner),
 ):
     try:
+        llm_config = model_candidates.resolve(body.model_candidate)
         record = await conversation_archive.create_record(
             body.assistant_turn,
             body.prompt_kind,
@@ -189,30 +198,40 @@ async def run_conversation_eval(
             prompt_version_id=body.prompt_version_id,
         )
         prepared = conversation_archive.prepared_for_record(record["id"])
-        run = conversation_eval.start_run(prepared, record_id=record["id"])
+        run = conversation_eval.start_run(
+            prepared, record_id=record["id"], llm_config=llm_config,
+        )
     except Exception as exc:
         return _conversation_eval_error(exc)
 
-    return _conversation_run_stream(run, prepared)
+    return _conversation_run_stream(run, prepared, llm_config)
 
 
 @router.post("/inspect/conversation-evals/records/{record_id}/runs")
 async def run_conversation_eval_record(
     record_id: int,
+    body: ConversationModelCandidateIn | None = Body(default=None),
     _owner: dict | None = Depends(require_owner),
 ):
     try:
+        llm_config = model_candidates.resolve(
+            body.model_candidate if body is not None else "primary"
+        )
         prepared = conversation_archive.prepared_for_record(record_id)
-        run = conversation_eval.start_run(prepared, record_id=record_id)
+        run = conversation_eval.start_run(
+            prepared, record_id=record_id, llm_config=llm_config,
+        )
     except Exception as exc:
         return _conversation_eval_error(exc)
-    return _conversation_run_stream(run, prepared)
+    return _conversation_run_stream(run, prepared, llm_config)
 
 
-def _conversation_run_stream(run: dict, prepared):
+def _conversation_run_stream(run: dict, prepared, llm_config: dict[str, str]):
     async def gen():
         yield _sse({"run": run})
-        async for event in conversation_eval.run_events(run["id"], prepared):
+        async for event in conversation_eval.run_events(
+            run["id"], prepared, llm_config=llm_config,
+        ):
             if event["type"] == "delta":
                 yield _sse({"delta": {"text": event["text"]}})
             elif event["type"] == "activity":

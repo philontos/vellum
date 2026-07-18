@@ -1,24 +1,34 @@
-import type { ConversationEvalRecordDetail } from "../../api/conversationEvals";
+import type {
+  ConversationEvalRecordDetail,
+  ConversationModelCandidate,
+} from "../../api/conversationEvals";
 import { useT } from "../../i18n";
 import { Tag } from "../ui/StatusChip";
 import { PromptInspector } from "./PromptInspector";
 import { ResultCard } from "./ResultCard";
+import { ModelCandidateSelect } from "./ModelCandidateSelect";
 
 export function ConversationEvalRecordView({
   record,
+  modelCandidates,
+  modelCandidate,
   running,
   liveOutput,
   error,
   onBack,
   onRunAgain,
+  onModelCandidateChange,
   onRefresh,
 }: {
   record: ConversationEvalRecordDetail;
+  modelCandidates: ConversationModelCandidate[];
+  modelCandidate: string;
   running: boolean;
   liveOutput: string;
   error: string;
   onBack: () => void;
   onRunAgain: () => void;
+  onModelCandidateChange: (candidate: string) => void;
   onRefresh: () => void;
 }) {
   const { t } = useT();
@@ -27,6 +37,9 @@ export function ConversationEvalRecordView({
     : record.prompt_kind === "custom"
       ? t("eval.promptKindCustom")
       : t("eval.promptKindOriginal");
+  const selectedModel = modelCandidates.find(
+    (candidate) => candidate.id === modelCandidate,
+  );
   return (
     <div
       data-eval-record-detail={record.id}
@@ -56,10 +69,18 @@ export function ConversationEvalRecordView({
         >
           {t("eval.refresh")}
         </button>
+        <ModelCandidateSelect
+          id="eval-record-model-candidate"
+          candidates={modelCandidates}
+          value={modelCandidate}
+          disabled={running}
+          onChange={onModelCandidateChange}
+          compact
+        />
         <button
           type="button"
           onClick={onRunAgain}
-          disabled={running}
+          disabled={running || !selectedModel?.configured}
           className="min-h-9 rounded-lg bg-accent px-4 text-sm font-medium text-accent-fg hover:bg-accent-ink disabled:bg-surface disabled:text-muted"
         >
           {running ? t("eval.generating") : t("eval.runAgain")}
@@ -147,7 +168,7 @@ export function ConversationEvalRecordView({
                     label={record.prompt_label}
                     output={liveOutput}
                     status="running"
-                    model={null}
+                    model={selectedModel?.model ?? null}
                     live
                   />
                 )}

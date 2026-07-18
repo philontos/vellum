@@ -40,7 +40,7 @@ def auth_db_path() -> Path:
 
 
 def prompt_db_path() -> Path:
-    """Deployment-wide prompt releases shared by every account.
+    """Deployment-wide prompts and model access shared by every account.
 
     Eval workers temporarily repoint ``VELLUM_DATA_DIR`` at one user's directory;
     an explicit absolute override keeps them on the same control-plane database.
@@ -125,7 +125,7 @@ def web_search_configured() -> bool:
     return False
 
 
-# === Feishu / Lark adapter (optional) ===
+# === Feishu / Lark adapter (deprecated; compatibility only) ===
 # A WebSocket long-connection bot that bridges Feishu private chats to vellum's
 # brain. Off unless BOTH app credentials are present, so a deployment without
 # them boots exactly as before (the adapter task is never started).

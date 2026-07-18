@@ -25,6 +25,9 @@ def test_prompt_migrations_create_the_global_release_store(tmp_path, monkeypatch
         "prompt_releases",
         "prompt_release_items",
         "prompt_audit_events",
+        "model_candidate_configs",
+        "model_candidate_validation_tickets",
+        "model_candidate_audit_events",
         "schema_migrations",
     } <= names
 
