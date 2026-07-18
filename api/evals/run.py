@@ -1,4 +1,4 @@
-"""CLI: python -m evals.run <recall|traits|facts|altitude|consultant|all>
+"""CLI: python -m evals.run <recall|traits|facts|altitude|consultant|inquiry|all>
 
 Real eval runner. Requires LLM_* (system under test) and EVAL_GEN_* (external
 evaluator, distinct model). Each case runs against a fresh temp data dir so cases
@@ -68,8 +68,14 @@ async def _consultant():
     return out
 
 
+async def _inquiry():
+    from evals import inquiry
+    return [await inquiry.run_case(case) for case in inquiry.load_cases()]
+
+
 _EVALS = {"recall": _recall, "traits": _traits, "facts": _facts,
-          "altitude": _altitude, "consultant": _consultant}
+          "altitude": _altitude, "consultant": _consultant,
+          "inquiry": _inquiry}
 
 
 async def _main(which: str):

@@ -8,7 +8,7 @@ def test_chat_triggers_background_modeling(migrated_db, monkeypatch):
     import app.chat.ingest as ingest
     import app.chat.retrieval as retrieval
     import app.chat.respond as respond
-    import app.routes.chat as chat_route
+    import app.chat.orchestrator as orchestrator
 
     async def fake_embed(t): return [1.0, 0.0, 0.0]
     monkeypatch.setattr(ingest, "embed", fake_embed)
@@ -22,7 +22,7 @@ def test_chat_triggers_background_modeling(migrated_db, monkeypatch):
     ran = {"called": False}
     async def fake_run_pending():
         ran["called"] = True
-    monkeypatch.setattr(chat_route.runner, "run_pending", fake_run_pending)
+    monkeypatch.setattr(orchestrator.runner, "run_pending", fake_run_pending)
 
     from app.main import app
     client = TestClient(app)

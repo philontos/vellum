@@ -6,23 +6,28 @@ export const PROMPT_CATEGORY_META = {
     labelKey: "prompts.category.chat",
     descriptionKey: "prompts.category.chatDescription",
   },
-  memory: {
+  inquiry: {
     order: 1,
+    labelKey: "prompts.category.inquiry",
+    descriptionKey: "prompts.category.inquiryDescription",
+  },
+  memory: {
+    order: 2,
     labelKey: "prompts.category.memory",
     descriptionKey: "prompts.category.memoryDescription",
   },
   traits: {
-    order: 2,
+    order: 3,
     labelKey: "prompts.category.traits",
     descriptionKey: "prompts.category.traitsDescription",
   },
   tools: {
-    order: 3,
+    order: 4,
     labelKey: "prompts.category.tools",
     descriptionKey: "prompts.category.toolsDescription",
   },
   protocol: {
-    order: 4,
+    order: 5,
     labelKey: "prompts.category.protocol",
     descriptionKey: "prompts.category.protocolDescription",
   },

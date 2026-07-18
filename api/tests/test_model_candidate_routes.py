@@ -46,6 +46,12 @@ def test_admin_workspace_lists_the_primary_model_without_eagerly_exposing_its_ke
         "has_api_key": True,
         "verified_at": None,
         "editable": True,
+        "capabilities": {
+            "basic": {"status": "unknown", "latency_ms": None},
+            "structured_json": {"status": "unknown", "latency_ms": None},
+            "streaming": {"status": "unknown", "latency_ms": None},
+            "tools": {"status": "unknown", "latency_ms": None},
+        },
     }
 
     revealed = _client().get("/admin/model-candidates/primary/api-key")
@@ -138,7 +144,7 @@ def test_primary_model_can_be_validated_and_saved_over_its_environment_fallback(
     }
 
 
-def test_owner_can_route_chat_background_and_evaluation_independently(
+def test_owner_can_route_chat_inquiry_background_and_evaluation_independently(
     migrated_db, monkeypatch,
 ):
     monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
@@ -151,6 +157,7 @@ def test_owner_can_route_chat_background_and_evaluation_independently(
     initial = client.get("/admin/model-candidates").json()
     assert initial["routes"] == [
         {"scenario": "chat", "candidate_id": "primary", "source": "environment"},
+        {"scenario": "inquiry", "candidate_id": "primary", "source": "environment"},
         {
             "scenario": "background",
             "candidate_id": "primary",
@@ -166,6 +173,13 @@ def test_owner_can_route_chat_background_and_evaluation_independently(
     assert client.put(
         "/admin/model-routes/chat", json={"candidate_id": "kimi"},
     ).status_code == 200
+    inherited = client.get("/admin/model-candidates").json()["routes"][1]
+    assert inherited == {
+        "scenario": "inquiry", "candidate_id": "kimi", "source": "inherited",
+    }
+    assert client.put(
+        "/admin/model-routes/inquiry", json={"candidate_id": "primary"},
+    ).status_code == 200
     assert client.put(
         "/admin/model-routes/background", json={"candidate_id": "glm"},
     ).status_code == 200
@@ -174,13 +188,16 @@ def test_owner_can_route_chat_background_and_evaluation_independently(
     ).status_code == 200
 
     assert candidates.resolve_for_scenario("chat")["model"] == "kimi-k3"
+    assert candidates.resolve_for_scenario("inquiry")["model"] == "deepseek-chat"
     assert candidates.resolve_for_scenario("background")["model"] == "glm-5.2"
     assert candidates.resolve_for_scenario("evaluation")["model"] == "deepseek-chat"
     assert resolve_structured_llm_config(stage="chat")["model"] == "kimi-k3"
     assert resolve_structured_llm_config(stage="facts")["model"] == "glm-5.2"
     assert resolve_structured_llm_config(stage="eval")["model"] == "deepseek-chat"
     routed = client.get("/admin/model-candidates").json()["routes"]
-    assert [route["source"] for route in routed] == ["stored", "stored", "stored"]
+    assert [route["source"] for route in routed] == [
+        "stored", "stored", "stored", "stored",
+    ]
 
     missing = client.put(
         "/admin/model-routes/not-a-scenario", json={"candidate_id": "glm"},
@@ -261,6 +278,87 @@ def test_validation_must_succeed_before_exact_config_can_be_saved(
         json={**_payload(), "validation_token": ticket},
     )
     assert reused.status_code == 422
+
+
+def test_validation_persists_capabilities_and_blocks_known_bad_inquiry_route(
+    migrated_db, monkeypatch,
+):
+    capabilities = {
+        "basic": {"status": "passed", "latency_ms": 20},
+        "structured_json": {"status": "failed", "latency_ms": 30},
+        "streaming": {"status": "passed", "latency_ms": 40},
+        "tools": {"status": "failed", "latency_ms": 50},
+    }
+
+    async def probe(candidate_id: str, config: dict[str, str]) -> dict:
+        return capabilities
+
+    monkeypatch.setattr(candidate_service, "_probe_candidate", probe)
+    client = _client()
+    checked = client.post(
+        "/admin/model-candidates/glm/validate", json=_payload(),
+    )
+    assert checked.status_code == 200
+    assert checked.json()["capabilities"] == capabilities
+
+    saved = client.put(
+        "/admin/model-candidates/glm",
+        json={
+            **_payload(),
+            "validation_token": checked.json()["validation_token"],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json()["capabilities"] == capabilities
+
+    routed = client.put(
+        "/admin/model-routes/inquiry", json={"candidate_id": "glm"},
+    )
+    assert routed.status_code == 422
+    assert "structured" in routed.json()["detail"].lower()
+
+    inherited = client.put(
+        "/admin/model-routes/chat", json={"candidate_id": "glm"},
+    )
+    assert inherited.status_code == 422
+    assert "inquiry inherits chat" in inherited.json()["detail"].lower()
+
+    background = client.put(
+        "/admin/model-routes/background", json={"candidate_id": "glm"},
+    )
+    assert background.status_code == 422
+    assert "structured" in background.json()["detail"].lower()
+
+
+def test_known_streaming_failure_cannot_be_selected_for_chat(
+    migrated_db, monkeypatch,
+):
+    capabilities = {
+        "basic": {"status": "passed", "latency_ms": 20},
+        "structured_json": {"status": "passed", "latency_ms": 30},
+        "streaming": {"status": "failed", "latency_ms": 40},
+        "tools": {"status": "passed", "latency_ms": 50},
+    }
+
+    async def probe(candidate_id: str, config: dict[str, str]) -> dict:
+        return capabilities
+
+    monkeypatch.setattr(candidate_service, "_probe_candidate", probe)
+    client = _client()
+    checked = client.post(
+        "/admin/model-candidates/glm/validate", json=_payload(),
+    ).json()
+    client.put(
+        "/admin/model-candidates/glm",
+        json={**_payload(), "validation_token": checked["validation_token"]},
+    ).raise_for_status()
+
+    routed = client.put(
+        "/admin/model-routes/chat", json={"candidate_id": "glm"},
+    )
+
+    assert routed.status_code == 422
+    assert "streaming" in routed.json()["detail"].lower()
 
 
 def test_saved_secret_can_be_reused_without_returning_it_to_the_browser(

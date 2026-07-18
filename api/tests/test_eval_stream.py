@@ -21,11 +21,14 @@ def _record_ok(system_prompt, **kw):
 
 
 def test_registry_has_all_suites():
-    assert set(suites.SUITES) == {"traits", "facts", "recall", "altitude", "consultant"}
+    assert set(suites.SUITES) == {
+        "traits", "facts", "recall", "altitude", "consultant", "inquiry",
+    }
     assert suites.SUITES["traits"].needs_eval_gen is False
     assert suites.SUITES["consultant"].needs_eval_gen is True
     assert suites.SUITES["recall"].needs_scratch is True
     assert suites.SUITES["traits"].needs_scratch is False
+    assert suites.SUITES["inquiry"].needs_eval_gen is False
 
 
 @pytest.mark.asyncio
@@ -71,7 +74,7 @@ async def test_each_eval_case_uses_the_evaluation_model_route(
 async def test_stream_traits_happy(migrated_db, monkeypatch):
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
         _record_ok(system_prompt)                       # mimic real client tracing
-        return {"O": {"score": 90, "confidence": 0.9, "evidence": "x"},
+        return {"O": {"score": 90, "confidence": 0.9, "evidence": "experimental"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr("app.model_loop.traits.chat_json", fake_chat_json)
 

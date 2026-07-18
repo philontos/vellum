@@ -1,5 +1,15 @@
 export type ModelCandidateSource = "stored" | "environment" | "none";
 
+export type ModelCapabilityStatus = "passed" | "failed" | "unknown";
+export type ModelCapability = {
+  status: ModelCapabilityStatus;
+  latency_ms: number | null;
+};
+export type ModelCapabilities = Record<
+  "basic" | "structured_json" | "streaming" | "tools",
+  ModelCapability
+>;
+
 export type ManagedModelCandidate = {
   id: string;
   name: string;
@@ -11,14 +21,15 @@ export type ManagedModelCandidate = {
   has_api_key: boolean;
   verified_at: string | null;
   editable: boolean;
+  capabilities?: ModelCapabilities;
 };
 
-export type ModelScenario = "chat" | "background" | "evaluation";
+export type ModelScenario = "chat" | "inquiry" | "background" | "evaluation";
 
 export type ModelRoute = {
   scenario: ModelScenario;
   candidate_id: string;
-  source: "stored" | "environment";
+  source: "stored" | "inherited" | "environment";
 };
 
 export type ModelCandidateWorkspace = {
@@ -35,6 +46,7 @@ export type ModelCandidateDraft = {
 export type ModelCandidateValidation = {
   validation_token: string;
   validated_at: string;
+  capabilities: ModelCapabilities;
 };
 
 async function responseError(response: Response, action: string): Promise<Error> {

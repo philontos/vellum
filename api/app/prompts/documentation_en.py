@@ -228,6 +228,26 @@ GUIDES = {
             "Avoid requiring search for stable facts; needless calls add latency.",
         ),
     ),
+    "inquiry.controller": (
+        "Decides whether one natural-language turn is already answerable, needs one "
+        "material clarification, or is ready for an evidence-grounded synthesis.",
+        "Runs once before the responder. It receives the current user turn, a short "
+        "recent tail, the current Inquiry Ledger, and raw user turns cited by that ledger.",
+        (
+            "Keep direct requests out of inquiry; clarification must materially change the answer.",
+            "Preserve exact user-turn citations and supporting/disconfirming hypotheses.",
+            "Keep next_question brief and in the user's language.",
+        ),
+    ),
+    "inquiry.repair": (
+        "Repairs a controller object that failed the code-owned JSON or consistency contract.",
+        "Runs at most once after an invalid controller result and receives the schema, "
+        "invalid object, and validation errors.",
+        (
+            "Do not broaden the task or add prose outside the JSON object.",
+            "Preserve the intended route only when it can satisfy the contract.",
+        ),
+    ),
     "llm.json_only_hint": (
         "Adds a provider-compatibility instruction to structured LLM calls so "
         "providers without reliable native JSON mode still return one parseable "
@@ -245,13 +265,14 @@ GUIDES = {
         "Extracts evidence for the four MBTI axes—E/I, S/N, T/F, and J/P—from one "
         "user-only span, then feeds that observation into the Bayesian long-term "
         "trait merge.",
-        "Runs as one structured call at the trait batch cadence. $raw_entry is the "
-        "new span, $profile_summary is prior context, and $rubric is the separately "
-        "managed MBTI scoring guide.",
+        "Runs independently per dimension at the trait batch cadence. $raw_entry is "
+        "the new span, $profile_summary is an independence guard (historical scores "
+        "are deliberately withheld), and $rubric is the MBTI scoring guide.",
         (
             "Keep all three $ variables and canonical E_I, S_N, T_F, J_P keys.",
             "Preserve pole direction: 0 means I/S/T/J and 100 means E/N/F/P.",
             "Use null for no signal; 50 means balanced evidence, not uncertainty.",
+            "Evidence must quote an application-labelled USER turn exactly.",
         ),
     ),
     "traits.mbti.rubric": (
@@ -270,13 +291,14 @@ GUIDES = {
         "Extracts evidence for Openness, Conscientiousness, Extraversion, "
         "Agreeableness, and Neuroticism from one user-only span before Bayesian "
         "merging into the long-term OCEAN profile.",
-        "Runs as one structured call at the trait batch cadence. It receives "
-        "$raw_entry, $profile_summary, and the separately managed $rubric, all from "
-        "the same pinned Prompt release.",
+        "Runs independently per dimension at the trait batch cadence. It receives "
+        "$raw_entry, an independence guard in $profile_summary (not prior scores), "
+        "and the separately managed $rubric from one pinned Prompt release.",
         (
             "Keep all three $ variables and canonical uppercase O, C, E, A, N keys.",
             "Return null when a dimension has no clear signal; most spans are sparse.",
             "Keep evidence in the user's language while JSON keys stay English.",
+            "Evidence must be an exact quote from a labelled USER turn.",
         ),
     ),
     "traits.ocean.rubric": (
@@ -296,13 +318,14 @@ GUIDES = {
         "Extracts independent promotion-focus and prevention-focus signals from a "
         "user-only span: striving toward gains and ideals versus vigilance against "
         "losses and obligations.",
-        "Runs as one structured call at the trait batch cadence with $raw_entry, "
-        "$profile_summary, and $rubric, then Bayesian-merges the observation into "
-        "the long-term profile.",
+        "Runs independently per dimension at the trait batch cadence with $raw_entry, "
+        "an independence guard in $profile_summary, and $rubric, then Bayesian-merges "
+        "only observations whose user quote is verified by code.",
         (
             "Keep all three $ variables and canonical promotion/prevention keys.",
             "The dimensions are independent: either, both, or neither may signal.",
             "Use null for absent evidence rather than a low-confidence midpoint.",
+            "Never replace $profile_summary with historical aggregate scores.",
         ),
     ),
     "traits.regulatory_focus.rubric": (
@@ -321,14 +344,16 @@ GUIDES = {
         "Extracts sparse, signed evidence for the ten Schwartz basic values from a "
         "user-only conversation span. Choices and trade-offs update long-term relative "
         "priority; emotion alone updates recent activation.",
-        "Runs as one structured call at the trait batch cadence using $raw_entry, "
-        "$profile_summary, and the separately managed $rubric from the same pinned "
-        "Prompt release.",
+        "Runs independently at the trait batch cadence using $raw_entry, a historical "
+        "episode-label reference in $profile_summary, and the separately managed "
+        "$rubric from the same pinned Prompt release.",
         (
             "Keep all three $ variables and all ten canonical lowercase keys.",
             "Preserve sparse extraction; a typical span expresses one to three values.",
             "Keep support, sacrifice, and explicit opposition distinct; use null for topics.",
             "Keep natural-language evidence in the user's language.",
+            "Only exact USER-turn quotes survive deterministic validation.",
+            "Do not use historical aggregate priorities as evidence for the new span.",
         ),
     ),
     "traits.schwartz.rubric": (

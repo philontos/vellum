@@ -58,6 +58,7 @@ def definitions() -> tuple[PromptDefinition, ...]:
     from app.chat.tools import recall, websearch
     from app.config.dimensions_loader import DIMENSION_MAP
     from app.llm import client as llm
+    from app.inquiry import controller as inquiry_controller
     from app.model_loop import dossier, facts, summary
 
     items = [
@@ -105,6 +106,20 @@ def definitions() -> tuple[PromptDefinition, ...]:
             template_format="format",
             variables=("current_time",),
             required_fragments=("trusted context",),
+        ),
+        _managed(
+            "inquiry.controller", "Inquiry controller",
+            "Chooses direct, inquire, or synthesize and proposes a grounded patch.",
+            "inquiry", inquiry_controller._PROMPT,
+            required_fragments=(
+                "Match the user's language", "supporting and", "disconfirming evidence",
+            ),
+        ),
+        _managed(
+            "inquiry.repair", "Inquiry repair",
+            "Repairs one invalid structured controller decision.",
+            "inquiry", inquiry_controller._REPAIR_PROMPT,
+            required_fragments=("Match the user's language", "JSON object"),
         ),
         _managed(
             "memory.summary", "Conversation summary", "Builds searchable recall cards.",

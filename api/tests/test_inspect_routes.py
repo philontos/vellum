@@ -47,6 +47,27 @@ def test_inspect_model_attaches_trait_meta(migrated_db):
     assert e_i["poles"] == ["I", "E"]
 
 
+def test_inspect_model_attaches_grounded_trait_observations(migrated_db):
+    from app.main import app
+    from app.store import model
+
+    model.apply_trait_batch(
+        dimension="ocean", start_turn=4, end_turn=8,
+        observations=[{
+            "sub_dimension": "O", "score": 82, "confidence": 0.7,
+            "evidence_turn": 6, "evidence_quote": "我喜欢尝试陌生方法",
+        }],
+        content={"O": {"score": 72, "tau": 1.49, "confidence": 0.23}},
+        sample_count=1,
+    )
+
+    traits = TestClient(app).get("/inspect/model").json()["traits"]
+    ocean = next(item for item in traits if item["dimension"] == "ocean")
+
+    assert ocean["observations"][0]["evidence_turn"] == 6
+    assert ocean["observations"][0]["evidence_quote"] == "我喜欢尝试陌生方法"
+
+
 def test_trace_list_is_lightweight_and_detail_is_loaded_separately(migrated_db):
     from app.main import app
     from app.store import traces
@@ -90,6 +111,70 @@ def test_trace_list_is_lightweight_and_detail_is_loaded_separately(migrated_db):
     assert json.loads(detail["tool_calls"])[0]["name"] == "memory"
 
     assert client.get("/inspect/traces/999999").status_code == 404
+
+
+def test_inquiry_question_trace_uses_current_user_turn_as_snippet(migrated_db):
+    from app.main import app
+    from app.store import traces
+
+    prompt = json.dumps({
+        "current_user_turn": {
+            "turn": 12,
+            "role": "user",
+            "content": "我是不是应该辞职？",
+        },
+        "inquiry": None,
+    }, ensure_ascii=False)
+    traces.record(
+        turn=13,
+        stage="chat",
+        model="m",
+        params={"route": "inquire"},
+        prompt=prompt,
+        output="最近发生的哪件事让你最确定？",
+        prompt_tokens=None,
+        completion_tokens=None,
+        duration_ms=20,
+    )
+
+    summary = TestClient(app).get("/inspect/traces").json()["traces"][0]
+
+    assert summary["snippet"] == "我是不是应该辞职？"
+
+
+def test_controller_only_trace_uses_current_user_turn_as_snippet(migrated_db):
+    from app.main import app
+    from app.store import traces
+
+    prompt = json.dumps({
+        "system_prompt": "controller",
+        "user_prompt": json.dumps({
+            "decision_schema": {},
+            "context": {
+                "current_user_turn": {
+                    "turn": 12,
+                    "role": "user",
+                    "content": "The responder later failed.",
+                },
+                "inquiry": None,
+            },
+        }),
+    })
+    traces.record(
+        turn=12,
+        stage="inquiry.decide",
+        model="controller",
+        params={},
+        prompt=prompt,
+        output="{}",
+        prompt_tokens=10,
+        completion_tokens=2,
+        duration_ms=20,
+    )
+
+    summary = TestClient(app).get("/inspect/traces").json()["traces"][0]
+
+    assert summary["snippet"] == "The responder later failed."
 
 
 def test_trace_list_classifies_legacy_trait_dimensions_from_structured_output(migrated_db):

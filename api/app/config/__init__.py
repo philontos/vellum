@@ -85,6 +85,27 @@ def _float(name: str, default: float) -> float:
 
 
 def tail_size() -> int:        return _int("VELLUM_TAIL_SIZE", 20)
+def response_tail_size() -> int:
+    return max(1, _int("VELLUM_RESPONSE_TAIL_SIZE", 8))
+
+
+def inquiry_tail_size() -> int: return max(0, _int("VELLUM_INQUIRY_TAIL_SIZE", 6))
+def inquiry_evidence_limit() -> int:
+    return max(0, _int("VELLUM_INQUIRY_EVIDENCE_LIMIT", 12))
+
+
+def inquiry_context_tokens() -> int:
+    return max(256, _int("VELLUM_INQUIRY_CONTEXT_TOKENS", 6000))
+
+
+def inquiry_max_questions() -> int:
+    return max(0, _int("VELLUM_INQUIRY_MAX_QUESTIONS", 5))
+
+
+def inquiry_ledger_tokens() -> int:
+    return max(100, _int("VELLUM_INQUIRY_LEDGER_TOKENS", 3500))
+
+
 def recall_k() -> int:         return _int("VELLUM_RECALL_K", 6)
 def recall_min_sim() -> float: return _float("VELLUM_RECALL_MIN_SIM", 0.35)
 def neighborhood_w() -> int:   return _int("VELLUM_NEIGHBORHOOD_W", 3)

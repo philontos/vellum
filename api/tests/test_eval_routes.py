@@ -53,7 +53,9 @@ def test_list_exposes_suite_catalog(migrated_db):
     c = TestClient(app)
     body = c.get("/inspect/evals").json()
     keys = {s["key"] for s in body["suites"]}
-    assert keys == {"traits", "facts", "recall", "altitude", "consultant"}
+    assert keys == {
+        "traits", "facts", "recall", "altitude", "consultant", "inquiry",
+    }
     by_key = {s["key"]: s["needs_eval_gen"] for s in body["suites"]}
     assert by_key["consultant"] is True and by_key["traits"] is False
 

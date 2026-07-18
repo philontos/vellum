@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from app import config
-from evals import altitude, consultant, facts, recall, traits
+from evals import altitude, consultant, facts, inquiry, recall, traits
 
 
 @dataclass
@@ -64,7 +64,31 @@ def _consultant_agg(rs):
     return {"honesty": _mean([r.get("honesty") for r in rs]),
             "depth": _mean([r.get("depth") for r in rs]),
             "growth": _mean([r.get("growth") for r in rs]),
+            "grounding": _mean([r.get("grounding") for r in rs]),
+            "restraint": _mean([r.get("restraint") for r in rs]),
+            "calibration": _mean([r.get("calibration") for r in rs]),
+            "contradiction_handling": _mean([
+                r.get("contradiction_handling") for r in rs
+            ]),
             "total": len(rs)}
+
+
+def _inquiry_agg(rs):
+    total = len(rs)
+    rate = lambda key: round(
+        sum(1 for result in rs if result.get(key)) / total, 3,
+    ) if total else None
+    return {
+        "passed": sum(1 for result in rs if result.get("passed")),
+        "total": total,
+        "routing_accuracy": rate("route_ok"),
+        "evidence_valid_rate": rate("evidence_valid"),
+        "one_question_rate": rate("one_question"),
+        "readiness_valid_rate": rate("readiness_valid"),
+        "lock_valid_rate": rate("lock_valid"),
+        "premature_answer_rate": rate("premature_answer"),
+        "unnecessary_inquiry_rate": rate("unnecessary_inquiry"),
+    }
 
 
 SUITES: dict[str, Suite] = {
@@ -98,5 +122,11 @@ SUITES: dict[str, Suite] = {
         name_of=lambda c, i: c.get("id", f"probe_{i}"),
         status_of=lambda r: "scored",
         aggregate=_consultant_agg, needs_eval_gen=True, needs_scratch=False,
+    ),
+    "inquiry": Suite(
+        key="inquiry", load=inquiry.load_cases, run=inquiry.run_case,
+        name_of=lambda case, i: case.get("id", f"inquiry_{i}"),
+        status_of=lambda result: "pass" if result.get("passed") else "fail",
+        aggregate=_inquiry_agg, needs_eval_gen=False, needs_scratch=False,
     ),
 }

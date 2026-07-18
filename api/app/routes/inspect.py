@@ -18,9 +18,12 @@ from app.config.dimensions_loader import dimension_meta
 from app.model_loop import schwartz
 from app.evaluation import archive as conversation_archive
 from app.evaluation import conversation as conversation_eval
+from app.inquiry import store as inquiry_store
 from app.llm import candidates as model_candidates
 from app.llm.client import resolve_structured_llm_config
-from app.store import model, observability as obs, portrait_claims, traces
+from app.store import (
+    model, observability as obs, portrait_claims, traces, turn_runs,
+)
 from evals.config import eval_gen_config
 from evals.suites import SUITES
 
@@ -34,6 +37,7 @@ def inspect_model():
     traits = model.all_traits()
     for t in traits:
         t["history"] = model.get_trait_history(t["dimension"])
+        t["observations"] = model.list_trait_observations(t["dimension"], 50)
         t["meta"] = dimension_meta(t["dimension"])   # names + pole labels for the UI
         if t["dimension"] == "schwartz":
             t["profile"] = schwartz.profile_payload(
@@ -63,6 +67,30 @@ def inspect_trace(trace_id: int):
     if trace is None:
         return JSONResponse({"error": "not found"}, status_code=404)
     return {"trace": trace}
+
+
+@router.get("/inspect/turn-runs")
+def inspect_turn_runs(limit: int = Query(default=100, ge=1, le=500)):
+    return {"runs": turn_runs.list_recent(limit=limit)}
+
+
+@router.get("/inspect/inquiries")
+def inspect_inquiries(
+    limit: int = Query(default=100, ge=1, le=500),
+    stream: str | None = None,
+):
+    return {"inquiries": inquiry_store.list_recent(limit=limit, stream=stream)}
+
+
+@router.get("/inspect/inquiries/{inquiry_id}")
+def inspect_inquiry(inquiry_id: int):
+    inquiry = inquiry_store.get(inquiry_id)
+    if inquiry is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return {
+        "inquiry": inquiry,
+        "events": inquiry_store.list_events(inquiry_id),
+    }
 
 
 @router.get("/inspect/probe")

@@ -1,7 +1,8 @@
 """Background modeling runner. Called after each chat turn. Each concern has its
 own cursor and cadence, decoupled from window eviction (spec §8):
   facts   — eager, every call (catch up to max_turn)
-  trait   — when (max_turn - cursor) >= K
+  trait   — per dimension, when (max_turn - dimension cursor) >= K and no
+            Inquiry is still exploring/reviewing
   summary — when (max_turn - cursor) >= S
   dossier — when (max_turn - cursor) >= M
 Each job is isolated (one failure doesn't block others); a cursor advances only
@@ -12,10 +13,12 @@ from weakref import WeakKeyDictionary
 
 from app import config
 from app.data_scope import current_user_id
+from app.config.dimensions_loader import DIMENSION_MAP
+from app.inquiry import store as inquiry_store
 from app.llm.client import capture_llm_calls
 from app.model_loop import dossier, facts, summary, traits
 from app.prompts import runtime
-from app.store import memory, traces
+from app.store import memory, model, traces
 
 
 # Same-user turns may finish close together and spawn overlapping runners. One
@@ -39,7 +42,7 @@ def _flush_traces(calls: list[dict], turn: int, start_turn: int | None = None,
     Traces panel can label it 'turns from–to'. `batch` is a per-pass id stamped on
     every call of one invocation, so the pass is an unambiguous group (not merely
     inferred from (stage, turn)) — survives concurrency and alternate timelines."""
-    for c in calls:
+    for attempt, c in enumerate(calls, start=1):
         prompt = (c.get("system_prompt") or "")
         if c.get("user_prompt"):
             prompt += "\n\n[user]\n" + c["user_prompt"]
@@ -73,6 +76,8 @@ def _flush_traces(calls: list[dict], turn: int, start_turn: int | None = None,
             prompt_tokens=c.get("prompt_tokens"),
             completion_tokens=c.get("completion_tokens"),
             duration_ms=c.get("duration_ms"),
+            scenario="background",
+            attempt=attempt,
         )
 
 
@@ -94,6 +99,42 @@ async def _run_concern(concern: str, job, gap_threshold: int, max_turn: int) -> 
         traceback.print_exc()
     finally:
         _flush_traces(calls, max_turn, start_turn=cursor + 1, batch=batch)
+
+
+async def _run_trait_dimension(
+    dimension: str, gap_threshold: int, max_turn: int,
+) -> None:
+    cursor = model.get_trait_cursor(dimension)
+    if max_turn - cursor < gap_threshold:
+        return
+    batch = f"trait:{dimension}:{max_turn}:{uuid.uuid4().hex[:8]}"
+    calls: list[dict] = []
+    try:
+        with capture_llm_calls(calls):
+            await traits.run_dimension(cursor + 1, max_turn, dimension)
+        model.advance_trait_cursor(dimension, max_turn)
+    except Exception as exc:
+        import traceback
+        print(
+            f"[model_loop] trait[{dimension}] job failed: {exc!r}",
+            flush=True,
+        )
+        traceback.print_exc()
+    finally:
+        _flush_traces(
+            calls, max_turn, start_turn=cursor + 1, batch=batch,
+        )
+
+
+async def _run_traits(gap_threshold: int, max_turn: int) -> None:
+    for dimension in DIMENSION_MAP:
+        await _run_trait_dimension(dimension, gap_threshold, max_turn)
+    if DIMENSION_MAP:
+        # Keep the legacy aggregate cursor useful for older installs and admin
+        # diagnostics. It represents only the slowest successful dimension.
+        through = min(model.get_trait_cursor(key) for key in DIMENSION_MAP)
+        if through > memory.get_cursor("trait"):
+            memory.advance_cursor("trait", through)
 
 
 async def _run_summary_streams(span_s: int, max_turn: int) -> None:
@@ -128,8 +169,9 @@ async def _run_pending_unlocked() -> None:
     # The user model (facts/trait/dossier) is GLOBAL — co-built from every stream.
     # facts: eager (threshold 1 = run whenever there's anything new)
     await _run_concern("facts", facts.run, 1, max_turn)
-    await _run_concern("trait", traits.run, config.trait_batch_k(), max_turn)
-    await _run_concern("dossier", dossier.run, config.dossier_batch_m(), max_turn)
+    if not inquiry_store.has_personality_modeling_blocker():
+        await _run_traits(config.trait_batch_k(), max_turn)
+        await _run_concern("dossier", dossier.run, config.dossier_batch_m(), max_turn)
     # summary: per-stream (the recall handle + diary card for each mode).
     await _run_summary_streams(config.summary_span_s(), max_turn)
 

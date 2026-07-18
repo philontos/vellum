@@ -107,4 +107,36 @@ describe("ModelCandidateEditor", () => {
     expect(html).toContain('value="revealed-test-key"');
     expect(html).toContain("Hide");
   });
+
+  it("shows scenario-relevant capability results", () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider>
+        <ModelCandidateEditor
+          candidate={{
+            ...candidate,
+            capabilities: {
+              basic: { status: "passed", latency_ms: 12 },
+              structured_json: { status: "failed", latency_ms: 18 },
+              streaming: { status: "passed", latency_ms: 20 },
+              tools: { status: "unknown", latency_ms: null },
+            },
+          }}
+          draft={draft}
+          validationFingerprint=""
+          busy={null}
+          error=""
+          apiKeyVisible={false}
+          onDraftChange={() => undefined}
+          onApiKeyVisibilityChange={() => undefined}
+          onValidate={() => undefined}
+          onSave={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(html).toContain("Structured JSON");
+    expect(html).toContain("Failed");
+    expect(html).toContain("18ms");
+    expect(html).toContain("Tool calling");
+  });
 });

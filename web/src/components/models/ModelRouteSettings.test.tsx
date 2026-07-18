@@ -20,6 +20,7 @@ const candidates: ManagedModelCandidate[] = [
 ];
 const routes: ModelRoute[] = [
   { scenario: "chat", candidate_id: "primary", source: "environment" },
+  { scenario: "inquiry", candidate_id: "primary", source: "inherited" },
   { scenario: "background", candidate_id: "glm", source: "stored" },
   { scenario: "evaluation", candidate_id: "primary", source: "environment" },
 ];
@@ -40,10 +41,11 @@ describe("ModelRouteSettings", () => {
     );
 
     expect(html).toContain("Chat replies");
+    expect(html).toContain("Inquiry controller");
     expect(html).toContain("Background modeling");
     expect(html).toContain("Evaluation default");
     expect(html).toContain("deepseek-chat");
     expect(html).toContain("glm-5.2");
-    expect((html.match(/<select/g) ?? []).length).toBe(3);
+    expect((html.match(/<select/g) ?? []).length).toBe(4);
   });
 });

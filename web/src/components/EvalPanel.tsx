@@ -19,6 +19,8 @@ import {
 import { ConversationEvalArchiveList } from "./evals/ConversationEvalArchiveList";
 import { ConversationEvalRecordView } from "./evals/ConversationEvalRecordView";
 import { ConversationEvalView } from "./evals/ConversationEvalView";
+import { SuiteEvalPanel } from "./evals/SuiteEvalPanel";
+import { useT } from "../i18n";
 
 export { ConversationEvalView } from "./evals/ConversationEvalView";
 
@@ -81,6 +83,39 @@ function summary(record: ConversationEvalRecordDetail): ConversationEvalRecordSu
 }
 
 export function EvalPanel() {
+  const { t } = useT();
+  const [surface, setSurface] = useState<"conversation" | "suites">("conversation");
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-none gap-1 border-b border-line bg-surface px-3 py-2 sm:px-4">
+        <button
+          type="button"
+          onClick={() => setSurface("conversation")}
+          className={`rounded-md px-3 py-1.5 text-sm ${
+            surface === "conversation" ? "bg-accent/15 text-accent" : "text-muted"
+          }`}
+        >
+          {t("eval.tabConversation")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSurface("suites")}
+          className={`rounded-md px-3 py-1.5 text-sm ${
+            surface === "suites" ? "bg-accent/15 text-accent" : "text-muted"
+          }`}
+        >
+          {t("eval.tabSuites")}
+        </button>
+      </div>
+      <div className="min-h-0 flex-1">
+        {surface === "conversation" ? <ConversationEvalPanel /> : <SuiteEvalPanel />}
+      </div>
+    </div>
+  );
+}
+
+
+function ConversationEvalPanel() {
   const [view, setView] = useState<EvalView>("launcher");
   const [workspace, setWorkspace] = useState<ConversationEvalWorkspace | null>(null);
   const [detail, setDetail] = useState<ConversationEvalRoundDetail | null>(null);

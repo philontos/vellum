@@ -8,7 +8,8 @@ from app.store import model
 async def test_direction_scoring_high(migrated_db, monkeypatch):
     # mock extraction: strong O-high signal, others null
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
-        return {"O": {"score": 88, "confidence": 0.7, "evidence": "x"},
+        return {"O": {"score": 88, "confidence": 0.7,
+                      "evidence": "unfamiliar experiments"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr(et.traits_job, "chat_json", fake_chat_json)
     monkeypatch.setattr(et.traits_job, "DIMENSION_MAP",
@@ -35,18 +36,20 @@ async def test_schwartz_eval_reads_centered_priority_instead_of_a_0_100_score(
     migrated_db, monkeypatch,
 ):
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
-        return {
+        output = {key: None for key in et.traits_job.schwartz.VALUE_KEYS}
+        output.update({
             "self_direction": {
                 "direction": "support", "strength": 0.9, "confidence": 0.8,
                 "basis": "tradeoff", "evidence": "chose freedom",
-                "counterpart": "security",
+                "counterpart": "security", "episode": "choosing freedom",
             },
             "security": {
                 "direction": "sacrifice", "strength": 0.8, "confidence": 0.8,
-                "basis": "tradeoff", "evidence": "accepted risk",
-                "counterpart": "self_direction",
+                "basis": "tradeoff", "evidence": "accepted the risk",
+                "counterpart": "self_direction", "episode": "choosing freedom",
             },
-        }
+        })
+        return output
 
     monkeypatch.setattr(et.traits_job, "chat_json", fake_chat_json)
     case = {

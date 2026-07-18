@@ -152,13 +152,15 @@ async def rebuild_schwartz(
                 continue
             span = span_text(start_turn, end_turn, roles=("user",))
             extracted = await traits._extract(span, "schwartz", dimension, current)
-            schwartz.validate_extraction(extracted)
             observed_at = rows[-1]["created_at"]
-            records = schwartz.normalize_observations(
-                extracted, start_turn=start_turn, end_turn=end_turn,
+            records = traits.grounded_schwartz_records(
+                extracted,
+                rows,
+                start_turn=start_turn,
+                end_turn=end_turn,
             )
             for record in records:
-                record["observed_at"] = observed_at
+                record.setdefault("observed_at", observed_at)
                 _staged_upsert(staged, record)
             current = schwartz.project(staged.values(), now=_as_utc(observed_at))
             snapshots.append({"content_json": current, "taken_at": observed_at})

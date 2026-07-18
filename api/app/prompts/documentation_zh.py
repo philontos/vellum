@@ -178,6 +178,27 @@ GUIDES = {
             "不要让稳定且已知的信息也一律搜索，以免增加不必要延迟。",
         ),
     ),
+    "inquiry.controller": (
+        "判断一轮自然语言对话是否已经可以直接回答、是否缺少一个会实质改变判断的信息，"
+        "或是否已经足以进行有证据支撑的综合回答。",
+        "在 Responder 前运行一次，输入当前用户消息、短近期上下文、当前 Inquiry Ledger，"
+        "以及 Ledger 明确引用的用户原始轮次。",
+        (
+            "明确请求不要进入 Inquiry；只有会实质改变回答时才追问。",
+            "保留精确的用户 turn 引用，并同时维护支持与反证假设。",
+            "next_question 必须简短并跟随用户语言。",
+        ),
+    ),
+    "inquiry.repair": (
+        "修复未通过代码维护的 JSON Schema、字段约束或路由一致性契约的 Controller 结果，"
+        "避免无效结构进入正式 Inquiry 状态。",
+        "Controller 结果无效时最多运行一次；运行时会同时输入完整 Schema、原始无效对象和"
+        "具体校验错误，并再次经过同一套严格代码校验。",
+        (
+            "不能扩展任务，也不能在 JSON 对象之外增加说明文字。",
+            "只有在满足契约时才保留原始 route 意图。",
+        ),
+    ),
     "llm.json_only_hint": (
         "为结构化 LLM 调用补充 Provider 兼容性指令，使不稳定支持原生 JSON Mode 的模型"
         "也尽量只返回一个可以解析的 JSON 对象。",
@@ -191,12 +212,13 @@ GUIDES = {
     "traits.mbti.extract": (
         "从仅包含用户内容的对话中提取 MBTI 四条轴线 E/I、S/N、T/F、J/P 的证据，"
         "再把本次观察通过贝叶斯合并写入长期特征画像。",
-        "达到 trait batch 周期时进行一次结构化 LLM 调用。$raw_entry 是新用户片段，"
-        "$profile_summary 是历史画像，$rubric 是独立维护的 MBTI 评分标准。",
+        "每个维度使用独立 cursor 到达 trait batch 周期后调用。$raw_entry 是新用户片段，"
+        "$profile_summary 是防止历史分数锚定的独立性护栏（不会注入旧画像），$rubric 是评分标准。",
         (
             "必须保留三个 $ 模板变量和 E_I、S_N、T_F、J_P 规范字段。",
             "必须保持极性方向：0 对应 I/S/T/J，100 对应 E/N/F/P。",
             "没有信号时使用 null；50 表示平衡证据，不能表示不确定。",
+            "evidence 必须逐字引用应用标注的 USER turn。",
         ),
     ),
     "traits.mbti.rubric": (
@@ -212,12 +234,13 @@ GUIDES = {
     "traits.ocean.extract": (
         "从仅包含用户内容的对话中提取开放性、尽责性、外向性、宜人性和神经质证据，"
         "再通过贝叶斯方式合并进用户的长期 OCEAN 画像。",
-        "达到 trait batch 周期时进行一次结构化调用，并接收 $raw_entry、$profile_summary "
-        "和独立维护的 $rubric，三者使用同一个发布快照。",
+        "每个维度使用独立 cursor 到达 trait batch 周期后调用，并接收 $raw_entry、"
+        "作为独立性护栏而非旧分数的 $profile_summary，以及同一发布快照中的 $rubric。",
         (
             "必须保留三个 $ 模板变量，以及大写规范字段 O、C、E、A、N。",
             "某个维度没有清晰信号时返回 null；短对话通常不会同时命中五项。",
             "evidence 使用用户语言，JSON 字段名保持规范英文。",
+            "只有能在 USER turn 中逐字核验的 evidence 才会被写入画像。",
         ),
     ),
     "traits.ocean.rubric": (
@@ -234,12 +257,13 @@ GUIDES = {
     "traits.regulatory_focus.extract": (
         "从用户对话中分别提取促进焦点和预防焦点：前者关注获得、理想和成长，"
         "后者关注避免损失、责任和安全，并合并进长期画像。",
-        "达到 trait batch 周期时进行一次结构化调用，使用 $raw_entry、$profile_summary "
-        "和 $rubric，之后对观察结果进行贝叶斯合并。",
+        "每个维度使用独立 cursor 到达 trait batch 周期后调用，使用 $raw_entry、"
+        "独立性护栏 $profile_summary 和 $rubric；代码核验用户原话后才进行贝叶斯合并。",
         (
             "必须保留三个 $ 模板变量和 promotion、prevention 规范字段。",
             "两个焦点彼此独立，可以只出现一个、同时出现或都没有信号。",
             "没有证据时使用 null，不能用低置信度中间分代替。",
+            "不得把 $profile_summary 改为历史汇总分数。",
         ),
     ),
     "traits.regulatory_focus.rubric": (
@@ -255,13 +279,15 @@ GUIDES = {
     "traits.schwartz.extract": (
         "从仅包含用户内容的对话中稀疏提取 Schwartz 十类基本价值观的有向证据；"
         "选择与权衡更新长期相对优先级，单纯情绪只更新近期激活。",
-        "达到 trait batch 周期时进行一次结构化调用，使用 $raw_entry、$profile_summary "
-        "和独立维护的 $rubric，全部来自同一个发布快照。",
+        "每个维度到达 trait batch 周期后独立调用，使用 $raw_entry、"
+        "$profile_summary 中的历史 episode 标签参考和同一发布快照中的 $rubric。",
         (
             "必须保留三个 $ 模板变量和全部十个规范小写字段。",
             "保留稀疏原则：一段典型对话通常只表达一到三个价值观。",
             "严格区分支持、相对让位和明确反对；只谈到主题时使用 null。",
             "自然语言 evidence 跟随用户语言。",
+            "只有在 USER turn 中逐字存在的 evidence 才会通过确定性校验。",
+            "历史聚合优先级不能作为当前 span 的新证据。",
         ),
     ),
     "traits.schwartz.rubric": (

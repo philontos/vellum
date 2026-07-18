@@ -8,6 +8,12 @@ vectors, and traces. There is no public signup or SaaS control plane.
 Any OpenAI-compatible chat model plugs in. Every LLM call (chat *and* background
 modeling) is captured as an inspectable trace.
 
+Each user turn passes through a code-owned orchestrator. A bounded structured
+Inquiry Controller either routes straight to the responder, asks one focused
+question, or synthesizes from a durable, revisioned evidence Ledger. The Ledger
+keeps observations, interpretations, competing hypotheses, material unknowns,
+and exact user-turn citations separate.
+
 ```
 api/   FastAPI + SQLite + hnswlib — chat loop (sync) + background modeling (async)
 web/   React + Vite + Tailwind   — Chat / You (your model) / Traces panels
@@ -118,6 +124,11 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `VELLUM_AUTH_COOKIE_SECURE` | `0` | Keep `0` for HTTP over WireGuard/SSH; set `1` only when the site is served through HTTPS. |
 | `VELLUM_AUTH_SESSION_DAYS` | `30` | Login session lifetime. Password changes and account disable revoke existing sessions. |
 | `VELLUM_TIMEZONE` | `Asia/Shanghai` | Local timezone attached to model-facing user turns for relative-time and conversation-gap reasoning. Stored messages remain UTC and unchanged. |
+| `VELLUM_RESPONSE_TAIL_SIZE` | `8` | Recent messages supplied to the final Chat responder. |
+| `VELLUM_INQUIRY_TAIL_SIZE` | `6` | Recent messages supplied to the Inquiry Controller, excluding the separately supplied current turn. |
+| `VELLUM_INQUIRY_CONTEXT_TOKENS` | `6000` | Hard provider-neutral budget for the Controller's Ledger, current turn, recent tail, and cited raw evidence. |
+| `VELLUM_INQUIRY_MAX_QUESTIONS` | `5` | Maximum focused questions in one Inquiry before provisional synthesis or pause. |
+| `VELLUM_INQUIRY_LEDGER_TOKENS` | `3500` | Hard serialized size limit for one durable Inquiry Ledger. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
 
 To set the fallback production model, configure its credentials in Admin
@@ -146,9 +157,12 @@ credentials live in the deployment-wide `prompts.db` and inherit its
 SQLCipher-at-rest setting. A saved Admin configuration takes precedence over the
 corresponding environment block.
 
-The same page independently routes **Chat replies**, **Background modeling**, and
-the **Evaluation default** to any configured integration. Route changes take
-effect without a process restart; a scenario without a saved route follows
+The same page independently routes **Chat replies**, **Inquiry control**,
+**Background modeling**, and the **Evaluation default** to any configured
+integration. Validation probes basic completion, structured JSON, streaming, and
+tool compatibility; a model with a known failed required capability cannot be
+routed to that scenario. Inquiry inherits the Chat route until explicitly set.
+Route changes take effect without a process restart; other unset routes follow
 `LLM_CANDIDATE`. In family mode the page and every credential/route endpoint are
 owner-only; legacy single-user mode retains its existing owner-equivalent Admin
 behavior.
@@ -277,9 +291,11 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
 - **You** — live dossier, its grounded portrait claims and user citations, facts,
   and trait dimensions, with per-dimension history curves as they shift over the
   conversation.
-- **Traces** — every LLM call (chat + facts/trait/summary/dossier evidence/render),
-  with the full prompt, output, reasoning, token counts, and latency. Pin a trace (★) to protect
-  it from rolling pruning; add a note to mark good/bad results while you tune.
+- **Traces** — correlated Controller → Chat → background spans with route, model,
+  revision, context budget, full prompt/output, reasoning, token counts, and
+  latency. The **Inquiries** view exposes each current Ledger, exact evidence,
+  asked questions, blockers, and revision history. Pin a trace (★) to protect it
+  from rolling pruning; add a note to mark good/bad results while you tune.
 - **Prompts** (owner only) — production chat, memory-modeling, trait, and tool
   prompts; per-Prompt usage guides plus an explicit draft/save/publish workflow
   with immutable release history. Dossier evidence extraction and final portrait
@@ -293,7 +309,9 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   view shows a line diff plus every repeated result side by side. Archives live in
   the per-account observability database, remain available independently of
   conversation history, and never append chat messages or trigger background
-  modeling.
+  modeling. The regression-suite view also runs Inquiry routing, evidence,
+  readiness, revision-lock, personality, recall, and consultant-quality checks,
+  with aggregate metrics and each structured case result.
 
 ### Rebuilding Schwartz from message history
 

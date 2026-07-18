@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getTraces, patchTrace, type TraceSummary } from "../api/client";
+import {
+  getInquiries,
+  getTraces,
+  getTurnRuns,
+  patchTrace,
+  type Inquiry,
+  type TraceSummary,
+  type TurnRun,
+} from "../api/client";
 import { useT } from "../i18n";
 import {
   backgroundCategories,
@@ -9,10 +17,11 @@ import {
 } from "./traces/group";
 import { BackgroundTabs, DimensionBadge } from "./traces/BackgroundTabs";
 import { RoundCard } from "./traces/RoundCard";
+import { InquiryList } from "./traces/InquiryList";
 import { TraceRow } from "./traces/TraceRow";
 import { Tag } from "./ui/StatusChip";
 
-export type TabKey = "rounds" | "background";
+export type TabKey = "rounds" | "inquiries" | "background";
 
 const TRACE_REFRESH_MS = 10_000;
 
@@ -24,6 +33,8 @@ export function TracesPanel() {
   const [tab, setTab] = useState<TabKey>("rounds");
   const [backgroundTab, setBackgroundTab] = useState("all");
   const [rows, setRows] = useState<TraceSummary[]>([]);
+  const [runs, setRuns] = useState<TurnRun[]>([]);
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
@@ -37,8 +48,14 @@ export function TracesPanel() {
       setError("");
     }
     try {
-      const next = await getTraces();
-      if (mounted.current) setRows(next);
+      const [nextRows, nextRuns, nextInquiries] = await Promise.all([
+        getTraces(), getTurnRuns(), getInquiries(),
+      ]);
+      if (mounted.current) {
+        setRows(nextRows);
+        setRuns(nextRuns);
+        setInquiries(nextInquiries);
+      }
     } catch (loadError: unknown) {
       if (mounted.current) setError(errorMessage(loadError));
     } finally {
@@ -84,6 +101,8 @@ export function TracesPanel() {
   return (
     <TracesPanelView
       rows={rows}
+      runs={runs}
+      inquiries={inquiries}
       tab={tab}
       backgroundTab={backgroundTab}
       loading={loading}
@@ -99,6 +118,8 @@ export function TracesPanel() {
 
 export function TracesPanelView({
   rows,
+  runs,
+  inquiries,
   tab,
   backgroundTab,
   loading,
@@ -110,6 +131,8 @@ export function TracesPanelView({
   onNote,
 }: {
   rows: TraceSummary[];
+  runs: TurnRun[];
+  inquiries: Inquiry[];
   tab: TabKey;
   backgroundTab: string;
   loading: boolean;
@@ -122,6 +145,7 @@ export function TracesPanelView({
 }) {
   const { t: tr } = useT();
   const rounds = groupRounds(rows);
+  const runsById = new Map(runs.map((run) => [run.id, run]));
   const passes = backgroundPasses(rows);
   const categories = backgroundCategories(passes);
   const activeBackgroundTab = categories.some((category) => category.key === backgroundTab)
@@ -137,6 +161,9 @@ export function TracesPanelView({
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           <TabButton active={tab === "rounds"} onClick={() => onTabChange("rounds")}>
             {tr("traces.tabRounds")}
+          </TabButton>
+          <TabButton active={tab === "inquiries"} onClick={() => onTabChange("inquiries")}>
+            {tr("traces.tabInquiries")}
           </TabButton>
           <TabButton active={tab === "background"} onClick={() => onTabChange("background")}>
             {tr("traces.tabBackground")}
@@ -155,6 +182,10 @@ export function TracesPanelView({
             ? rounds.length === 1
               ? tr("traces.roundCountOne")
               : tr("traces.roundCount", { n: rounds.length })
+            : tab === "inquiries"
+              ? inquiries.length === 1
+                ? tr("traces.inquiryCountOne")
+                : tr("traces.inquiryCount", { n: inquiries.length })
             : visiblePasses.length === 1
               ? tr("traces.passCountOne")
               : tr("traces.passCount", { n: visiblePasses.length })}
@@ -180,11 +211,23 @@ export function TracesPanelView({
         ) : tab === "rounds" ? (
           rounds.length > 0 ? (
             rounds.map((r) => (
-              <RoundCard key={r.turn ?? "ungrouped"} round={r} onPin={onPin} onNote={onNote} />
+              <RoundCard
+                key={r.turn ?? "ungrouped"}
+                round={r}
+                run={(() => {
+                  const runId = r.chat?.run_id
+                    ?? r.controller.find((trace) => trace.run_id)?.run_id;
+                  return runId ? runsById.get(runId) : undefined;
+                })()}
+                onPin={onPin}
+                onNote={onNote}
+              />
             ))
           ) : (
             <div className="p-4 text-muted sm:p-8">{tr("traces.empty")}</div>
           )
+        ) : tab === "inquiries" ? (
+          <InquiryList inquiries={inquiries} />
         ) : visiblePasses.length > 0 ? (
           visiblePasses.map((p) => (
             <div key={p.id} className="border-b border-line/70 px-3 py-3 sm:px-4">

@@ -1,9 +1,10 @@
 """Owner-facing validation and redacted views for model candidates."""
 from urllib.parse import urlsplit
+import time
 
 import httpx
 
-from app.llm import candidate_store, candidates
+from app.llm import candidate_store, candidates, capability_probe
 
 
 VALIDATION_TIMEOUT_SECONDS = 30.0
@@ -23,6 +24,37 @@ class UnknownScenarioError(CandidateAdminError):
 
 class CandidateValidationError(CandidateAdminError):
     pass
+
+
+_CAPABILITY_KEYS = ("basic", "structured_json", "streaming", "tools")
+
+
+def _unknown_capabilities() -> dict:
+    return {
+        key: {"status": "unknown", "latency_ms": None}
+        for key in _CAPABILITY_KEYS
+    }
+
+
+def _capabilities(raw: dict | None, *, basic_passed: bool = False) -> dict:
+    normalized = _unknown_capabilities()
+    if basic_passed:
+        normalized["basic"] = {"status": "passed", "latency_ms": None}
+    if not isinstance(raw, dict):
+        return normalized
+    for key in _CAPABILITY_KEYS:
+        item = raw.get(key)
+        if not isinstance(item, dict):
+            continue
+        status = item.get("status")
+        latency = item.get("latency_ms")
+        if status not in {"passed", "failed", "unknown"}:
+            continue
+        normalized[key] = {
+            "status": status,
+            "latency_ms": latency if isinstance(latency, int) and latency >= 0 else None,
+        }
+    return normalized
 
 
 def _definition(candidate_id: str) -> dict[str, str]:
@@ -88,7 +120,7 @@ def _provider_error(response: httpx.Response, api_key: str) -> str:
     return f"Provider rejected the configuration (HTTP {response.status_code}){suffix}"
 
 
-async def _probe_candidate(candidate_id: str, config: dict[str, str]) -> None:
+async def _probe_candidate(candidate_id: str, config: dict[str, str]) -> dict:
     """Exercise the exact model with one minimal non-streaming completion."""
     del candidate_id  # reserved for provider-specific probes if one diverges
     url = f"{config['base_url']}/chat/completions"
@@ -102,6 +134,7 @@ async def _probe_candidate(candidate_id: str, config: dict[str, str]) -> None:
         "stream": False,
         "max_tokens": 1,
     }
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=VALIDATION_TIMEOUT_SECONDS) as client:
             response = await client.post(url, headers=headers, json=payload)
@@ -123,6 +156,9 @@ async def _probe_candidate(candidate_id: str, config: dict[str, str]) -> None:
         raise CandidateValidationError(
             "Provider response did not contain a chat completion."
         )
+    return await capability_probe.run(
+        config, basic_latency_ms=int((time.monotonic() - started) * 1000),
+    )
 
 
 def _public_candidate(definition: dict[str, str]) -> dict:
@@ -148,6 +184,9 @@ def _public_candidate(definition: dict[str, str]) -> dict:
         "has_api_key": bool(config["api_key"]),
         "verified_at": stored["verified_at"] if stored is not None else None,
         "editable": True,
+        "capabilities": _capabilities(
+            candidate_store.get_capabilities(candidate_id)
+        ),
     }
 
 
@@ -187,6 +226,32 @@ def save_route(
         raise CandidateAdminError(
             "Configure and validate this model before selecting it for a scenario."
         )
+    inquiry_inherits_chat = (
+        normalized_scenario == "chat"
+        and candidate_store.get_route("inquiry") is None
+    )
+    capabilities = _capabilities(
+        candidate_store.get_capabilities(normalized_id)
+    )
+    if normalized_scenario in {"chat", "evaluation"}:
+        if capabilities["streaming"]["status"] == "failed":
+            raise CandidateAdminError(
+                "This integration failed streaming validation and cannot be "
+                f"selected for {normalized_scenario.title()}."
+            )
+    needs_structured = normalized_scenario in {
+        "inquiry", "background", "evaluation",
+    } or inquiry_inherits_chat
+    if needs_structured:
+        if capabilities["structured_json"]["status"] == "failed":
+            detail = (
+                " Inquiry inherits Chat until an explicit Inquiry route is saved."
+                if inquiry_inherits_chat else ""
+            )
+            raise CandidateAdminError(
+                "This integration failed structured JSON validation and cannot "
+                f"be selected for {normalized_scenario.title()}.{detail}"
+            )
     candidate_store.save_route(
         normalized_scenario, normalized_id, actor_user_id,
     )
@@ -200,13 +265,15 @@ async def validate(
 ) -> dict:
     normalized_id = _definition(candidate_id)["id"]
     config = _full_config(normalized_id, raw)
-    await _probe_candidate(normalized_id, config)
+    probed = await _probe_candidate(normalized_id, config)
+    capabilities = _capabilities(probed, basic_passed=True)
     issued = candidate_store.issue_validation(
-        normalized_id, config, actor_user_id,
+        normalized_id, config, actor_user_id, capabilities,
     )
     return {
         "validation_token": issued["token"],
         "validated_at": issued["validated_at"],
+        "capabilities": capabilities,
     }
 
 

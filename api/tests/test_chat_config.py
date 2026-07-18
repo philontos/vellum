@@ -20,3 +20,17 @@ def test_env_override(monkeypatch):
     monkeypatch.setenv("VELLUM_TIMEZONE", "America/New_York")
     assert config.tail_size() == 8
     assert config.timezone_name() == "America/New_York"
+
+
+def test_inquiry_and_response_limits_cannot_become_unbounded_from_negative_values(
+    monkeypatch,
+):
+    monkeypatch.setenv("VELLUM_RESPONSE_TAIL_SIZE", "-1")
+    monkeypatch.setenv("VELLUM_INQUIRY_TAIL_SIZE", "-1")
+    monkeypatch.setenv("VELLUM_INQUIRY_EVIDENCE_LIMIT", "-1")
+    monkeypatch.setenv("VELLUM_INQUIRY_CONTEXT_TOKENS", "-1")
+
+    assert config.response_tail_size() == 1
+    assert config.inquiry_tail_size() == 0
+    assert config.inquiry_evidence_limit() == 0
+    assert config.inquiry_context_tokens() == 256

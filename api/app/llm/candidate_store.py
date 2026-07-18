@@ -56,6 +56,16 @@ def get_route(scenario: str) -> dict | None:
     return dict(row) if row is not None else None
 
 
+def get_capabilities(candidate_id: str) -> dict | None:
+    db.run_migrations()
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT capabilities_json FROM model_candidate_capabilities "
+            "WHERE candidate_id = ?", (candidate_id,),
+        ).fetchone()
+    return json.loads(row["capabilities_json"]) if row is not None else None
+
+
 def save_route(
     scenario: str,
     candidate_id: str,
@@ -100,6 +110,7 @@ def issue_validation(
     candidate_id: str,
     config: dict[str, str],
     actor_user_id: str | None,
+    capabilities: dict | None = None,
 ) -> dict[str, str]:
     db.run_migrations()
     token = secrets.token_urlsafe(32)
@@ -107,6 +118,11 @@ def issue_validation(
     expires_at = now + VALIDATION_TTL_SECONDS
     with db.get_conn() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            "DELETE FROM model_candidate_validation_capabilities WHERE token_hash IN ("
+            "SELECT token_hash FROM model_candidate_validation_tickets "
+            "WHERE expires_at <= ?)", (now,),
+        )
         conn.execute(
             "DELETE FROM model_candidate_validation_tickets WHERE expires_at <= ?",
             (now,),
@@ -124,6 +140,14 @@ def issue_validation(
             "SELECT created_at FROM model_candidate_validation_tickets "
             "WHERE token_hash = ?", (_token_digest(token),),
         ).fetchone()["created_at"]
+        conn.execute(
+            "INSERT INTO model_candidate_validation_capabilities"
+            "(token_hash, capabilities_json) VALUES (?, ?)",
+            (
+                _token_digest(token),
+                json.dumps(capabilities or {}, ensure_ascii=False),
+            ),
+        )
         conn.execute(
             "INSERT INTO model_candidate_audit_events"
             "(action, candidate_id, actor_user_id, details_json) VALUES (?, ?, ?, ?)",
@@ -152,6 +176,10 @@ def save_validated(
         ).fetchone()
         if row is None or row["expires_at"] <= now:
             conn.execute(
+                "DELETE FROM model_candidate_validation_capabilities "
+                "WHERE token_hash = ?", (digest,),
+            )
+            conn.execute(
                 "DELETE FROM model_candidate_validation_tickets WHERE token_hash = ?",
                 (digest,),
             )
@@ -166,6 +194,10 @@ def save_validated(
             raise ValidationConfigChangedError(
                 "The configuration changed after validation; validate it again."
             )
+        capability_row = conn.execute(
+            "SELECT capabilities_json FROM model_candidate_validation_capabilities "
+            "WHERE token_hash = ?", (digest,),
+        ).fetchone()
 
         conn.execute(
             "INSERT INTO model_candidate_configs"
@@ -179,6 +211,22 @@ def save_validated(
                 candidate_id, config["base_url"], config["api_key"],
                 config["model"], row["created_at"], actor_user_id,
             ),
+        )
+        capabilities_json = (
+            capability_row["capabilities_json"] if capability_row is not None else "{}"
+        )
+        conn.execute(
+            "INSERT INTO model_candidate_capabilities"
+            "(candidate_id, config_sha256, capabilities_json) VALUES (?, ?, ?) "
+            "ON CONFLICT(candidate_id) DO UPDATE SET "
+            "config_sha256 = excluded.config_sha256, "
+            "capabilities_json = excluded.capabilities_json, "
+            "verified_at = datetime('now')",
+            (candidate_id, _config_digest(candidate_id, config), capabilities_json),
+        )
+        conn.execute(
+            "DELETE FROM model_candidate_validation_capabilities WHERE token_hash = ?",
+            (digest,),
         )
         conn.execute(
             "DELETE FROM model_candidate_validation_tickets WHERE token_hash = ?",

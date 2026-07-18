@@ -32,6 +32,22 @@ describe("groupRounds", () => {
     expect(rounds[0].facts.map((f) => f.id)).toEqual([2]);
   });
 
+  it("shows Inquiry Controller attempts before the answer in the same round", () => {
+    const rounds = groupRounds([
+      t({ id: 4, stage: "facts", turn: 3 }),
+      t({ id: 3, stage: "chat", turn: 3, run_id: "run-1" }),
+      t({ id: 2, stage: "inquiry.repair", turn: 3, run_id: "run-1", attempt: 2 }),
+      t({ id: 1, stage: "inquiry.decide", turn: 3, run_id: "run-1", attempt: 1 }),
+    ]);
+
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0].controller.map((trace) => trace.stage)).toEqual([
+      "inquiry.decide",
+      "inquiry.repair",
+    ]);
+    expect(rounds[0].chat?.id).toBe(3);
+  });
+
   it("orders rounds newest-first by turn", () => {
     const rounds = groupRounds([
       t({ id: 1, stage: "chat", turn: 1 }),
