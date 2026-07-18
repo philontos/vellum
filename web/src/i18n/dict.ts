@@ -298,7 +298,7 @@ export const DICT = {
     "prompts.restoreConfirm": "Load release v{version} into the draft workspace? Current saved drafts will be replaced.",
 
     // probe — read-only recall inspector (ask a question, see what gets recalled)
-    "nav.probe": "Probe",
+    "nav.probe": "Recall",
     "probe.placeholder": "Ask anything — see what gets recalled…",
     "probe.run": "Probe",
     "probe.running": "Probing…",
@@ -618,7 +618,7 @@ export const DICT = {
     "prompts.restoreConfirm": "把版本 v{version} 加载到草稿工作区？当前已保存的草稿会被替换。",
 
     // probe —— 只读召回探查
-    "nav.probe": "探查",
+    "nav.probe": "记忆召回",
     "probe.placeholder": "随便问 —— 看会召回什么…",
     "probe.run": "探查",
     "probe.running": "探查中…",

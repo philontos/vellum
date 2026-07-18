@@ -52,7 +52,7 @@ describe("AdminPanel", () => {
     expect(html).toContain('aria-label="Admin tools"');
     expect(html).toContain("Prompts");
     expect(html).toContain("Traces");
-    expect(html).toContain("Probe");
+    expect(html).toContain("Recall");
     expect(html).toContain("Evals");
   });
 
@@ -60,7 +60,7 @@ describe("AdminPanel", () => {
     const html = renderPanel(MEMBER);
 
     expect(html).toContain("Traces");
-    expect(html).toContain("Probe");
+    expect(html).toContain("Recall");
     expect(html).not.toContain("Prompts");
     expect(html).not.toContain("Evals");
   });
