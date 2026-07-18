@@ -74,6 +74,31 @@ def test_chat_trace_is_tagged_with_the_assistant_turn(migrated_db, monkeypatch):
     assert rows[0]["turn"] == assistant_turn       # not None — anchored to the round
 
 
+def test_chat_uses_the_selected_production_model_candidate(migrated_db, monkeypatch):
+    _setup(monkeypatch)
+    import app.routes.chat as chat_route
+    from app.main import app
+    from app.store.traces import get_conn
+
+    monkeypatch.setenv("LLM_CANDIDATE", "kimi")
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+
+    async def no_background_modeling():
+        return None
+
+    monkeypatch.setattr(chat_route.runner, "run_pending", no_background_modeling)
+    client = TestClient(app)
+    with client.stream("POST", "/chat", json={"message": "hello"}) as response:
+        assert response.status_code == 200
+        "".join(response.iter_text())
+
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT model FROM traces WHERE stage = 'chat'"
+        ).fetchone()
+    assert row["model"] == "kimi-k3"
+
+
 def test_chat_route_records_tool_calls_in_trace(migrated_db, monkeypatch):
     """A POST /chat turn that calls a tool must persist the calls on its trace,
     mirroring the live tool_start/tool_end frames the client already sees."""

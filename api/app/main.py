@@ -18,6 +18,7 @@ from app.routes import diary as diary_routes
 from app.routes import facts as fact_routes
 from app.routes import history as history_routes
 from app.routes import inspect as inspect_routes
+from app.routes import model_candidates as model_candidate_routes
 from app.routes import prompts as prompt_routes
 
 
@@ -28,7 +29,8 @@ async def lifespan(app: FastAPI):
     # rebuilt lazily from the db on first use.
     bootstrap.migrate_all()
 
-    # Bridge Feishu private chats to vellum, in-process, only when configured.
+    # Deprecated compatibility bridge for existing Feishu deployments. Keep it
+    # in-process and off unless explicitly configured.
     # Imported lazily so a deployment without lark-oapi/credentials boots
     # exactly as before and the test suite never starts the connection.
     feishu_task = None
@@ -67,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(diary_routes.router, dependencies=protected)
     app.include_router(fact_routes.router, dependencies=protected)
     app.include_router(inspect_routes.router, dependencies=protected)
+    app.include_router(model_candidate_routes.router)
     app.include_router(prompt_routes.router)
 
     @app.get("/health")

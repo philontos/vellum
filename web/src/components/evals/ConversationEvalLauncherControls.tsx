@@ -4,17 +4,20 @@ import type {
 } from "../../api/conversationEvals";
 import { useT } from "../../i18n";
 import { Tag } from "../ui/StatusChip";
+import { ModelCandidateSelect } from "./ModelCandidateSelect";
 
 export function ConversationEvalLauncherControls({
   workspace,
   detail,
   promptChoice,
+  modelCandidate,
   customName,
   customContent,
   loading,
   running,
   savingPrompt,
   onPromptChoiceChange,
+  onModelCandidateChange,
   onCustomNameChange,
   onCustomContentChange,
   onSavePrompt,
@@ -23,20 +26,26 @@ export function ConversationEvalLauncherControls({
   workspace: ConversationEvalWorkspace;
   detail: ConversationEvalRoundDetail;
   promptChoice: string;
+  modelCandidate: string;
   customName: string;
   customContent: string;
   loading: boolean;
   running: boolean;
   savingPrompt: boolean;
   onPromptChoiceChange: (choice: string) => void;
+  onModelCandidateChange: (candidate: string) => void;
   onCustomNameChange: (value: string) => void;
   onCustomContentChange: (value: string) => void;
   onSavePrompt: () => void;
   onStart: () => void;
 }) {
   const { t } = useT();
+  const selectedModel = workspace.model_candidates.find(
+    (candidate) => candidate.id === modelCandidate,
+  );
   const canRun = Boolean(
     promptChoice
+    && selectedModel?.configured
     && !loading
     && !running
     && (
@@ -63,37 +72,46 @@ export function ConversationEvalLauncherControls({
             {detail.round.user_content}
           </div>
         </div>
-        <div className="w-[min(28rem,42%)] flex-none">
-          <label className="block text-[10px] font-medium uppercase tracking-[0.14em] text-muted" htmlFor="eval-prompt-choice">
-            {t("eval.promptVersion")}
-          </label>
-          <div className="mt-1.5 flex gap-2">
-            <select
-              id="eval-prompt-choice"
-              value={promptChoice}
-              onChange={(event) => onPromptChoiceChange(event.target.value)}
+        <div className="w-[min(42rem,52%)] flex-none">
+          <div className="flex items-end gap-2">
+            <label className="block min-w-0 flex-1" htmlFor="eval-prompt-choice">
+              <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-muted">
+                {t("eval.promptVersion")}
+              </span>
+              <select
+                id="eval-prompt-choice"
+                value={promptChoice}
+                onChange={(event) => onPromptChoiceChange(event.target.value)}
+                disabled={running}
+                className="mt-1.5 min-h-10 w-full rounded-lg border border-line bg-well px-2.5 text-sm text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
+              >
+                <option value="original" disabled={!detail.round.replayable}>
+                  {detail.round.prompt_release_version !== null
+                    ? t("eval.originalPromptVersion", { version: detail.round.prompt_release_version })
+                    : t("eval.originalPrompt")}
+                </option>
+                {workspace.releases.map((release) => (
+                  <option key={release.id} value={`release:${release.id}`}>
+                    {t("eval.releaseVersion", { version: release.version })}
+                    {release.is_active ? ` · ${t("eval.active")}` : ""}
+                    {release.note ? ` · ${release.note}` : ""}
+                  </option>
+                ))}
+                {workspace.prompt_versions.map((version) => (
+                  <option key={version.id} value={`custom:${version.id}`}>
+                    {version.name}
+                  </option>
+                ))}
+                <option value="new">{t("eval.newPrompt")}</option>
+              </select>
+            </label>
+            <ModelCandidateSelect
+              id="eval-model-candidate"
+              candidates={workspace.model_candidates}
+              value={modelCandidate}
               disabled={running}
-              className="min-h-10 min-w-0 flex-1 rounded-lg border border-line bg-well px-2.5 text-sm text-ink-soft focus:outline-none focus:ring-2 focus:ring-accent/20"
-            >
-              <option value="original" disabled={!detail.round.replayable}>
-                {detail.round.prompt_release_version !== null
-                  ? t("eval.originalPromptVersion", { version: detail.round.prompt_release_version })
-                  : t("eval.originalPrompt")}
-              </option>
-              {workspace.releases.map((release) => (
-                <option key={release.id} value={`release:${release.id}`}>
-                  {t("eval.releaseVersion", { version: release.version })}
-                  {release.is_active ? ` · ${t("eval.active")}` : ""}
-                  {release.note ? ` · ${release.note}` : ""}
-                </option>
-              ))}
-              {workspace.prompt_versions.map((version) => (
-                <option key={version.id} value={`custom:${version.id}`}>
-                  {version.name}
-                </option>
-              ))}
-              <option value="new">{t("eval.newPrompt")}</option>
-            </select>
+              onChange={onModelCandidateChange}
+            />
             <button
               type="button"
               onClick={onStart}

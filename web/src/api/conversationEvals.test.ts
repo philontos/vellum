@@ -109,6 +109,7 @@ describe("conversation eval client", () => {
 
     await streamConversationEvalRecordRun(
       12,
+      "kimi",
       {
         onRun: (run) => events.push(`run:${run.id}`),
         onDelta: (text) => events.push(`delta:${text}`),
@@ -118,7 +119,11 @@ describe("conversation eval client", () => {
 
     expect(fetch).toHaveBeenCalledWith(
       "/inspect/conversation-evals/records/12/runs",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_candidate: "kimi" }),
+      }),
     );
     expect(events).toEqual(["run:12", "delta:new", "done:new"]);
   });

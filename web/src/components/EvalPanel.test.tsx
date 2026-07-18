@@ -13,6 +13,11 @@ import { ConversationEvalArchiveList } from "./evals/ConversationEvalArchiveList
 import { ConversationEvalRecordView } from "./evals/ConversationEvalRecordView";
 
 const WORKSPACE: ConversationEvalWorkspace = {
+  model_candidates: [
+    { id: "primary", name: "Current model", model: "model-a", configured: true },
+    { id: "glm", name: "GLM", model: "glm-5.2", configured: true },
+    { id: "kimi", name: "Kimi K3", model: "kimi-k3", configured: false },
+  ],
   rounds: [{
     user_turn: 20,
     assistant_turn: 21,
@@ -123,6 +128,7 @@ describe("conversation evaluation views", () => {
           detail={SOURCE}
           selectedTurn={21}
           promptChoice="new"
+          modelCandidate="glm"
           customName="Trial prompt"
           customContent="You are direct."
           archiveCount={3}
@@ -132,6 +138,7 @@ describe("conversation evaluation views", () => {
           error=""
           onSelectRound={() => undefined}
           onPromptChoiceChange={() => undefined}
+          onModelCandidateChange={() => undefined}
           onCustomNameChange={() => undefined}
           onCustomContentChange={() => undefined}
           onSavePrompt={() => undefined}
@@ -144,6 +151,10 @@ describe("conversation evaluation views", () => {
     );
 
     expect(html).toContain("Start evaluation");
+    expect(html).toContain("Candidate model");
+    expect(html).toContain("GLM · glm-5.2");
+    expect(html).toContain("Kimi K3 · kimi-k3 · not configured");
+    expect(html).toContain('id="eval-model-candidate"');
     expect(html).toContain("Evaluation archive · 3");
     expect(html).toContain('data-scroll-region="eval-history"');
     expect(html).toContain('data-scroll-region="eval-selected-input"');
@@ -182,11 +193,14 @@ describe("conversation evaluation views", () => {
       <I18nProvider>
         <ConversationEvalRecordView
           record={RECORD}
+          modelCandidates={WORKSPACE.model_candidates}
+          modelCandidate="glm"
           running={false}
           liveOutput=""
           error=""
           onBack={() => undefined}
           onRunAgain={() => undefined}
+          onModelCandidateChange={() => undefined}
           onRefresh={() => undefined}
         />
       </I18nProvider>,
@@ -204,5 +218,6 @@ describe("conversation evaluation views", () => {
     expect(html).toContain("You are direct.");
     expect(html).toContain("Start with the irreversible part.");
     expect(html).toContain("Generated answer B");
+    expect(html).toContain('id="eval-record-model-candidate"');
   });
 });

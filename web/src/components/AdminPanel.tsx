@@ -3,13 +3,16 @@ import { useState } from "react";
 import type { AuthUser } from "../auth/client";
 import { useT } from "../i18n";
 import { EvalPanel } from "./EvalPanel";
+import { ModelCandidatesPanel } from "./ModelCandidatesPanel";
 import { ProbePanel } from "./ProbePanel";
 import { PromptsPanel } from "./PromptsPanel";
 import { TracesPanel } from "./TracesPanel";
 
-export type AdminSection = "prompts" | "traces" | "probe" | "evals";
+export type AdminSection = "prompts" | "models" | "traces" | "probe" | "evals";
 
-const OWNER_SECTIONS: AdminSection[] = ["prompts", "traces", "probe", "evals"];
+const OWNER_SECTIONS: AdminSection[] = [
+  "prompts", "models", "traces", "probe", "evals",
+];
 const MEMBER_SECTIONS: AdminSection[] = ["traces", "probe"];
 
 export function adminSectionsForUser(user: AuthUser | null): AdminSection[] {
@@ -54,6 +57,7 @@ export function AdminPanel({
 
   const labels: Record<AdminSection, string> = {
     prompts: t("nav.prompts"),
+    models: t("nav.models"),
     traces: t("nav.traces"),
     probe: t("nav.probe"),
     evals: t("nav.evals"),
@@ -104,6 +108,7 @@ export function AdminPanel({
         className="min-h-0 flex-1 overflow-hidden"
       >
         {active === "prompts" && <PromptsPanel onDirtyChange={onPromptDirtyChange} />}
+        {active === "models" && <ModelCandidatesPanel />}
         {active === "traces" && <TracesPanel />}
         {active === "probe" && <ProbePanel />}
         {active === "evals" && <EvalPanel />}

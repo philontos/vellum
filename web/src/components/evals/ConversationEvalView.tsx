@@ -12,6 +12,7 @@ export function ConversationEvalView({
   detail,
   selectedTurn,
   promptChoice,
+  modelCandidate,
   customName,
   customContent,
   archiveCount,
@@ -21,6 +22,7 @@ export function ConversationEvalView({
   error,
   onSelectRound,
   onPromptChoiceChange,
+  onModelCandidateChange,
   onCustomNameChange,
   onCustomContentChange,
   onSavePrompt,
@@ -34,6 +36,7 @@ export function ConversationEvalView({
   detail: ConversationEvalRoundDetail | null;
   selectedTurn: number | null;
   promptChoice: string;
+  modelCandidate: string;
   customName: string;
   customContent: string;
   archiveCount: number;
@@ -43,6 +46,7 @@ export function ConversationEvalView({
   error: string;
   onSelectRound: (turn: number) => void;
   onPromptChoiceChange: (choice: string) => void;
+  onModelCandidateChange: (candidate: string) => void;
   onCustomNameChange: (value: string) => void;
   onCustomContentChange: (value: string) => void;
   onSavePrompt: () => void;
@@ -129,12 +133,14 @@ export function ConversationEvalView({
                 workspace={workspace}
                 detail={detail}
                 promptChoice={promptChoice}
+                modelCandidate={modelCandidate}
                 customName={customName}
                 customContent={customContent}
                 loading={loading}
                 running={running}
                 savingPrompt={savingPrompt}
                 onPromptChoiceChange={onPromptChoiceChange}
+                onModelCandidateChange={onModelCandidateChange}
                 onCustomNameChange={onCustomNameChange}
                 onCustomContentChange={onCustomContentChange}
                 onSavePrompt={onSavePrompt}

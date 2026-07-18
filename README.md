@@ -97,8 +97,11 @@ Copy `api/.env.example` to `api/.env` and fill it in.
 
 | Variable | Required | What it is |
 |---|---|---|
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | yes | The chat model — any OpenAI-compatible `/chat/completions` endpoint. |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | yes* | The primary chat model — any OpenAI-compatible `/chat/completions` endpoint. *Required when `LLM_CANDIDATE=primary`. |
+| `LLM_CANDIDATE` | no | Production model selection: `primary` (default), `glm`, or `kimi`. Applies consistently to web chat and all background modeling. |
 | `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL` | yes* | The embedding model (`/embeddings`). *Falls back to `LLM_*` if unset — but set it explicitly when your chat provider has no embeddings. |
+| `GLM_BASE_URL` / `GLM_API_KEY` / `GLM_MODEL` | no | Environment fallback for the named GLM candidate. URL and model default to the official endpoint and `glm-5.2`; setting the key enables it. |
+| `KIMI_BASE_URL` / `KIMI_API_KEY` / `KIMI_MODEL` | no | Environment fallback for the named Kimi candidate. URL and model default to the official endpoint and `kimi-k3`; `MOONSHOT_API_KEY` is also accepted. |
 | `VELLUM_DATA_DIR` | no | Data root. `prompts.db` is deployment-wide; family mode also stores `auth.db` plus `users/<id>/vellum.db`. Default `./data`. |
 | `VELLUM_AUTH_ENABLED` | no | `1` enables private family login and per-account stores; default `0` keeps legacy mode. |
 | `EVAL_GEN_BASE_URL` / `EVAL_GEN_API_KEY` / `EVAL_GEN_MODEL` | no | External evaluator model — only needed to *run* evals. |
@@ -116,6 +119,34 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `VELLUM_AUTH_SESSION_DAYS` | `30` | Login session lifetime. Password changes and account disable revoke existing sessions. |
 | `VELLUM_TIMEZONE` | `Asia/Shanghai` | Local timezone attached to model-facing user turns for relative-time and conversation-gap reasoning. Stored messages remain UTC and unchanged. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
+
+To promote a named candidate into the production path, configure its credentials
+in Admin (described below) or in the environment, set the selection, then restart
+the API process. The selection covers the web reply and every background modeling
+call; embeddings remain on `EMBED_*`:
+
+```bash
+# GLM
+LLM_CANDIDATE=glm
+GLM_API_KEY=...
+
+# or Kimi K3
+LLM_CANDIDATE=kimi
+KIMI_API_KEY=...       # MOONSHOT_API_KEY also works
+```
+
+Set `LLM_CANDIDATE=primary` to return to `LLM_BASE_URL` / `LLM_API_KEY` /
+`LLM_MODEL`.
+
+An owner can configure GLM and Kimi without putting their credentials in `.env`:
+open **Admin → Models**, enter the Base URL, model, and API key, then choose
+**Validate**. **Save** remains disabled until that exact configuration succeeds;
+changing any field invalidates the check. Saved keys stay server-side in the
+deployment-wide `prompts.db`, are never returned to the browser, and inherit the
+database's SQLCipher-at-rest setting. A saved Admin configuration takes precedence
+over the corresponding named environment block. In family mode these endpoints
+and the Models tab are owner-only; legacy single-user mode retains its existing
+owner-equivalent Admin behavior.
 
 ---
 
@@ -227,6 +258,9 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   model or included in a release.
 - **Reasoning models:** chain-of-thought (`reasoning_content` / `reasoning`) is
   captured into traces for inspection, but never streamed into the chat answer.
+- **Feishu/Lark adapter (deprecated):** existing deployments remain compatible,
+  but this entry point is maintenance-only. New chat integration work targets the
+  web path; the adapter still inherits the selected production model while enabled.
 - **Tests:** backend `pytest` (from `api/`); web `pnpm test` (from `web/`).
 - **Evals:** `python -m evals.run all` from `api/` (requires `EVAL_GEN_*`). The
   keyless harness tests run as part of `pytest`.
@@ -247,8 +281,10 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   rendering are independently editable prompts.
 - **Evals** (owner only) — fork any completed conversation turn into an independent
   evaluation archive using its original Prompt, an immutable release, or a named
-  on-the-spot system Prompt. Each archive freezes the source, baseline Prompt,
-  evaluated Prompt, and complete model inputs; its detail view shows a line diff
-  plus every repeated result side by side. Archives live in the per-account
-  observability database, remain available independently of conversation history,
-  and never append chat messages or trigger background modeling.
+  on-the-spot system Prompt. Each run can use the current chat model, GLM, or Kimi
+  K3; candidate credentials remain server-side and changing a candidate never
+  changes live chat. Each archive freezes the source, baseline Prompt, evaluated
+  Prompt, and complete model inputs; its detail view shows a line diff plus every
+  repeated result side by side. Archives live in the per-account observability
+  database, remain available independently of conversation history, and never
+  append chat messages or trigger background modeling.

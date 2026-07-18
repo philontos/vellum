@@ -1,4 +1,4 @@
-"""Encrypted SQLite connection and forward-only migrations for Prompt releases."""
+"""Encrypted SQLite connection and migrations for the deployment control plane."""
 from contextlib import contextmanager
 from pathlib import Path
 

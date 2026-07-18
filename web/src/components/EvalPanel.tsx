@@ -44,6 +44,15 @@ function defaultChoice(
   return "new";
 }
 
+function defaultModelCandidate(workspace: ConversationEvalWorkspace): string {
+  const primary = workspace.model_candidates.find(
+    (candidate) => candidate.id === "primary" && candidate.configured,
+  );
+  return primary?.id
+    ?? workspace.model_candidates.find((candidate) => candidate.configured)?.id
+    ?? "primary";
+}
+
 function summary(record: ConversationEvalRecordDetail): ConversationEvalRecordSummary {
   return {
     id: record.id,
@@ -73,6 +82,7 @@ export function EvalPanel() {
   const [activeRecord, setActiveRecord] = useState<ConversationEvalRecordDetail | null>(null);
   const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
   const [promptChoice, setPromptChoice] = useState("");
+  const [modelCandidate, setModelCandidate] = useState("primary");
   const [customName, setCustomName] = useState("");
   const [customContent, setCustomContent] = useState("");
   const [loading, setLoading] = useState(true);
@@ -115,6 +125,12 @@ export function EvalPanel() {
         getConversationEvalRecords({ limit: PAGE_SIZE }),
       ]);
       setWorkspace(next);
+      setModelCandidate((current) => {
+        const selected = next.model_candidates.find(
+          (candidate) => candidate.id === current && candidate.configured,
+        );
+        return selected?.id ?? defaultModelCandidate(next);
+      });
       setRecords(archive.records);
       setArchiveHasMore(archive.has_more);
       const selected = next.rounds.find(
@@ -170,6 +186,7 @@ export function EvalPanel() {
         rounds: [...workspace.rounds, ...page.rounds],
         releases: page.releases,
         prompt_versions: page.prompt_versions,
+        model_candidates: page.model_candidates,
         has_more: page.has_more,
       });
     } catch (loadError) {
@@ -250,8 +267,10 @@ export function EvalPanel() {
     ]);
   }
 
-  async function executeRecord(recordId: number): Promise<void> {
-    await streamConversationEvalRecordRun(recordId, {
+  async function executeRecord(
+    recordId: number, candidate: string,
+  ): Promise<void> {
+    await streamConversationEvalRecordRun(recordId, candidate, {
       onDelta: (text) => setLiveOutput((current) => current + text),
       onDone: (run) => {
         setActiveRecord((current) => current?.id === recordId ? {
@@ -281,7 +300,7 @@ export function EvalPanel() {
       const record = await createConversationEvalRecord(request);
       updateRecord(record);
       setView("record");
-      await executeRecord(record.id);
+      await executeRecord(record.id, modelCandidate);
     } catch (runError) {
       setError(message(runError));
     } finally {
@@ -296,7 +315,7 @@ export function EvalPanel() {
     setLiveOutput("");
     setError("");
     try {
-      await executeRecord(activeRecord.id);
+      await executeRecord(activeRecord.id, modelCandidate);
     } catch (runError) {
       setError(message(runError));
     } finally {
@@ -351,18 +370,22 @@ export function EvalPanel() {
     return (
       <ConversationEvalRecordView
         record={activeRecord}
+        modelCandidates={workspace?.model_candidates ?? []}
+        modelCandidate={modelCandidate}
         running={running}
         liveOutput={liveOutput}
         error={error}
         onBack={() => setView("archive")}
         onRunAgain={() => void runAgain()}
+        onModelCandidateChange={setModelCandidate}
         onRefresh={() => void refreshRecord()}
       />
     );
   }
 
   const emptyWorkspace: ConversationEvalWorkspace = {
-    rounds: [], releases: [], prompt_versions: [], has_more: false,
+    model_candidates: [], rounds: [], releases: [], prompt_versions: [],
+    has_more: false,
   };
 
   return (
@@ -371,6 +394,7 @@ export function EvalPanel() {
       detail={detail}
       selectedTurn={selectedTurn}
       promptChoice={promptChoice}
+      modelCandidate={modelCandidate}
       customName={customName}
       customContent={customContent}
       archiveCount={records.length}
@@ -389,6 +413,7 @@ export function EvalPanel() {
           setCustomContent(detail?.original_system_prompt ?? "");
         }
       }}
+      onModelCandidateChange={setModelCandidate}
       onCustomNameChange={setCustomName}
       onCustomContentChange={setCustomContent}
       onSavePrompt={() => void savePrompt()}

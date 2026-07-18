@@ -224,6 +224,93 @@ def test_replay_validation_is_explicit(migrated_db):
     assert unknown_round.status_code == 404
 
 
+def test_replay_runs_can_select_isolated_glm_and_kimi_candidates(
+    migrated_db, monkeypatch,
+):
+    from app.evaluation import conversation
+    from app.llm.client import resolve_structured_llm_config
+    from app.main import app
+    from app.store import memory
+
+    monkeypatch.setenv("LLM_BASE_URL", "https://primary.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "primary-key")
+    monkeypatch.setenv("LLM_MODEL", "primary-model")
+    monkeypatch.setenv("GLM_API_KEY", "glm-key")
+    monkeypatch.setenv("KIMI_API_KEY", "kimi-key")
+    memory.append_message("user", "Compare providers")
+    answer = memory.append_message("assistant", "Original")
+    _chat_trace(answer["turn"], "Compare providers", "Original")
+    seen = []
+
+    async def fake_stream(messages, stream="neutral", through_turn=None):
+        config = resolve_structured_llm_config()
+        seen.append(config)
+        yield {
+            "type": "final", "content": config["model"], "reasoning": None,
+            "tool_calls": None, "prompt_tokens": 1, "completion_tokens": 1,
+            "duration_ms": 1,
+        }
+
+    monkeypatch.setattr(conversation.respond, "stream", fake_stream)
+    client = TestClient(app)
+    workspace = client.get("/inspect/conversation-evals").json()
+    assert [item["id"] for item in workspace["model_candidates"]] == [
+        "primary", "glm", "kimi",
+    ]
+    record = client.post(
+        "/inspect/conversation-evals/records",
+        json={"assistant_turn": answer["turn"], "prompt_kind": "original"},
+    ).json()
+
+    for candidate in ("glm", "kimi"):
+        with client.stream(
+            "POST",
+            f"/inspect/conversation-evals/records/{record['id']}/runs",
+            json={"model_candidate": candidate},
+        ) as response:
+            assert response.status_code == 200
+            assert "[DONE]" in "".join(response.iter_text())
+
+    detail = client.get(
+        f"/inspect/conversation-evals/records/{record['id']}"
+    ).json()
+    assert [run["model"] for run in detail["runs"]] == ["kimi-k3", "glm-5.2"]
+    assert [config["base_url"] for config in seen] == [
+        "https://open.bigmodel.cn/api/paas/v4",
+        "https://api.moonshot.cn/v1",
+    ]
+    assert resolve_structured_llm_config()["model"] == "primary-model"
+
+
+def test_unconfigured_named_candidate_is_rejected_before_run_creation(
+    migrated_db, monkeypatch,
+):
+    from app.main import app
+    from app.store import memory
+
+    monkeypatch.delenv("KIMI_API_KEY", raising=False)
+    monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+    memory.append_message("user", "Try Kimi")
+    answer = memory.append_message("assistant", "Original")
+    _chat_trace(answer["turn"], "Try Kimi", "Original")
+    client = TestClient(app)
+    record = client.post(
+        "/inspect/conversation-evals/records",
+        json={"assistant_turn": answer["turn"], "prompt_kind": "original"},
+    ).json()
+
+    response = client.post(
+        f"/inspect/conversation-evals/records/{record['id']}/runs",
+        json={"model_candidate": "kimi"},
+    )
+
+    assert response.status_code == 422
+    assert "KIMI_API_KEY" in response.json()["detail"]
+    assert client.get(
+        f"/inspect/conversation-evals/records/{record['id']}"
+    ).json()["runs"] == []
+
+
 @pytest.mark.asyncio
 async def test_published_release_swaps_prompt_fragments_but_freezes_history(
     migrated_db,

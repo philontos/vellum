@@ -39,9 +39,13 @@ function renderPanel(user: AuthUser | null) {
 
 describe("AdminPanel", () => {
   it("preserves the existing owner-only boundary for Prompt and Eval tools", () => {
-    expect(adminSectionsForUser(OWNER)).toEqual(["prompts", "traces", "probe", "evals"]);
+    expect(adminSectionsForUser(OWNER)).toEqual([
+      "prompts", "models", "traces", "probe", "evals",
+    ]);
     expect(adminSectionsForUser(MEMBER)).toEqual(["traces", "probe"]);
-    expect(adminSectionsForUser(null)).toEqual(["prompts", "traces", "probe", "evals"]);
+    expect(adminSectionsForUser(null)).toEqual([
+      "prompts", "models", "traces", "probe", "evals",
+    ]);
   });
 
   it("renders one stable desktop-only workspace with accessible child tabs", () => {
@@ -51,6 +55,7 @@ describe("AdminPanel", () => {
     expect(html).toContain('role="tablist"');
     expect(html).toContain('aria-label="Admin tools"');
     expect(html).toContain("Prompts");
+    expect(html).toContain("Models");
     expect(html).toContain("Traces");
     expect(html).toContain("Recall");
     expect(html).toContain("Evals");
@@ -62,6 +67,7 @@ describe("AdminPanel", () => {
     expect(html).toContain("Traces");
     expect(html).toContain("Recall");
     expect(html).not.toContain("Prompts");
+    expect(html).not.toContain("Models");
     expect(html).not.toContain("Evals");
   });
 
