@@ -1,21 +1,29 @@
 import { useEffect, useState } from "react";
 
 import {
+  createConversationEvalRecord,
   createConversationPromptVersion,
+  getConversationEvalRecord,
+  getConversationEvalRecords,
   getConversationEvalRound,
   getConversationEvalWorkspace,
-  streamConversationEvalRun,
+  streamConversationEvalRecordRun,
+  type ConversationEvalRecordDetail,
+  type ConversationEvalRecordSummary,
   type ConversationEvalRound,
   type ConversationEvalRoundDetail,
   type ConversationEvalRunRequest,
   type ConversationEvalWorkspace,
   type ConversationPromptVersion,
 } from "../api/conversationEvals";
+import { ConversationEvalArchiveList } from "./evals/ConversationEvalArchiveList";
+import { ConversationEvalRecordView } from "./evals/ConversationEvalRecordView";
 import { ConversationEvalView } from "./evals/ConversationEvalView";
 
 export { ConversationEvalView } from "./evals/ConversationEvalView";
 
 const PAGE_SIZE = 50;
+type EvalView = "launcher" | "archive" | "record";
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -36,21 +44,48 @@ function defaultChoice(
   return "new";
 }
 
+function summary(record: ConversationEvalRecordDetail): ConversationEvalRecordSummary {
+  return {
+    id: record.id,
+    source_user_turn: record.source_user_turn,
+    source_assistant_turn: record.source_assistant_turn,
+    stream: record.stream,
+    source_user_content: record.source_user_content,
+    baseline_output: record.baseline_output,
+    baseline_prompt_label: record.baseline_prompt_label,
+    prompt_kind: record.prompt_kind,
+    prompt_release_id: record.prompt_release_id,
+    prompt_release_version: record.prompt_release_version,
+    prompt_version_id: record.prompt_version_id,
+    prompt_label: record.prompt_label,
+    run_count: record.run_count,
+    latest_status: record.latest_status,
+    latest_output: record.latest_output,
+    created_at: record.created_at,
+  };
+}
+
 export function EvalPanel() {
+  const [view, setView] = useState<EvalView>("launcher");
   const [workspace, setWorkspace] = useState<ConversationEvalWorkspace | null>(null);
   const [detail, setDetail] = useState<ConversationEvalRoundDetail | null>(null);
+  const [records, setRecords] = useState<ConversationEvalRecordSummary[]>([]);
+  const [activeRecord, setActiveRecord] = useState<ConversationEvalRecordDetail | null>(null);
   const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
   const [promptChoice, setPromptChoice] = useState("");
   const [customName, setCustomName] = useState("");
   const [customContent, setCustomContent] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingArchive, setLoadingArchive] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMoreArchive, setLoadingMoreArchive] = useState(false);
+  const [archiveHasMore, setArchiveHasMore] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [running, setRunning] = useState(false);
   const [liveOutput, setLiveOutput] = useState("");
   const [error, setError] = useState("");
 
-  async function loadRound(
+  async function selectRound(
     turn: number,
     source: ConversationEvalWorkspace,
   ): Promise<void> {
@@ -72,10 +107,16 @@ export function EvalPanel() {
 
   async function loadInitial(preferredTurn?: number | null): Promise<void> {
     setLoading(true);
+    setLoadingArchive(true);
     setError("");
     try {
-      const next = await getConversationEvalWorkspace({ limit: PAGE_SIZE });
+      const [next, archive] = await Promise.all([
+        getConversationEvalWorkspace({ limit: PAGE_SIZE }),
+        getConversationEvalRecords({ limit: PAGE_SIZE }),
+      ]);
       setWorkspace(next);
+      setRecords(archive.records);
+      setArchiveHasMore(archive.has_more);
       const selected = next.rounds.find(
         (round) => round.assistant_turn === preferredTurn,
       ) ?? next.rounds[0];
@@ -84,6 +125,7 @@ export function EvalPanel() {
         setSelectedTurn(selected.assistant_turn);
         setDetail(nextDetail);
         setPromptChoice(defaultChoice(nextDetail.round, next));
+        setCustomName("");
         setCustomContent(nextDetail.original_system_prompt ?? "");
       } else {
         setSelectedTurn(null);
@@ -94,6 +136,7 @@ export function EvalPanel() {
       setError(message(loadError));
     } finally {
       setLoading(false);
+      setLoadingArchive(false);
     }
   }
 
@@ -101,7 +144,21 @@ export function EvalPanel() {
     void loadInitial();
   }, []);
 
-  async function loadMore() {
+  async function refreshArchive(): Promise<void> {
+    setLoadingArchive(true);
+    setError("");
+    try {
+      const archive = await getConversationEvalRecords({ limit: PAGE_SIZE });
+      setRecords(archive.records);
+      setArchiveHasMore(archive.has_more);
+    } catch (loadError) {
+      setError(message(loadError));
+    } finally {
+      setLoadingArchive(false);
+    }
+  }
+
+  async function loadMoreSources() {
     if (!workspace?.has_more || loadingMore || workspace.rounds.length === 0) return;
     setLoadingMore(true);
     setError("");
@@ -119,6 +176,24 @@ export function EvalPanel() {
       setError(message(loadError));
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function loadMoreRecords() {
+    if (!archiveHasMore || loadingMoreArchive || records.length === 0) return;
+    setLoadingMoreArchive(true);
+    setError("");
+    try {
+      const page = await getConversationEvalRecords({
+        limit: PAGE_SIZE,
+        before: records[records.length - 1].id,
+      });
+      setRecords((current) => [...current, ...page.records]);
+      setArchiveHasMore(page.has_more);
+    } catch (loadError) {
+      setError(message(loadError));
+    } finally {
+      setLoadingMoreArchive(false);
     }
   }
 
@@ -167,7 +242,28 @@ export function EvalPanel() {
     return null;
   }
 
-  async function run() {
+  function updateRecord(record: ConversationEvalRecordDetail) {
+    setActiveRecord(record);
+    setRecords((current) => [
+      summary(record),
+      ...current.filter((item) => item.id !== record.id),
+    ]);
+  }
+
+  async function executeRecord(recordId: number): Promise<void> {
+    await streamConversationEvalRecordRun(recordId, {
+      onDelta: (text) => setLiveOutput((current) => current + text),
+      onDone: (run) => {
+        setActiveRecord((current) => current?.id === recordId ? {
+          ...current,
+          runs: [run, ...current.runs.filter((item) => item.id !== run.id)],
+        } : current);
+      },
+    });
+    updateRecord(await getConversationEvalRecord(recordId));
+  }
+
+  async function startEvaluation() {
     if (!detail || running) return;
     let choice = promptChoice;
     if (choice === "new") {
@@ -182,21 +278,87 @@ export function EvalPanel() {
     setLiveOutput("");
     setError("");
     try {
-      await streamConversationEvalRun(request, {
-        onDelta: (text) => setLiveOutput((current) => current + text),
-        onDone: (result) => {
-          setDetail((current) => current && {
-            ...current,
-            runs: [result, ...current.runs.filter((run) => run.id !== result.id)],
-          });
-        },
-      });
+      const record = await createConversationEvalRecord(request);
+      updateRecord(record);
+      setView("record");
+      await executeRecord(record.id);
     } catch (runError) {
       setError(message(runError));
     } finally {
       setRunning(false);
       setLiveOutput("");
     }
+  }
+
+  async function runAgain() {
+    if (!activeRecord || running) return;
+    setRunning(true);
+    setLiveOutput("");
+    setError("");
+    try {
+      await executeRecord(activeRecord.id);
+    } catch (runError) {
+      setError(message(runError));
+    } finally {
+      setRunning(false);
+      setLiveOutput("");
+    }
+  }
+
+  async function openRecord(recordId: number) {
+    setLoading(true);
+    setError("");
+    try {
+      setActiveRecord(await getConversationEvalRecord(recordId));
+      setView("record");
+    } catch (loadError) {
+      setError(message(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshRecord() {
+    if (!activeRecord) return;
+    setLoading(true);
+    setError("");
+    try {
+      updateRecord(await getConversationEvalRecord(activeRecord.id));
+    } catch (loadError) {
+      setError(message(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (view === "archive") {
+    return (
+      <ConversationEvalArchiveList
+        records={records}
+        hasMore={archiveHasMore}
+        loading={loadingArchive}
+        loadingMore={loadingMoreArchive}
+        error={error}
+        onOpen={(recordId) => void openRecord(recordId)}
+        onNew={() => setView("launcher")}
+        onRefresh={() => void refreshArchive()}
+        onLoadMore={() => void loadMoreRecords()}
+      />
+    );
+  }
+
+  if (view === "record" && activeRecord) {
+    return (
+      <ConversationEvalRecordView
+        record={activeRecord}
+        running={running}
+        liveOutput={liveOutput}
+        error={error}
+        onBack={() => setView("archive")}
+        onRunAgain={() => void runAgain()}
+        onRefresh={() => void refreshRecord()}
+      />
+    );
   }
 
   const emptyWorkspace: ConversationEvalWorkspace = {
@@ -211,13 +373,15 @@ export function EvalPanel() {
       promptChoice={promptChoice}
       customName={customName}
       customContent={customContent}
+      archiveCount={records.length}
       loading={loading}
       running={running}
       savingPrompt={savingPrompt}
       error={error}
-      liveOutput={liveOutput}
       onSelectRound={(turn) => {
-        if (workspace && turn !== selectedTurn && !running) void loadRound(turn, workspace);
+        if (workspace && turn !== selectedTurn && !running) {
+          void selectRound(turn, workspace);
+        }
       }}
       onPromptChoiceChange={(choice) => {
         setPromptChoice(choice);
@@ -228,8 +392,12 @@ export function EvalPanel() {
       onCustomNameChange={setCustomName}
       onCustomContentChange={setCustomContent}
       onSavePrompt={() => void savePrompt()}
-      onRun={() => void run()}
-      onLoadMore={() => void loadMore()}
+      onStartEvaluation={() => void startEvaluation()}
+      onOpenArchive={() => {
+        setView("archive");
+        void refreshArchive();
+      }}
+      onLoadMore={() => void loadMoreSources()}
       onRefresh={() => void loadInitial(selectedTurn)}
       loadingMore={loadingMore}
     />

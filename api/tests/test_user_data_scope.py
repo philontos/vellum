@@ -1,6 +1,8 @@
 from app import config
 from app.data_scope import user_scope
-from app.store import db, memory
+import json
+
+from app.store import conversation_evals, db, memory
 from app.store import vectors
 from app.store.vectors import VectorStore
 
@@ -39,3 +41,42 @@ def test_each_user_keeps_an_independent_in_memory_vector_index(tmp_path, monkeyp
     with user_scope("user-a"):
         assert VectorStore().index is alice_index
         assert VectorStore().search([1.0, 0.0], k=1) == [1]
+
+
+def test_each_user_gets_independent_conversation_eval_archives(tmp_path, monkeypatch):
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
+
+    def create(label: str) -> dict:
+        messages = [{"role": "system", "content": f"{label} SYSTEM"}]
+        return conversation_evals.create_record({
+            "source_user_turn": 0,
+            "source_assistant_turn": 1,
+            "stream": "neutral",
+            "source_created_at": "2026-07-17 00:00:00",
+            "source_user_content": f"{label} input",
+            "baseline_output": f"{label} baseline",
+            "baseline_prompt_release_id": None,
+            "baseline_prompt_release_version": None,
+            "baseline_prompt_label": "Original Prompt",
+            "baseline_system_prompt": f"{label} BASELINE",
+            "baseline_input_json": json.dumps(messages),
+            "prompt_kind": "custom",
+            "prompt_release_id": None,
+            "prompt_release_version": None,
+            "prompt_version_id": None,
+            "prompt_label": label,
+            "system_prompt": f"{label} SYSTEM",
+            "input_json": json.dumps(messages),
+            "runtime_snapshot_json": "{}",
+        })
+
+    with user_scope("user-a"):
+        create("Alice")
+        assert [row["prompt_label"] for row in conversation_evals.list_records()] == ["Alice"]
+
+    with user_scope("user-b"):
+        assert conversation_evals.list_records() == []
+        create("Bob")
+
+    with user_scope("user-a"):
+        assert [row["prompt_label"] for row in conversation_evals.list_records()] == ["Alice"]

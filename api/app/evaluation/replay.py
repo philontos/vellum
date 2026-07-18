@@ -7,7 +7,7 @@ from app import config
 from app.chat import assemble, temporal
 from app.prompts import runtime, service as prompt_service
 from app.prompts.catalog import definitions
-from app.store import memory, observability as obs, traces
+from app.store import conversation_evals as eval_store, memory, traces
 
 
 class ConversationRoundNotFoundError(KeyError):
@@ -205,7 +205,7 @@ async def prepare_replay(
     if prompt_kind == "custom":
         if prompt_version_id is None:
             raise ReplayValidationError("A saved Prompt version is required")
-        version = obs.get_conversation_prompt_version(prompt_version_id)
+        version = eval_store.get_prompt_version(prompt_version_id)
         if version is None:
             raise ReplayValidationError(
                 f"Unknown Prompt version: {prompt_version_id}"

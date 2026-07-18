@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createConversationEvalRecord,
   createConversationPromptVersion,
+  getConversationEvalRecord,
+  getConversationEvalRecords,
   getConversationEvalRound,
   getConversationEvalWorkspace,
-  streamConversationEvalRun,
+  streamConversationEvalRecordRun,
 } from "./conversationEvals";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -14,12 +17,14 @@ function response(body: unknown): Response {
 }
 
 describe("conversation eval client", () => {
-  it("loads selectable historical rounds and one comparison", async () => {
+  it("loads historical sources and standalone evaluation archives", async () => {
     const fetchMock = vi.fn(async () => response({ rounds: [] }));
     vi.stubGlobal("fetch", fetchMock);
 
     await getConversationEvalWorkspace({ limit: 30, before: 80 });
     await getConversationEvalRound(81);
+    await getConversationEvalRecords({ limit: 20, before: 9 });
+    await getConversationEvalRecord(10);
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -30,6 +35,40 @@ describe("conversation eval client", () => {
       2,
       "/inspect/conversation-evals/rounds/81",
       { cache: "no-store" },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/inspect/conversation-evals/records?limit=20&before=9",
+      { cache: "no-store" },
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/inspect/conversation-evals/records/10",
+      { cache: "no-store" },
+    );
+  });
+
+  it("forks a source into an immutable evaluation archive", async () => {
+    const fetchMock = vi.fn(async () => response({ id: 12 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createConversationEvalRecord({
+      assistant_turn: 9,
+      prompt_kind: "custom",
+      prompt_version_id: 4,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/inspect/conversation-evals/records",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assistant_turn: 9,
+          prompt_kind: "custom",
+          prompt_version_id: 4,
+        }),
+      },
     );
   });
 
@@ -68,8 +107,8 @@ describe("conversation eval client", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body }) as Response));
     const events: string[] = [];
 
-    await streamConversationEvalRun(
-      { assistant_turn: 9, prompt_kind: "release", prompt_release_id: 3 },
+    await streamConversationEvalRecordRun(
+      12,
       {
         onRun: (run) => events.push(`run:${run.id}`),
         onDelta: (text) => events.push(`delta:${text}`),
@@ -77,6 +116,10 @@ describe("conversation eval client", () => {
       },
     );
 
+    expect(fetch).toHaveBeenCalledWith(
+      "/inspect/conversation-evals/records/12/runs",
+      expect.objectContaining({ method: "POST" }),
+    );
     expect(events).toEqual(["run:12", "delta:new", "done:new"]);
   });
 });

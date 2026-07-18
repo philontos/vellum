@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app import config
 from app.auth.dependencies import require_owner
 from app.config.dimensions_loader import dimension_meta
+from app.evaluation import archive as conversation_archive
 from app.evaluation import conversation as conversation_eval
 from app.llm.client import resolve_structured_llm_config
 from app.store import model, observability as obs, portrait_claims, traces
@@ -101,6 +102,8 @@ class ConversationReplayIn(BaseModel):
 def _conversation_eval_error(exc: Exception):
     if isinstance(exc, conversation_eval.ConversationRoundNotFoundError):
         raise HTTPException(status_code=404, detail="Conversation round not found") from exc
+    if isinstance(exc, conversation_archive.ConversationEvalRecordNotFoundError):
+        raise HTTPException(status_code=404, detail="Evaluation record not found") from exc
     if isinstance(exc, conversation_eval.ReplayValidationError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     raise exc
@@ -126,6 +129,42 @@ def conversation_eval_round(
         return _conversation_eval_error(exc)
 
 
+@router.get("/inspect/conversation-evals/records")
+def conversation_eval_records(
+    limit: int = Query(default=50, ge=1, le=200),
+    before: int | None = Query(default=None),
+    _owner: dict | None = Depends(require_owner),
+):
+    return conversation_archive.list_records(limit=limit, before=before)
+
+
+@router.get("/inspect/conversation-evals/records/{record_id}")
+def conversation_eval_record(
+    record_id: int,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        return conversation_archive.record_detail(record_id)
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+
+
+@router.post("/inspect/conversation-evals/records", status_code=201)
+async def create_conversation_eval_record(
+    body: ConversationReplayIn,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        return await conversation_archive.create_record(
+            body.assistant_turn,
+            body.prompt_kind,
+            prompt_release_id=body.prompt_release_id,
+            prompt_version_id=body.prompt_version_id,
+        )
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+
+
 @router.post("/inspect/conversation-evals/prompt-versions", status_code=201)
 def create_conversation_prompt_version(
     body: ConversationPromptVersionIn,
@@ -143,16 +182,34 @@ async def run_conversation_eval(
     _owner: dict | None = Depends(require_owner),
 ):
     try:
-        prepared = await conversation_eval.prepare_replay(
+        record = await conversation_archive.create_record(
             body.assistant_turn,
             body.prompt_kind,
             prompt_release_id=body.prompt_release_id,
             prompt_version_id=body.prompt_version_id,
         )
-        run = conversation_eval.start_run(prepared)
+        prepared = conversation_archive.prepared_for_record(record["id"])
+        run = conversation_eval.start_run(prepared, record_id=record["id"])
     except Exception as exc:
         return _conversation_eval_error(exc)
 
+    return _conversation_run_stream(run, prepared)
+
+
+@router.post("/inspect/conversation-evals/records/{record_id}/runs")
+async def run_conversation_eval_record(
+    record_id: int,
+    _owner: dict | None = Depends(require_owner),
+):
+    try:
+        prepared = conversation_archive.prepared_for_record(record_id)
+        run = conversation_eval.start_run(prepared, record_id=record_id)
+    except Exception as exc:
+        return _conversation_eval_error(exc)
+    return _conversation_run_stream(run, prepared)
+
+
+def _conversation_run_stream(run: dict, prepared):
     async def gen():
         yield _sse({"run": run})
         async for event in conversation_eval.run_events(run["id"], prepared):
