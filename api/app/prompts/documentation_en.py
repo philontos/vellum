@@ -318,28 +318,30 @@ GUIDES = {
         ),
     ),
     "traits.schwartz.extract": (
-        "Extracts sparse evidence for the ten Schwartz basic values from a user-only "
-        "conversation span and merges supported observations into the long-term "
-        "values profile.",
+        "Extracts sparse, signed evidence for the ten Schwartz basic values from a "
+        "user-only conversation span. Choices and trade-offs update long-term relative "
+        "priority; emotion alone updates recent activation.",
         "Runs as one structured call at the trait batch cadence using $raw_entry, "
         "$profile_summary, and the separately managed $rubric from the same pinned "
         "Prompt release.",
         (
             "Keep all three $ variables and all ten canonical lowercase keys.",
             "Preserve sparse extraction; a typical span expresses one to three values.",
-            "Use null for unsupported values and evidence in the user's language.",
+            "Keep support, sacrifice, and explicit opposition distinct; use null for topics.",
+            "Keep natural-language evidence in the user's language.",
         ),
     ),
     "traits.schwartz.rubric": (
-        "Defines the ten Schwartz values, their behavioral signals, score ranges, "
-        "confidence calibration, and sparse-abstention policy used by extraction.",
+        "Defines the ten Schwartz values, the evidence-strength hierarchy, directional "
+        "trade-off semantics, confidence calibration, and sparse-abstention policy.",
         "Inserted verbatim into the $rubric placeholder during each Schwartz "
         "extraction. It is not a separate request and is pinned with the extraction "
         "template for the whole batch.",
         (
             "Keep meanings synchronized with all ten extraction output keys.",
             "Do not broaden definitions until most values appear in every span.",
-            "Do not redefine null as a neutral or average score.",
+            "Do not turn strength into an absolute person-level importance score.",
+            "Do not redefine null as a neutral or average observation.",
         ),
     ),
 }

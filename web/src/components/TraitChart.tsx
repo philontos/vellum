@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TraitDim } from "../api/client";
 import { Card } from "./ui/Card";
 import { traitRows, leaning, sparkline, type TraitRow } from "./traits/model";
+import { SchwartzChart } from "./SchwartzChart";
 
 // Ember Noir series — sienna, gold, sage, slate, ochre, plum (legible on the dark ground).
 const COLORS = ["#D0663F", "#C6975A", "#9ABF82", "#8FB1C2", "#D9B36A", "#A98BC9"];
@@ -9,6 +10,11 @@ const SPARK_W = 64, SPARK_H = 18;
 const COLLAPSED = 6;   // sorted dimensions (e.g. Schwartz) fold past this many rows
 
 export function TraitChart({ dim }: { dim: TraitDim }) {
+  if (dim.dimension === "schwartz") return <SchwartzChart dim={dim} />;
+  return <BarTraitChart dim={dim} />;
+}
+
+function BarTraitChart({ dim }: { dim: TraitDim }) {
   const [expanded, setExpanded] = useState(false);
   const rows = traitRows(dim);
   const foldable = (dim.meta?.sort_by_score ?? false) && rows.length > COLLAPSED;

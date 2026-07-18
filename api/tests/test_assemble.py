@@ -77,6 +77,44 @@ def test_trait_summary_bipolar_uses_correct_pole(migrated_db):
     assert "J (72)" not in out
 
 
+def test_trait_summary_frames_schwartz_as_relative_priority(migrated_db):
+    model.set_trait("schwartz", {
+        "self_direction": {
+            "priority": 0.31, "confidence": 0.7, "stance": "support",
+            "status": "core_priority",
+        },
+        "security": {
+            "priority": -0.22, "confidence": 0.6, "stance": "yielding",
+            "status": "relative_yielding",
+        },
+        "tradition": {
+            "priority": None, "confidence": 0, "stance": "unobserved",
+            "status": "unobserved",
+        },
+    }, sample_count=5)
+
+    out = assemble._trait_summary()
+
+    assert "0=personal mean" in out
+    assert "Self-Direction: above own average (+0.31)" in out
+    assert "Security: below own average (-0.22; relative, not rejection)" in out
+    assert "Tradition" not in out
+
+
+def test_trait_summary_centers_legacy_schwartz_during_upgrade(migrated_db):
+    model.set_trait("schwartz", {
+        "achievement": {"score": 78, "confidence": 0.7},
+        "security": {"score": 76, "confidence": 0.7},
+        "conformity": {"score": 61, "confidence": 0.4},
+    }, sample_count=41)
+
+    out = assemble._trait_summary()
+
+    assert "relative priorities" in out
+    assert "Achievement: above own average" in out
+    assert "Conformity: below own average" in out
+
+
 @pytest.mark.asyncio
 async def test_personality_framing_directs_diagnostic_use(migrated_db, monkeypatch):
     async def fake_retrieve(q, **kw):

@@ -11,15 +11,19 @@
 **Conformity**: Compliance with social norms to avoid harming others. Signals: rule-following, politeness, self-restraint.
 **Security**: Need for stability, harmony, and safety. Signals: risk avoidance, desire for order, preference for certainty.
 
-# Score ranges (when there IS a signal)
+# Evidence strength (not a person-level score)
 
-| Score | Meaning |
-|-------|---------|
-| 0–20  | Value rarely expressed, possibly reversed |
-| 20–40 | Below average |
-| 40–60 | Moderate |
-| 60–80 | Clearly expressed, distinct behavioral signals present |
-| 80+   | Core value — dominates behavior and decision-making |
+| Basis | What counts |
+|-------|-------------|
+| `costly_choice` | The user paid a real cost or accepted risk to uphold the value |
+| `tradeoff` | The user explicitly chose this value over another |
+| `repeated_behavior` | The same priority appears in distinct situations in this span |
+| `self_statement` | The user directly says the value matters or does not matter |
+| `aspiration` | The user wants to embody it but has not shown a choice yet |
+| `emotion` | The value is salient now; update activation only, not durable priority |
+
+`strength` describes how decisively this episode expresses the direction. It is
+not an absolute importance score and is never centered at 0.5.
 
 # Confidence calibration
 
@@ -31,4 +35,4 @@
 | 0.2–0.4  | Tentative — consider whether `null` is more honest |
 | < 0.2    | Prefer `null` over a low-confidence score |
 
-**`null` means "no signal in this entry" — the canonical way to abstain.** Schwartz values are sparse — typical entries express 1–3 of the 10 values, so 7–9 should be `null`.
+**`null` means "no priority evidence in this span" — the canonical way to abstain.** Schwartz values are sparse — typical spans express 1–3 of the 10 values, so 7–9 should be `null`. Low relative priority is learned through repeated trade-offs or explicit rejection, never inferred from silence.

@@ -9,7 +9,8 @@ def test_migrations_create_all_tables(migrated_db):
     names = {r["name"] for r in rows}
     expected = {
         "messages", "summaries", "vector_refs", "cursors",
-        "dossier", "portrait_claims", "trait_current", "trait_history", "facts", "traces",
+        "dossier", "portrait_claims", "trait_current", "trait_history", "trait_evidence",
+        "facts", "traces",
         "schema_migrations",
     }
     assert expected <= names
