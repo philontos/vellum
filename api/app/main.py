@@ -20,6 +20,7 @@ from app.routes import history as history_routes
 from app.routes import inspect as inspect_routes
 from app.routes import model_candidates as model_candidate_routes
 from app.routes import prompts as prompt_routes
+from app.routes import trace_review as trace_review_routes
 
 
 @asynccontextmanager
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(diary_routes.router, dependencies=protected)
     app.include_router(fact_routes.router, dependencies=protected)
     app.include_router(inspect_routes.router, dependencies=protected)
+    app.include_router(trace_review_routes.router, dependencies=protected)
     app.include_router(model_candidate_routes.router)
     app.include_router(model_candidate_routes.route_router)
     app.include_router(prompt_routes.router)
