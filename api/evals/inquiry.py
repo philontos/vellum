@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from app import config
+from app.chat import context_plan
 from app.inquiry import controller
 
 
@@ -121,9 +122,18 @@ def _lock_valid(decision: dict, context: dict) -> bool:
 
 async def run_case(case: dict) -> dict:
     context = _context(case)
-    decision = (await controller.decide(context)).model_dump(mode="json")
+    decision_model = await controller.decide(context)
+    decision = decision_model.model_dump(mode="json")
     expected = case["expected_route"]
     route_ok = decision["route"] == expected
+    actual_context_mode = context_plan.effective_mode(
+        decision_model, context["current_user_turn"]["content"],
+    )
+    expected_context_mode = case.get("expected_context_mode")
+    context_mode_ok = (
+        None if expected_context_mode is None
+        else actual_context_mode == expected_context_mode
+    )
     allowed = case.get("allowed_operations")
     operation_ok = allowed is None or decision["operation"] in allowed
     target_ok = (
@@ -144,12 +154,16 @@ async def run_case(case: dict) -> dict:
     passed = all((
         route_ok, operation_ok, target_ok, one_question,
         evidence_valid, readiness_valid, lock_valid,
+        context_mode_ok is not False,
     ))
     return {
         "id": case.get("id"),
         "expected_route": expected,
         "actual_route": decision["route"],
         "actual_operation": decision["operation"],
+        "expected_context_mode": expected_context_mode,
+        "actual_context_mode": actual_context_mode,
+        "context_mode_ok": context_mode_ok,
         "route_ok": route_ok,
         "operation_ok": operation_ok,
         "target_ok": target_ok,

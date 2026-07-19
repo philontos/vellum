@@ -9,7 +9,9 @@ import json
 import uuid
 
 from app import config
-from app.chat import assemble, ingest, persona, respond, run_observer, turn_guidance
+from app.chat import (
+    assemble, context_plan, ingest, persona, respond, run_observer, turn_guidance,
+)
 from app.inquiry import context as inquiry_context
 from app.inquiry import controller, service, store as inquiry_store
 from app.inquiry.contracts import InquiryDecision
@@ -51,6 +53,8 @@ def _fallback_decision() -> InquiryDecision:
             "Respond cautiously. Avoid unsupported conclusions and, only if "
             "user-specific information is material, ask one brief question."
         ),
+        "context_mode": "recent",
+        "recall_query": None,
         "provisional": True,
     })
 
@@ -60,6 +64,8 @@ def _trace(
     snapshot: runtime.PromptSnapshot, applied: service.AppliedDecision,
     model: str | None, prompt: object, output: str, final: dict,
     controller_error: str | None,
+    context_meta: dict | None, pipeline_sequence: int,
+    normalized_fields: tuple[str, ...],
 ) -> None:
     inquiry = applied.inquiry
     traces.record(
@@ -75,6 +81,9 @@ def _trace(
             "controller_error": controller_error,
             "prompt_release_id": snapshot.release_id,
             "prompt_release_version": snapshot.release_version,
+            "pipeline_sequence": pipeline_sequence,
+            "context": context_meta or {},
+            "controller_normalized_fields": list(normalized_fields),
         },
         prompt=json.dumps(prompt, ensure_ascii=False),
         output=output,
@@ -170,6 +179,8 @@ async def _execute_turn(
             decision, stream=stream, user_turn=user_turn, run_id=None,
         )
 
+    observer.note_decision(applied.decision)
+
     if applied.user_reply is not None:
         final = {
             "type": "final",
@@ -183,12 +194,16 @@ async def _execute_turn(
             "run_id": run_id,
         }
         assistant = ingest.persist_assistant(applied.user_reply, stream=stream)
+        observer.persist_controller_spans(assistant["turn"])
         cfg = resolve_structured_llm_config(scenario="inquiry")
         _trace(
             assistant_turn=assistant["turn"], stream=stream, run_id=run_id,
             snapshot=snapshot, applied=applied, model=cfg.get("model"),
             prompt=effective_control_context, output=applied.user_reply, final=final,
             controller_error=controller_error,
+            context_meta=None,
+            pipeline_sequence=observer.chat_pipeline_sequence(),
+            normalized_fields=observer.controller_normalized_fields,
         )
         observer.complete(
             assistant_turn=assistant["turn"], applied=applied,
@@ -199,19 +214,41 @@ async def _execute_turn(
         yield final
         return
 
+    responder_mode = context_plan.effective_mode(applied.decision, text)
     messages = await assemble.build_messages(
-        query=text, persona_name=stream,
+        query=text,
+        persona_name=stream,
+        context_mode=responder_mode,
+        recall_query=applied.decision.recall_query,
+        extra_system_sections=[turn_guidance.render(
+            applied, controller_error=controller_error,
+        )],
+        exclude_recall_through_turn=user_turn - 1,
     )
-    messages = turn_guidance.attach(
-        messages, applied, controller_error=controller_error,
+    recall_tool_enabled = (
+        responder_mode == "personal"
+        and config.response_recall_tokens() > 0
     )
+    response_context_meta = dict(getattr(messages, "meta", {}))
+    response_context_meta["recall_tool_enabled"] = recall_tool_enabled
+    observer.note_response_context(response_context_meta)
     cfg = resolve_structured_llm_config(scenario="chat")
     final = {
         "type": "final", "content": "", "reasoning": None,
         "tool_calls": None, "prompt_tokens": None,
         "completion_tokens": None, "duration_ms": None,
     }
-    async for event in respond.stream(messages, stream=stream):
+    async for event in respond.stream(
+        messages,
+        stream=stream,
+        through_turn=user_turn - 1,
+        exclude_recall_turns=set(
+            response_context_meta.get("history_turns") or (),
+        ),
+        recall_summary_mode="digest",
+        recall_max_tokens=config.response_recall_tokens(),
+        recall_enabled=recall_tool_enabled,
+    ):
         if event["type"] == "final":
             final = {**event, "route": decision.route, "run_id": run_id}
         else:
@@ -233,11 +270,15 @@ async def _execute_turn(
                 f"{controller_error}; {close_error}"
                 if controller_error else close_error
             )
+    observer.persist_controller_spans(assistant["turn"])
     _trace(
         assistant_turn=assistant["turn"], stream=stream, run_id=run_id,
         snapshot=snapshot, applied=applied, model=cfg.get("model"),
         prompt=messages, output=final["content"], final=final,
         controller_error=controller_error,
+        context_meta=response_context_meta,
+        pipeline_sequence=observer.chat_pipeline_sequence(),
+        normalized_fields=observer.controller_normalized_fields,
     )
     observer.complete(
         assistant_turn=assistant["turn"], applied=applied,

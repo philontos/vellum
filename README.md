@@ -112,7 +112,7 @@ Copy `api/.env.example` to `api/.env` and fill it in.
 | `VELLUM_AUTH_ENABLED` | no | `1` enables private family login and per-account stores; default `0` keeps legacy mode. |
 | `EVAL_GEN_BASE_URL` / `EVAL_GEN_API_KEY` / `EVAL_GEN_MODEL` | no | External evaluator model — only needed to *run* evals. |
 
-Useful optional knobs (no `.env.example` entry, sane defaults):
+Useful optional knobs (all have sane defaults):
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -125,11 +125,22 @@ Useful optional knobs (no `.env.example` entry, sane defaults):
 | `VELLUM_AUTH_SESSION_DAYS` | `30` | Login session lifetime. Password changes and account disable revoke existing sessions. |
 | `VELLUM_TIMEZONE` | `Asia/Shanghai` | Local timezone attached to model-facing user turns for relative-time and conversation-gap reasoning. Stored messages remain UTC and unchanged. |
 | `VELLUM_RESPONSE_TAIL_SIZE` | `8` | Recent messages supplied to the final Chat responder. |
+| `VELLUM_RESPONSE_CONTEXT_TOKENS` | `8000` | Hard provider-neutral budget for the assembled responder input before optional tool results, including its system prompt, validated turn plan, current turn, history, and injected personal context. |
+| `VELLUM_RESPONSE_RECALL_TOKENS` | `1800` | Per-turn allocation for bounded semantic recall. `0` disables injected and tool-based long-term recall. |
+| `VELLUM_RESPONSE_FACT_TOKENS` | `1200` | Per-turn allocation for newest active durable facts. |
 | `VELLUM_INQUIRY_TAIL_SIZE` | `6` | Recent messages supplied to the Inquiry Controller, excluding the separately supplied current turn. |
 | `VELLUM_INQUIRY_CONTEXT_TOKENS` | `6000` | Hard provider-neutral budget for the Controller's Ledger, current turn, recent tail, and cited raw evidence. |
 | `VELLUM_INQUIRY_MAX_QUESTIONS` | `5` | Maximum focused questions in one Inquiry before provisional synthesis or pause. |
 | `VELLUM_INQUIRY_LEDGER_TOKENS` | `3500` | Hard serialized size limit for one durable Inquiry Ledger. |
 | `VELLUM_SYNC_REMOTE` / `VELLUM_DEVICE_ID` | _(unset)_ | git remote + device label for `python -m app.sync`. |
+
+The Inquiry Controller also selects a responder context plan per turn: `minimal`
+uses only the current message, `recent` adds the bounded live tail, and `personal`
+may add the dossier, newest facts, traits, and digest-based semantic recall. Code
+forces low-information greetings to `minimal`, keeps synthesis on `recent` because
+the validated Ledger is authoritative, and records the selected mode, estimated
+tokens, truncation, and dropped-item counts in Admin → Traces. The Inquiry eval
+suite reports `context_mode_accuracy` for cases with an expected responder mode.
 
 To set the fallback production model, configure its credentials in Admin
 (described below) or in the environment, set the selection, then restart the API

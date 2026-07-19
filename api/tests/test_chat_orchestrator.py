@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.chat import orchestrator
@@ -82,6 +84,9 @@ async def test_inquire_path_returns_validated_question_without_responder(
     assert run["responder_model"] is None
     spans = [row for row in traces.list_recent() if row["run_id"] == run["id"]]
     assert {span["stage"] for span in spans} == {"inquiry.decide", "chat"}
+    assert [
+        span["stage"] for span in sorted(spans, key=lambda item: item["id"])
+    ] == ["inquiry.decide", "chat"]
     assert next(span for span in spans if span["stage"] == "inquiry.decide")[
         "scenario"
     ] == "inquiry"
@@ -98,7 +103,9 @@ async def test_direct_path_injects_plan_and_streams_responder(
 
     async def messages(**kwargs):
         return [
-            {"role": "system", "content": "BASE"},
+            {"role": "system", "content": (
+                "BASE\n\n" + "\n\n".join(kwargs["extra_system_sections"])
+            )},
             {"role": "user", "content": "What is 2+2?"},
         ]
 
@@ -128,6 +135,75 @@ async def test_direct_path_injects_plan_and_streams_responder(
 
 
 @pytest.mark.asyncio
+async def test_low_information_direct_turn_forces_minimal_responder_context(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setattr(orchestrator.ingest, "embed", _no_embed)
+    decision = InquiryDecision.model_validate({
+        "route": "direct",
+        "operation": "none",
+        "patch": {},
+        "answer_brief": "Reply with a brief greeting.",
+        "context_mode": "personal",
+        "provisional": False,
+    })
+    decision.note_normalized_fields(["patch"])
+    monkeypatch.setattr(
+        orchestrator.controller, "decide", lambda ctx: _async(decision),
+    )
+    seen = {}
+    response_seen = {}
+
+    async def messages(**kwargs):
+        seen.update(kwargs)
+        return orchestrator.assemble.AssembledMessages(
+            [{"role": "system", "content": kwargs["extra_system_sections"][0]},
+             {"role": "user", "content": "hello"}],
+            meta={
+                "context_mode": kwargs["context_mode"],
+                "estimated_tokens": 200,
+                "max_input_tokens": 8000,
+                "dropped_history_messages": 4,
+                "history_turns": [0],
+            },
+        )
+
+    async def response_stream(payload, **kwargs):
+        response_seen.update(kwargs)
+        yield {"type": "delta", "text": "Hi."}
+        yield {
+            "type": "final", "content": "Hi.", "reasoning": None,
+            "tool_calls": None, "prompt_tokens": 100,
+            "completion_tokens": 2, "duration_ms": 5,
+        }
+
+    monkeypatch.setattr(orchestrator.assemble, "build_messages", messages)
+    monkeypatch.setattr(orchestrator.respond, "stream", response_stream)
+    monkeypatch.setattr(orchestrator, "schedule_background", lambda: None)
+
+    events = [event async for event in orchestrator.turn_events(
+        "hello", persona_name="neutral",
+    )]
+
+    assert events[-1]["content"] == "Hi."
+    assert seen["context_mode"] == "minimal"
+    assert seen["exclude_recall_through_turn"] == -1
+    assert response_seen["through_turn"] == -1
+    assert response_seen["exclude_recall_turns"] == {0}
+    assert response_seen["recall_summary_mode"] == "digest"
+    assert response_seen["recall_enabled"] is False
+    run = turn_runs.list_recent()[0]
+    assert run["context_meta"]["responder"]["context_mode"] == "minimal"
+    assert run["context_meta"]["controller_normalized_fields"] == ["patch"]
+    chat_span = next(
+        row for row in traces.list_recent() if row["run_id"] == run["id"]
+    )
+    params = json.loads(chat_span["params"])
+    assert params["context"]["context_mode"] == "minimal"
+    assert params["controller_normalized_fields"] == ["patch"]
+
+
+@pytest.mark.asyncio
 async def test_controller_failure_does_not_mutate_ledger_and_uses_cautious_responder(
     migrated_db, monkeypatch,
 ):
@@ -136,8 +212,13 @@ async def test_controller_failure_does_not_mutate_ledger_and_uses_cautious_respo
     async def fail(_context):
         raise RuntimeError("controller unavailable")
 
+    context_seen = {}
+
     async def messages(**kwargs):
-        return [{"role": "system", "content": "BASE"}]
+        context_seen.update(kwargs)
+        return [{"role": "system", "content": (
+            "BASE\n\n" + "\n\n".join(kwargs["extra_system_sections"])
+        )}]
 
     seen = {}
 
@@ -161,6 +242,8 @@ async def test_controller_failure_does_not_mutate_ledger_and_uses_cautious_respo
 
     assert events[-1]["type"] == "final"
     assert "avoid unsupported conclusions" in seen["system"]
+    assert context_seen["context_mode"] == "recent"
+    assert context_seen["recall_query"] is None
     assert store.get_current("neutral") is None
     run = turn_runs.list_recent()[0]
     assert run["status"] == "degraded"

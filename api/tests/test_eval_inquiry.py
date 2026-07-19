@@ -1,7 +1,7 @@
 import pytest
 
 from app.inquiry.contracts import InquiryDecision
-from evals import inquiry
+from evals import inquiry, suites
 
 
 def _decision(route: str) -> InquiryDecision:
@@ -40,6 +40,22 @@ def test_cases_cover_direct_inquire_and_synthesize_routes():
     expected = {case["expected_route"] for case in cases}
 
     assert expected == {"direct", "inquire", "synthesize"}
+
+
+def test_simple_direct_cases_require_minimal_responder_context():
+    cases = {case["id"]: case for case in inquiry.load_cases()}
+
+    assert cases["direct_factual"]["expected_context_mode"] == "minimal"
+    assert cases["direct_writing"]["expected_context_mode"] == "minimal"
+
+
+def test_inquiry_suite_reports_context_mode_accuracy():
+    aggregate = suites.SUITES["inquiry"].aggregate([
+        {"passed": True, "context_mode_ok": True},
+        {"passed": False, "context_mode_ok": False},
+    ])
+
+    assert aggregate["context_mode_accuracy"] == 0.5
 
 
 def test_eval_context_matches_production_question_policy_without_current_duplication():
@@ -104,6 +120,24 @@ async def test_inquiry_eval_flags_premature_answer(monkeypatch):
 
     assert result["passed"] is False
     assert result["premature_answer"] is True
+
+
+@pytest.mark.asyncio
+async def test_inquiry_eval_flags_unnecessarily_heavy_responder_context(monkeypatch):
+    case = {
+        "id": "simple-fact",
+        "messages": [{"turn": 10, "role": "user", "content": "法国首都？"}],
+        "expected_route": "direct",
+        "expected_context_mode": "minimal",
+    }
+    decision = _decision("direct")
+    monkeypatch.setattr(inquiry.controller, "decide", lambda ctx: _async(decision))
+
+    result = await inquiry.run_case(case)
+
+    assert result["actual_context_mode"] == "personal"
+    assert result["context_mode_ok"] is False
+    assert result["passed"] is False
 
 
 @pytest.mark.asyncio

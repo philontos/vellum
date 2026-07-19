@@ -31,13 +31,20 @@ def _context_meta(context: dict) -> dict:
     }
 
 
-def _call_params(call: dict) -> dict:
-    return {
+def _call_params(
+    call: dict, *, pipeline_sequence: int,
+    normalized_fields: tuple[str, ...] = (),
+) -> dict:
+    params = {
         "status": call.get("status"),
         "error": call.get("error"),
         "prompt_chars": call.get("prompt_chars"),
         "context": call.get("context") or {},
+        "pipeline_sequence": pipeline_sequence,
     }
+    if normalized_fields:
+        params["normalized_fields"] = list(normalized_fields)
+    return params
 
 
 @dataclass
@@ -48,6 +55,8 @@ class TurnRunObserver:
     revision_before: int | None
     configured_controller_model: str | None
     controller_calls: list[dict] = field(default_factory=list)
+    controller_normalized_fields: tuple[str, ...] = ()
+    response_context_meta: dict = field(default_factory=dict)
     controller_spans_persisted: bool = False
     finished: bool = False
 
@@ -80,6 +89,15 @@ class TurnRunObserver:
         with capture_llm_calls(self.controller_calls):
             yield
 
+    def note_decision(self, decision) -> None:
+        self.controller_normalized_fields = decision.normalized_fields
+
+    def note_response_context(self, meta: dict | None) -> None:
+        self.response_context_meta = dict(meta or {})
+
+    def chat_pipeline_sequence(self) -> int:
+        return len(self.controller_calls) + 1
+
     def _persist_controller_spans(self, turn: int) -> None:
         if self.controller_spans_persisted:
             return
@@ -92,7 +110,14 @@ class TurnRunObserver:
                 turn=turn,
                 stage=call.get("stage") or "inquiry.decide",
                 model=call.get("model"),
-                params=_call_params(call),
+                params=_call_params(
+                    call,
+                    pipeline_sequence=attempt,
+                    normalized_fields=(
+                        self.controller_normalized_fields
+                        if attempt == len(self.controller_calls) else ()
+                    ),
+                ),
                 prompt=prompt,
                 output=call.get("response") or "",
                 reasoning=call.get("reasoning"),
@@ -104,6 +129,9 @@ class TurnRunObserver:
                 attempt=attempt,
             )
         self.controller_spans_persisted = True
+
+    def persist_controller_spans(self, turn: int) -> None:
+        self._persist_controller_spans(turn)
 
     def complete(
         self, *, assistant_turn: int, applied, responder_model: str | None,
@@ -138,6 +166,12 @@ class TurnRunObserver:
             responder_model=responder_model,
             decision=applied.decision.model_dump(mode="json"),
             error=controller_error,
+            context_meta_update={
+                "responder": self.response_context_meta,
+                "controller_normalized_fields": list(
+                    self.controller_normalized_fields,
+                ),
+            },
         )
         self.finished = True
 

@@ -111,6 +111,13 @@ describe("TracesPanelView", () => {
           remaining_questions: 1, max_questions: 5,
           dropped_recent_messages: 2, dropped_cited_evidence: 1,
           current_user_turn_truncated: true,
+          controller_normalized_fields: ["patch"],
+          responder: {
+            context_mode: "recent", estimated_tokens: 640,
+            max_input_tokens: 8000, dropped_history_messages: 2,
+            dropped_recall_snippets: 1, truncated_recall_snippets: 0,
+            dropped_facts: 3, current_message_truncated: true,
+          },
         },
         prompt_release_id: null, prompt_release_version: null,
         error: "controller fallback", started_at: "2026-07-17 12:00:00",
@@ -125,6 +132,10 @@ describe("TracesPanelView", () => {
     expect(html).toContain("1/5 questions left");
     expect(html).toContain("3 context items dropped");
     expect(html).toContain("current turn truncated");
+    expect(html).toContain("Chat recent · 640/8000 tok");
+    expect(html).toContain("6 responder items dropped");
+    expect(html).toContain("responder current turn truncated");
+    expect(html).toContain("Controller normalized patch");
   });
 
   it("associates a controller-only failed round with its root run", () => {

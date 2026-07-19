@@ -2,6 +2,7 @@
 query with a well-formed search string."""
 from app.chat import retrieval
 from app.prompts import runtime
+from app.token_budget import clip_text
 
 
 _DESCRIPTION = (
@@ -29,18 +30,26 @@ _SCHEMA = {
 
 def register_into(
     reg, stream: str = "neutral", through_turn: int | None = None,
+    exclude_turns: set[int] | None = None, summary_mode: str = "raw",
+    max_tokens: int | None = None,
 ) -> None:
     async def _handler(args: dict) -> str:
-        if through_turn is None:
-            snips = await retrieval.retrieve(args.get("query", ""), stream=stream)
-        else:
-            snips = await retrieval.retrieve(
-                args.get("query", ""), stream=stream,
-                through_turn=through_turn,
-            )
+        snips = await retrieval.retrieve(
+            args.get("query", ""), stream=stream,
+            through_turn=through_turn,
+            exclude_turns=set(exclude_turns or ()),
+            summary_mode=summary_mode,
+        )
         if not snips:
             return "No relevant past conversations found."
-        return "\n---\n".join(s["text"] for s in snips)
+        result = "\n---\n".join(s["text"] for s in snips)
+        if max_tokens is None:
+            return result
+        clipped, _ = clip_text(
+            result, max_tokens,
+            omission_marker="\n[… omitted for recall budget …]\n",
+        )
+        return clipped or "No recall result fits the responder context budget."
 
     schema = {
         **_SCHEMA,

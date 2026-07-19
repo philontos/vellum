@@ -3,6 +3,7 @@ import pytest
 from app.chat import assemble
 from app.store import memory, model
 from app.store.db import get_conn
+from app.token_budget import estimate_tokens
 
 
 @pytest.mark.asyncio
@@ -139,6 +140,123 @@ async def test_retrieved_snippets_included(migrated_db, monkeypatch):
     memory.append_message("user", "q")
     system = (await assemble.build_messages())[0]["content"]
     assert "assistant: y" in system
+
+
+@pytest.mark.asyncio
+async def test_minimal_context_omits_profile_recall_and_older_history(
+    migrated_db, monkeypatch,
+):
+    async def recall_must_not_run(*args, **kwargs):
+        raise AssertionError("minimal context must not run semantic recall")
+
+    monkeypatch.setattr(assemble.retrieval, "retrieve", recall_must_not_run)
+    model.set_dossier("private profile detail")
+    model.add_fact("private durable fact")
+    memory.append_message("user", "older question")
+    memory.append_message("assistant", "older answer")
+    current = memory.append_message("user", "hello")
+
+    built = await assemble.build_context(
+        query="hello",
+        context_mode="minimal",
+        extra_system_sections=["## Validated turn plan\nRoute: direct"],
+    )
+
+    assert len(built.messages) == 2
+    assert built.messages[-1]["content"].endswith("\nhello")
+    assert "older answer" not in str(built.messages)
+    assert "private profile detail" not in built.messages[0]["content"]
+    assert "private durable fact" not in built.messages[0]["content"]
+    assert "Possibly relevant past" not in built.messages[0]["content"]
+    assert "Validated turn plan" in built.messages[0]["content"]
+    assert built.meta["context_mode"] == "minimal"
+    assert built.meta["history_turns"] == [current["turn"]]
+
+
+@pytest.mark.asyncio
+async def test_personal_context_excludes_tail_turns_from_recall(
+    migrated_db, monkeypatch,
+):
+    seen = {}
+
+    async def fake_retrieve(query, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    turns = [
+        memory.append_message("user", "older question")["turn"],
+        memory.append_message("assistant", "older answer")["turn"],
+        memory.append_message("user", "current personal question")["turn"],
+    ]
+
+    await assemble.build_context(
+        query="current personal question", context_mode="personal",
+    )
+
+    assert seen["exclude_turns"] == set(turns)
+    assert seen["summary_mode"] == "digest"
+
+
+@pytest.mark.asyncio
+async def test_response_context_has_a_hard_budget_and_reports_drops(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setenv("VELLUM_RESPONSE_CONTEXT_TOKENS", "2500")
+    monkeypatch.setenv("VELLUM_RESPONSE_RECALL_TOKENS", "400")
+    monkeypatch.setenv("VELLUM_RESPONSE_FACT_TOKENS", "300")
+
+    async def fake_retrieve(query, **kwargs):
+        return [{
+            "start": 0,
+            "end": 20,
+            "text": "very long recalled history " * 1000,
+        }]
+
+    monkeypatch.setattr(assemble.retrieval, "retrieve", fake_retrieve)
+    model.set_dossier("very long dossier " * 500)
+    for index in range(12):
+        model.add_fact(f"fact {index} " + "detail " * 100)
+    memory.append_message("user", "old " * 1000)
+    memory.append_message("assistant", "answer " * 1000)
+    memory.append_message("user", "current question")
+
+    built = await assemble.build_context(
+        query="current question",
+        context_mode="personal",
+        extra_system_sections=["## Validated turn plan\nRoute: direct"],
+    )
+
+    assert estimate_tokens(built.messages) <= 2500
+    assert built.messages[-1]["content"].endswith("\ncurrent question")
+    assert "Validated turn plan" in built.messages[0]["content"]
+    assert "Possibly relevant past" in built.messages[0]["content"]
+    assert built.meta["estimated_tokens"] <= built.meta["max_input_tokens"]
+    assert built.meta["dropped_history_messages"] > 0
+    assert (
+        built.meta["dropped_recall_snippets"] > 0
+        or built.meta["truncated_recall_snippets"] > 0
+    )
+
+
+@pytest.mark.asyncio
+async def test_response_budget_reports_when_the_current_turn_is_truncated(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setenv("VELLUM_RESPONSE_CONTEXT_TOKENS", "1500")
+    current = memory.append_message(
+        "user", "important beginning " + ("detail " * 4000) + "important ending",
+    )
+
+    built = await assemble.build_context(
+        context_mode="minimal",
+        extra_system_sections=["## Validated turn plan\nRoute: direct"],
+    )
+
+    assert estimate_tokens(built.messages) <= 1500
+    assert built.meta["history_turns"] == [current["turn"]]
+    assert built.meta["current_message_truncated"] is True
+    assert "omitted for responder budget" in built.messages[-1]["content"]
 
 
 @pytest.mark.asyncio

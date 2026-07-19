@@ -270,6 +270,10 @@ export const DICT = {
     "traces.questionBudget": "{remaining}/{max} questions left",
     "traces.contextDropped": "{n} context items dropped",
     "traces.currentTurnTruncated": "current turn truncated",
+    "traces.responderContext": "Chat {mode} · {used}/{max} tok",
+    "traces.responderDropped": "{n} responder items dropped",
+    "traces.responderCurrentTurnTruncated": "responder current turn truncated",
+    "traces.controllerNormalized": "Controller normalized {fields}",
 
     // evals panel
     "nav.evals": "Evals",
@@ -717,6 +721,10 @@ export const DICT = {
     "traces.questionBudget": "剩余问题 {remaining}/{max}",
     "traces.contextDropped": "丢弃 {n} 条 context",
     "traces.currentTurnTruncated": "当前输入已截断",
+    "traces.responderContext": "Chat {mode} · {used}/{max} tok",
+    "traces.responderDropped": "Responder 丢弃 {n} 条上下文",
+    "traces.responderCurrentTurnTruncated": "Responder 已截断当前输入",
+    "traces.controllerNormalized": "Controller 已归一化 {fields}",
 
     // evals panel
     "nav.evals": "评测",
