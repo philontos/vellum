@@ -313,6 +313,35 @@ uvicorn app.main:app --port 18080 --env-file .env --reload
   readiness, revision-lock, personality, recall, and consultant-quality checks,
   with aggregate metrics and each structured case result.
 
+### Agent trace-review API
+
+The read-only trace-review endpoints expose the same account-scoped diagnostics
+as structured, OpenAPI-described JSON. They are intended for a local engineering
+agent to discover a newly exercised path, load one complete Controller → Chat
+run, and compare a bounded window without scraping the admin UI:
+
+- `GET /inspect/trace-review/runs` lists recent roots with lightweight span
+  totals. It accepts `status`, `route`, `stream`, `user_turn`, `assistant_turn`,
+  `started_after`, `started_before`, and `limit` filters.
+- `GET /inspect/trace-review/runs/{run_id}` returns the root, full correlated
+  spans in call order, decoded `params` / `prompt` / `tool_calls`, and objective
+  signals such as degraded fallback, context truncation, LLM/tool errors,
+  retries, missing spans, or pruned bodies.
+- `GET /inspect/trace-review/stats` aggregates a recent filtered window by run
+  status/route and trace stage/model, including token totals and latency
+  average/p50/p95/max. It never loads prompt/output bodies.
+
+These routes use the normal Vellum login session and therefore retain per-account
+isolation. For command-line use, authenticate once with a cookie jar and reuse it:
+
+```bash
+curl -c vellum.cookies -H 'content-type: application/json' \
+  -d '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}' \
+  http://127.0.0.1:18090/auth/login
+curl -b vellum.cookies \
+  'http://127.0.0.1:18090/inspect/trace-review/runs?limit=10'
+```
+
 ### Rebuilding Schwartz from message history
 
 Schwartz V2 is rebuildable from the canonical live user messages in SQLite; it
