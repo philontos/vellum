@@ -13,6 +13,10 @@ SCHWARTZ_V2_PROMPT_KEYS = (
     "traits.schwartz.extract",
     "traits.schwartz.rubric",
 )
+INQUIRY_GROUNDING_V2_PROMPT_KEYS = (
+    "inquiry.controller",
+    "inquiry.repair",
+)
 
 
 class PendingPromptDraftsError(RuntimeError):
@@ -23,7 +27,7 @@ def _workspace_prompts(workspace: dict) -> dict[str, dict]:
     return {item["key"]: item for item in workspace["prompts"]}
 
 
-def schwartz_v2_status() -> dict:
+def _upgrade_status(keys: tuple[str, ...]) -> dict:
     workspace = service.get_workspace()
     prompts = _workspace_prompts(workspace)
     definitions = definition_map()
@@ -32,7 +36,7 @@ def schwartz_v2_status() -> dict:
         "workspace_revision": workspace["workspace_revision"],
         "matches_code_v2": all(
             prompts[key]["published_content"] == definitions[key].default_content
-            for key in SCHWARTZ_V2_PROMPT_KEYS
+            for key in keys
         ),
         "pending_keys": sorted(
             item["key"] for item in workspace["prompts"] if item["is_modified"]
@@ -40,15 +44,24 @@ def schwartz_v2_status() -> dict:
     }
 
 
-def publish_schwartz_v2(actor_user_id: str | None = None) -> dict:
-    """Publish code-owned V2 Schwartz prompts while preserving all other prompts."""
+def schwartz_v2_status() -> dict:
+    return _upgrade_status(SCHWARTZ_V2_PROMPT_KEYS)
+
+
+def inquiry_grounding_v2_status() -> dict:
+    return _upgrade_status(INQUIRY_GROUNDING_V2_PROMPT_KEYS)
+
+
+def _publish_code_defaults(
+    keys: tuple[str, ...], *, note: str, actor_user_id: str | None = None,
+) -> dict:
     workspace = service.get_workspace()
     prompts = _workspace_prompts(workspace)
     definitions = definition_map()
     unrelated = sorted(
         item["key"]
         for item in workspace["prompts"]
-        if item["is_modified"] and item["key"] not in SCHWARTZ_V2_PROMPT_KEYS
+        if item["is_modified"] and item["key"] not in keys
     )
     if unrelated:
         raise PendingPromptDraftsError(
@@ -57,11 +70,11 @@ def publish_schwartz_v2(actor_user_id: str | None = None) -> dict:
         )
     if all(
         prompts[key]["published_content"] == definitions[key].default_content
-        for key in SCHWARTZ_V2_PROMPT_KEYS
+        for key in keys
     ):
-        return {"changed": False, "status": schwartz_v2_status()}
+        return {"changed": False, "status": _upgrade_status(keys)}
 
-    for key in SCHWARTZ_V2_PROMPT_KEYS:
+    for key in keys:
         expected = definitions[key].default_content
         current = _workspace_prompts(workspace)[key]
         if current["draft_content"] == expected:
@@ -74,13 +87,31 @@ def publish_schwartz_v2(actor_user_id: str | None = None) -> dict:
         )
     service.publish(
         workspace["workspace_revision"],
-        "Upgrade Schwartz extraction to signed V2 evidence",
+        note,
         actor_user_id=actor_user_id,
     )
-    status = schwartz_v2_status()
+    status = _upgrade_status(keys)
     if not status["matches_code_v2"]:
-        raise RuntimeError("published Schwartz Prompt release does not match code V2")
+        raise RuntimeError("published Prompt release does not match code V2")
     return {"changed": True, "status": status}
+
+
+def publish_schwartz_v2(actor_user_id: str | None = None) -> dict:
+    """Publish code-owned V2 Schwartz prompts while preserving all other prompts."""
+    return _publish_code_defaults(
+        SCHWARTZ_V2_PROMPT_KEYS,
+        note="Upgrade Schwartz extraction to signed V2 evidence",
+        actor_user_id=actor_user_id,
+    )
+
+
+def publish_inquiry_grounding_v2(actor_user_id: str | None = None) -> dict:
+    """Publish the evidence-first Inquiry gate without changing other prompts."""
+    return _publish_code_defaults(
+        INQUIRY_GROUNDING_V2_PROMPT_KEYS,
+        note="Upgrade Inquiry grounding and consultation gate to V2",
+        actor_user_id=actor_user_id,
+    )
 
 
 def _actor(username: str | None) -> tuple[str | None, str]:
@@ -100,7 +131,9 @@ def _actor(username: str | None) -> tuple[str | None, str]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.prompts.maintenance")
-    parser.add_argument("upgrade", choices=["schwartz-v2"])
+    parser.add_argument(
+        "upgrade", choices=["schwartz-v2", "inquiry-grounding-v2"],
+    )
     parser.add_argument("--username")
     parser.add_argument(
         "--apply", action="store_true",
@@ -112,27 +145,34 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     actor_user_id, actor_label = _actor(args.username)
-    status = schwartz_v2_status()
+    if args.upgrade == "inquiry-grounding-v2":
+        status = inquiry_grounding_v2_status()
+        publish_upgrade = publish_inquiry_grounding_v2
+        upgrade_label = "Inquiry grounding prompts"
+    else:
+        status = schwartz_v2_status()
+        publish_upgrade = publish_schwartz_v2
+        upgrade_label = "Schwartz prompts"
     release = status["active_release"]
     release_label = (
         "none" if release is None else f"{release['id']} (version {release['version']})"
     )
     print(f"Actor: {actor_label}")
     print(f"Active Prompt release: {release_label}")
-    print(f"Schwartz prompts match code V2: {status['matches_code_v2']}")
+    print(f"{upgrade_label} match code V2: {status['matches_code_v2']}")
     print("Pending Prompt drafts: " + (", ".join(status["pending_keys"]) or "none"))
     if not args.apply:
-        print("DRY RUN: add --apply to publish the guarded Schwartz V2 upgrade.")
+        print("DRY RUN: add --apply to publish the guarded V2 upgrade.")
         return 0
     try:
-        result = publish_schwartz_v2(actor_user_id=actor_user_id)
+        result = publish_upgrade(actor_user_id=actor_user_id)
     except PendingPromptDraftsError as exc:
         raise SystemExit(str(exc)) from exc
     final = result["status"]["active_release"]
     if result["changed"]:
         print(f"Published Prompt release {final['id']} (version {final['version']}).")
     else:
-        print("No change: the active Schwartz prompts already match code V2.")
+        print(f"No change: the active {upgrade_label.lower()} already match code V2.")
     return 0
 
 

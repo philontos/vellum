@@ -62,3 +62,36 @@ def test_publish_schwartz_v2_refuses_to_publish_unrelated_drafts(migrated_db):
     after = service.get_workspace()
     assert after["workspace_revision"] == workspace["workspace_revision"]
     assert after["active_release"] == old["active_release"]
+
+
+def test_publish_inquiry_grounding_v2_updates_only_the_inquiry_prompts(
+    migrated_db,
+):
+    workspace = service.get_workspace()
+    for key in ("inquiry.controller", "inquiry.repair"):
+        current = _prompt(workspace, key)
+        legacy = "LEGACY INQUIRY MARKER\n" + current["draft_content"]
+        workspace = service.save_draft(
+            key, legacy, workspace["workspace_revision"],
+        )
+    old = service.publish(workspace["workspace_revision"], "legacy Inquiry")
+    before = {
+        item["key"]: item["published_content"]
+        for item in old["prompts"]
+        if item["key"] not in {"inquiry.controller", "inquiry.repair"}
+    }
+
+    result = maintenance.publish_inquiry_grounding_v2(actor_user_id="owner-id")
+
+    assert result["changed"] is True
+    assert result["status"]["matches_code_v2"] is True
+    upgraded = service.get_workspace()
+    for key in ("inquiry.controller", "inquiry.repair"):
+        assert _prompt(upgraded, key)["published_content"] == (
+            maintenance.definition_map()[key].default_content
+        )
+    assert {
+        item["key"]: item["published_content"]
+        for item in upgraded["prompts"]
+        if item["key"] not in {"inquiry.controller", "inquiry.repair"}
+    } == before
