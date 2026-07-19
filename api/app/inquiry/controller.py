@@ -28,6 +28,13 @@ question policy; when its remaining budget is zero, synthesize with explicit
 uncertainty or pause instead of asking again. Match the user's language in
 next_question and answer_brief.
 
+Choose the final responder's context deliberately. Use `context_mode=minimal`
+for greetings and self-contained factual, writing, translation, or operational
+requests; `recent` when the nearby exchange is sufficient; and `personal` only
+when durable user knowledge or semantic recall materially improves the answer.
+For personal mode, provide a focused `recall_query` when the current wording is
+too vague to retrieve well. Otherwise use null.
+
 When the goal has been answered and no blocking unknown remains, close the
 Inquiry as part of synthesis. When the user suspends or changes away from the
 topic, answer the new request directly and pause the active Inquiry in the same
@@ -48,6 +55,9 @@ Never cite assistant text. A closed inquiry is immutable; revisiting it opens a
 new linked inquiry. When resolving a blocking unknown, preserve what resolved it
 as a grounded observation, interpretation, or hypothesis evidence update in the
 same patch. Return only an object matching the supplied JSON schema.
+
+patch must always be a JSON object. Use `{}` when there is no Ledger update.
+Never return null for patch.
 """
 
 _REPAIR_PROMPT = """Repair an invalid InquiryDecision.
@@ -73,6 +83,17 @@ def _input(
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _validate(raw: object) -> InquiryDecision:
+    normalized_fields: list[str] = []
+    candidate = raw
+    if isinstance(raw, dict) and raw.get("patch") is None:
+        candidate = {**raw, "patch": {}}
+        normalized_fields.append("patch")
+    decision = InquiryDecision.model_validate(candidate)
+    decision.note_normalized_fields(normalized_fields)
+    return decision
+
+
 async def decide(context: dict) -> InquiryDecision:
     with runtime.ensure_snapshot():
         try:
@@ -84,7 +105,7 @@ async def decide(context: dict) -> InquiryDecision:
                 context={"stream": context.get("stream", "")},
             )
             try:
-                return InquiryDecision.model_validate(raw)
+                return _validate(raw)
             except ValidationError as error:
                 invalid: object | None = raw
                 first_error: Exception = error
@@ -102,7 +123,7 @@ async def decide(context: dict) -> InquiryDecision:
                 scenario="inquiry",
                 context={"stream": context.get("stream", "")},
             )
-            return InquiryDecision.model_validate(repaired)
+            return _validate(repaired)
         except (ValidationError, llm.StructuredResponseParseError) as final_error:
             raise InquiryControllerError(
                 "Inquiry Controller returned invalid decisions twice"

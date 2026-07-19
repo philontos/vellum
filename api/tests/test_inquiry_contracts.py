@@ -110,6 +110,22 @@ def test_contract_forbids_unknown_fields():
         InquiryDecision.model_validate({**_decision(), "secret_mode": "guess"})
 
 
+def test_direct_decision_carries_a_bounded_responder_context_plan():
+    decision = InquiryDecision.model_validate(_decision(
+        route="direct",
+        operation="none",
+        patch={},
+        next_question=None,
+        target_unknown_id=None,
+        answer_brief="Answer from the recent exchange only.",
+        context_mode="recent",
+        recall_query=None,
+    ))
+
+    assert decision.context_mode == "recent"
+    assert decision.recall_query is None
+
+
 @pytest.mark.parametrize("field", ["goal_update", "add_observations", "add_interpretations"])
 def test_grounded_ledger_claims_require_at_least_one_evidence_quote(field):
     payload = _decision()

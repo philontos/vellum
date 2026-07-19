@@ -37,19 +37,29 @@ def finish(
     inquiry_id: int | None, revision_before: int | None,
     revision_after: int | None, controller_model: str | None,
     responder_model: str | None, decision: dict, error: str | None,
+    context_meta_update: dict | None = None,
 ) -> dict:
     if status not in {"done", "degraded"}:
         raise ValueError(f"Invalid completed turn status {status!r}")
     with get_conn() as conn:
+        existing = conn.execute(
+            "SELECT context_meta_json FROM turn_runs WHERE id = ?", (run_id,),
+        ).fetchone()
+        if existing is None:
+            raise KeyError(run_id)
+        context_meta = json.loads(existing["context_meta_json"] or "{}")
+        context_meta.update(context_meta_update or {})
         cur = conn.execute(
             "UPDATE turn_runs SET assistant_turn = ?, route = ?, status = ?, "
             "inquiry_id = ?, revision_before = ?, revision_after = ?, "
             "controller_model = ?, responder_model = ?, decision_json = ?, "
-            "error = ?, finished_at = datetime('now') WHERE id = ?",
+            "context_meta_json = ?, error = ?, finished_at = datetime('now') "
+            "WHERE id = ?",
             (
                 assistant_turn, route, status, inquiry_id, revision_before,
                 revision_after, controller_model, responder_model,
-                json.dumps(decision, ensure_ascii=False), error, run_id,
+                json.dumps(decision, ensure_ascii=False),
+                json.dumps(context_meta, ensure_ascii=False), error, run_id,
             ),
         )
         if cur.rowcount != 1:

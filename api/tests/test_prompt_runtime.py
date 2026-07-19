@@ -128,7 +128,7 @@ async def test_chat_trace_keeps_the_release_that_started_the_turn(migrated_db, m
     async def fake_retrieve(query, **kwargs):
         return []
 
-    async def publish_while_streaming(messages, stream="neutral"):
+    async def publish_while_streaming(messages, stream="neutral", **kwargs):
         service.publish(pending["workspace_revision"], "publish during chat")
         yield {
             "type": "final",

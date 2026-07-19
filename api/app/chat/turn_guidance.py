@@ -10,14 +10,9 @@ route and evidence boundaries without mentioning the controller or ledger.
 """
 
 
-def attach(
-    messages: list[dict], applied: AppliedDecision,
-    *, controller_error: str | None = None,
-) -> list[dict]:
-    copied = [dict(message) for message in messages]
-    if not copied or copied[0].get("role") != "system":
-        raise ValueError("Responder messages must start with a system message")
-
+def render(
+    applied: AppliedDecision, *, controller_error: str | None = None,
+) -> str:
     decision = applied.decision
     lines = [
         _HEADER.strip(),
@@ -38,7 +33,18 @@ def attach(
             "The controller was unavailable. Preserve availability but avoid "
             "unsupported conclusions; ask at most one brief question if needed."
         )
+    return "\n".join(lines)
+
+
+def attach(
+    messages: list[dict], applied: AppliedDecision,
+    *, controller_error: str | None = None,
+) -> list[dict]:
+    copied = [dict(message) for message in messages]
+    if not copied or copied[0].get("role") != "system":
+        raise ValueError("Responder messages must start with a system message")
     copied[0]["content"] = (
-        copied[0].get("content", "") + "\n\n" + "\n".join(lines)
+        copied[0].get("content", "") + "\n\n"
+        + render(applied, controller_error=controller_error)
     )
     return copied

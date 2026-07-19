@@ -82,6 +82,9 @@ def _inquiry_agg(rs):
         "passed": sum(1 for result in rs if result.get("passed")),
         "total": total,
         "routing_accuracy": rate("route_ok"),
+        "context_mode_accuracy": _mean([
+            result.get("context_mode_ok") for result in rs
+        ]),
         "evidence_valid_rate": rate("evidence_valid"),
         "one_question_rate": rate("one_question"),
         "readiness_valid_rate": rate("readiness_valid"),

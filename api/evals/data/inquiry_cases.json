@@ -5,6 +5,7 @@
       {"turn": 10, "role": "user", "content": "法国的首都是什么？"}
     ],
     "expected_route": "direct",
+    "expected_context_mode": "minimal",
     "allowed_operations": ["none"]
   },
   {
@@ -13,6 +14,7 @@
       {"turn": 10, "role": "user", "content": "把这句话改得更礼貌：明天把报告给我。"}
     ],
     "expected_route": "direct",
+    "expected_context_mode": "minimal",
     "allowed_operations": ["none"]
   },
   {

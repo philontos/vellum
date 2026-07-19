@@ -79,6 +79,28 @@ function RunContextMeta({ run }: { run: TurnRun }) {
   const dropped = (number("dropped_recent_messages") ?? 0)
     + (number("dropped_cited_evidence") ?? 0)
     + (number("dropped_paused_inquiries") ?? 0);
+  const responder = (
+    run.context_meta.responder
+    && typeof run.context_meta.responder === "object"
+    && !Array.isArray(run.context_meta.responder)
+  ) ? run.context_meta.responder as Record<string, unknown> : null;
+  const responderNumber = (key: string) => {
+    const value = responder?.[key];
+    return typeof value === "number" ? value : null;
+  };
+  const responderMode = typeof responder?.context_mode === "string"
+    ? responder.context_mode
+    : null;
+  const responderEstimated = responderNumber("estimated_tokens");
+  const responderMax = responderNumber("max_input_tokens");
+  const responderDropped = (responderNumber("dropped_history_messages") ?? 0)
+    + (responderNumber("dropped_recall_snippets") ?? 0)
+    + (responderNumber("dropped_facts") ?? 0);
+  const normalizedFields = Array.isArray(
+    run.context_meta.controller_normalized_fields,
+  ) ? run.context_meta.controller_normalized_fields.filter(
+      (value): value is string => typeof value === "string",
+    ) : [];
 
   return (
     <>
@@ -93,6 +115,22 @@ function RunContextMeta({ run }: { run: TurnRun }) {
       {dropped > 0 && <Tag>{t("traces.contextDropped", { n: dropped })}</Tag>}
       {run.context_meta.current_user_turn_truncated === true && (
         <Tag>{t("traces.currentTurnTruncated")}</Tag>
+      )}
+      {responderMode && responderEstimated !== null && responderMax !== null && (
+        <Tag>{t("traces.responderContext", {
+          mode: responderMode, used: responderEstimated, max: responderMax,
+        })}</Tag>
+      )}
+      {responderDropped > 0 && (
+        <Tag>{t("traces.responderDropped", { n: responderDropped })}</Tag>
+      )}
+      {responder?.current_message_truncated === true && (
+        <Tag>{t("traces.responderCurrentTurnTruncated")}</Tag>
+      )}
+      {normalizedFields.length > 0 && (
+        <Tag>{t("traces.controllerNormalized", {
+          fields: normalizedFields.join(", "),
+        })}</Tag>
       )}
     </>
   );

@@ -13,11 +13,19 @@ from app.prompts import runtime
 
 def _build_registry(
     stream: str, through_turn: int | None = None,
+    exclude_recall_turns: set[int] | None = None,
+    recall_summary_mode: str = "raw",
+    recall_max_tokens: int | None = None,
+    recall_enabled: bool = True,
 ) -> registry.ToolRegistry:
     reg = registry.ToolRegistry()
-    recall.register_into(
-        reg, stream, through_turn=through_turn,
-    )   # recall is scoped to the active mode's stream and replay cutoff
+    if recall_enabled:
+        recall.register_into(
+            reg, stream, through_turn=through_turn,
+            exclude_turns=exclude_recall_turns,
+            summary_mode=recall_summary_mode,
+            max_tokens=recall_max_tokens,
+        )   # scoped to the active stream, replay cutoff, and responder plan
     # web_search is a standing capability — always offered to the model. Whether a
     # provider/key is actually wired up only affects execution (it fails gracefully
     # when not) and the prompt/hop tuning below, never whether the tool exists.
@@ -37,12 +45,20 @@ def _max_hops() -> int:
 async def stream(
     messages: list[dict], stream: str = "neutral",
     through_turn: int | None = None,
+    exclude_recall_turns: set[int] | None = None,
+    recall_summary_mode: str = "raw",
+    recall_max_tokens: int | None = None,
+    recall_enabled: bool = True,
 ):
     # Tool descriptions and every hop of one answer must see the same release,
     # including direct callers outside the HTTP/Feishu turn wrappers.
     with runtime.ensure_snapshot():
         async for event in _stream(
             messages, stream=stream, through_turn=through_turn,
+            exclude_recall_turns=exclude_recall_turns,
+            recall_summary_mode=recall_summary_mode,
+            recall_max_tokens=recall_max_tokens,
+            recall_enabled=recall_enabled,
         ):
             yield event
 
@@ -50,11 +66,14 @@ async def stream(
 async def _stream(
     messages: list[dict], stream: str = "neutral",
     through_turn: int | None = None,
+    exclude_recall_turns: set[int] | None = None,
+    recall_summary_mode: str = "raw",
+    recall_max_tokens: int | None = None,
+    recall_enabled: bool = True,
 ):
-    reg = (
-        _build_registry(stream)
-        if through_turn is None
-        else _build_registry(stream, through_turn=through_turn)
+    reg = _build_registry(
+        stream, through_turn, exclude_recall_turns, recall_summary_mode,
+        recall_max_tokens, recall_enabled,
     )
     tools = reg.schemas()
     convo = list(messages)

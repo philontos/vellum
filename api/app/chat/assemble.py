@@ -2,13 +2,17 @@
 the figure; the personal model + retrieved memory are BACKGROUND REFERENCE,
 framed so the model leads with the answer and only leans on them when relevant
 (spec §3 altitude)."""
+from dataclasses import dataclass
+
 from app import config
 from app.chat import persona, retrieval, temporal
+from app.chat.context_budget import ContextBuilder
 from app.config.dimensions_loader import dimension_meta
 from app.model_loop import schwartz
 from app.prompts import runtime
 from app.store import memory, model
 from app.store.db import get_conn
+from app.token_budget import estimate_tokens
 
 # Default altitude framing for the thinking-partner mode. A persona can replace it
 # wholesale by shipping its own stance.txt (e.g. the counseling mode), in which case
@@ -153,32 +157,76 @@ def _trait_summary() -> str:
     return "\n".join(lines)
 
 
-async def build_messages(query: str | None = None,
-                         persona_name: str | None = None,
-                         through_turn: int | None = None) -> list[dict]:
+class AssembledMessages(list):
+    """A list-compatible payload that keeps its bounded-context diagnostics."""
+
+    def __init__(self, messages: list[dict], *, meta: dict):
+        super().__init__(messages)
+        self.meta = meta
+
+
+@dataclass(frozen=True)
+class BuiltContext:
+    messages: AssembledMessages
+    meta: dict
+
+
+async def build_messages(
+    query: str | None = None, persona_name: str | None = None,
+    through_turn: int | None = None, context_mode: str = "personal",
+    recall_query: str | None = None,
+    extra_system_sections: list[str] | None = None,
+    exclude_recall_through_turn: int | None = None,
+) -> list[dict]:
     """Assemble system + recent tail. `query` for retrieval defaults to the last
     user message in the tail. `persona_name` selects the prompt-side mode (voice +
     stance); None falls back to VELLUM_PERSONA."""
+    built = await build_context(
+        query=query, persona_name=persona_name, through_turn=through_turn,
+        context_mode=context_mode, recall_query=recall_query,
+        extra_system_sections=extra_system_sections,
+        exclude_recall_through_turn=exclude_recall_through_turn,
+    )
+    return built.messages
+
+
+async def build_context(
+    query: str | None = None, persona_name: str | None = None,
+    through_turn: int | None = None, context_mode: str = "personal",
+    recall_query: str | None = None,
+    extra_system_sections: list[str] | None = None,
+    exclude_recall_through_turn: int | None = None,
+) -> BuiltContext:
     with runtime.ensure_snapshot():
-        return await _build_messages(
+        return await _build_context(
             query=query, persona_name=persona_name, through_turn=through_turn,
+            context_mode=context_mode, recall_query=recall_query,
+            extra_system_sections=extra_system_sections,
+            exclude_recall_through_turn=exclude_recall_through_turn,
         )
 
 
-async def _build_messages(query: str | None = None,
-                          persona_name: str | None = None,
-                          through_turn: int | None = None) -> list[dict]:
+async def _build_context(
+    query: str | None = None, persona_name: str | None = None,
+    through_turn: int | None = None, context_mode: str = "personal",
+    recall_query: str | None = None,
+    extra_system_sections: list[str] | None = None,
+    exclude_recall_through_turn: int | None = None,
+) -> BuiltContext:
     # The mode's name is also its context stream: the live tail + recall are scoped
     # to it, so switching modes never drags another mode's transcript in. The user
     # model below (dossier/facts/traits) stays global, co-built from every stream.
+    if context_mode not in {"minimal", "recent", "personal"}:
+        raise ValueError(f"Unknown responder context mode {context_mode!r}")
     p = persona.load(persona_name)
     stream = p.name
+    tail_limit = 1 if context_mode == "minimal" else config.response_tail_size()
     tail = (
         memory.recent_tail_through(
-            config.response_tail_size(), through_turn, stream=stream,
+            tail_limit, through_turn, stream=stream,
         )
         if through_turn is not None
-        else memory.recent_tail(config.response_tail_size(), stream=stream)
+        else memory.recent_tail(tail_limit, stream=stream)
     )
     if query is None:
         last_user = next((m for m in reversed(tail) if m["role"] == "user"), None)
@@ -186,38 +234,101 @@ async def _build_messages(query: str | None = None,
 
     altitude = runtime.resolve("chat.altitude", _ALTITUDE)
     response_protocol = runtime.resolve("chat.response_protocol", _RESPONSE_PROTOCOL)
-    sections = [p.voice, p.stance or altitude, response_protocol,
-                temporal.system_context()]
+    base_sections = [
+        p.voice, p.stance or altitude, response_protocol,
+        temporal.system_context(),
+    ]
     if config.web_search_configured():
-        sections.append(runtime.resolve(
+        base_sections.append(runtime.resolve(
             "chat.research_discipline", _RESEARCH_DISCIPLINE,
         ))
 
-    dossier = model.get_dossier().strip()
-    if dossier:
-        sections.append("## What you know about the user\n" + dossier)
+    annotated_tail = temporal.annotate_messages(tail)
+    max_tokens = config.response_context_tokens()
+    builder = ContextBuilder(
+        base_sections=base_sections,
+        extra_sections=list(extra_system_sections or []),
+        current_message=(annotated_tail[-1] if annotated_tail else None),
+        max_tokens=max_tokens,
+    )
+    kept_history = len(builder.history)
+    if context_mode != "minimal":
+        kept_history = builder.add_history_suffix(annotated_tail)
 
-    facts = model.active_facts()
-    if facts:
-        sections.append("## Durable facts\n" + "\n".join(f"- {f['text']}" for f in facts))
-
-    traits = _trait_summary()
-    if traits:
-        trait_frame = runtime.resolve("chat.trait_frame", _TRAIT_FRAME)
-        sections.append("## How the user tends to be\n" +
-                        (p.trait_frame or trait_frame) + "\n\n" + traits)
-
-    if query:
-        if through_turn is None:
-            snips = await retrieval.retrieve(query, stream=stream)
-        else:
-            snips = await retrieval.retrieve(
-                query, stream=stream, through_turn=through_turn,
+    dossier_included = dossier_truncated = False
+    facts: list[dict] = []
+    kept_facts = truncated_facts = 0
+    traits_included = traits_truncated = False
+    snips: list[dict] = []
+    kept_snips = truncated_snips = 0
+    recall_attempted = False
+    if context_mode == "personal":
+        dossier = model.get_dossier().strip()
+        if dossier:
+            dossier_included, dossier_truncated = builder.add_text_section(
+                "## What you know about the user", dossier,
+                min(1400, max_tokens // 4),
             )
-        if snips:
-            sections.append("## Possibly relevant past\n" +
-                            "\n---\n".join(s["text"] for s in snips))
 
-    system = {"role": "system", "content": "\n\n".join(sections)}
-    history = temporal.annotate_messages(tail)
-    return [system, *history]
+        facts = model.active_facts()
+        if facts:
+            kept_facts, truncated_facts = builder.add_item_section(
+                "## Durable facts",
+                [f"- {fact['text']}" for fact in reversed(facts)],
+                config.response_fact_tokens(),
+            )
+
+        traits = _trait_summary()
+        if traits:
+            trait_frame = runtime.resolve("chat.trait_frame", _TRAIT_FRAME)
+            traits_included, traits_truncated = builder.add_text_section(
+                "## How the user tends to be",
+                (p.trait_frame or trait_frame) + "\n\n" + traits,
+                min(1200, max_tokens // 5),
+            )
+
+        focused_query = (recall_query or query or "").strip()
+        if focused_query and config.response_recall_tokens() > 0:
+            recall_attempted = True
+            snips = await retrieval.retrieve(
+                focused_query,
+                stream=stream,
+                through_turn=(
+                    exclude_recall_through_turn
+                    if exclude_recall_through_turn is not None
+                    else through_turn
+                ),
+                exclude_turns={message["turn"] for message in tail},
+                summary_mode="digest",
+            )
+            kept_snips, truncated_snips = builder.add_item_section(
+                "## Possibly relevant past",
+                [snippet["text"] for snippet in snips],
+                config.response_recall_tokens(),
+                separator="\n---\n",
+            )
+
+    messages = builder.build()
+    history_turns = [
+        message["turn"] for message in tail[-kept_history:]
+    ] if kept_history else []
+    meta = {
+        "context_mode": context_mode,
+        "estimated_tokens": estimate_tokens(messages),
+        "max_input_tokens": max_tokens,
+        "history_turns": history_turns,
+        "current_message_truncated": builder.current_message_truncated,
+        "dropped_history_messages": max(0, len(tail) - kept_history),
+        "dossier_included": dossier_included,
+        "dossier_truncated": dossier_truncated,
+        "dropped_facts": max(0, len(facts) - kept_facts),
+        "truncated_facts": truncated_facts,
+        "traits_included": traits_included,
+        "traits_truncated": traits_truncated,
+        "dropped_recall_snippets": max(0, len(snips) - kept_snips),
+        "truncated_recall_snippets": truncated_snips,
+        "recall_attempted": recall_attempted,
+        "recall_skipped": not recall_attempted,
+    }
+    wrapped = AssembledMessages(messages, meta=meta)
+    return BuiltContext(messages=wrapped, meta=meta)

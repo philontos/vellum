@@ -1,7 +1,7 @@
 """Strict structured contract returned by the Inquiry Controller."""
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 
 class _StrictModel(BaseModel):
@@ -59,6 +59,8 @@ class LedgerPatch(_StrictModel):
 
 
 class InquiryDecision(_StrictModel):
+    _normalized_fields: tuple[str, ...] = PrivateAttr(default=())
+
     route: Literal["direct", "inquire", "synthesize"]
     operation: Literal["none", "open", "update", "resume", "pause", "close"]
     expected_inquiry_id: int | None = Field(default=None, ge=1)
@@ -69,7 +71,16 @@ class InquiryDecision(_StrictModel):
         default=None, pattern=r"^u[0-9A-Za-z_-]{1,31}$",
     )
     answer_brief: str | None = Field(default=None, max_length=4_000)
+    context_mode: Literal["minimal", "recent", "personal"] = "personal"
+    recall_query: str | None = Field(default=None, max_length=600)
     provisional: bool = False
+
+    @property
+    def normalized_fields(self) -> tuple[str, ...]:
+        return self._normalized_fields
+
+    def note_normalized_fields(self, fields: list[str]) -> None:
+        self._normalized_fields = tuple(fields)
 
     @model_validator(mode="after")
     def _consistent_control(self):

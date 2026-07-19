@@ -29,8 +29,14 @@ def test_inquiry_and_response_limits_cannot_become_unbounded_from_negative_value
     monkeypatch.setenv("VELLUM_INQUIRY_TAIL_SIZE", "-1")
     monkeypatch.setenv("VELLUM_INQUIRY_EVIDENCE_LIMIT", "-1")
     monkeypatch.setenv("VELLUM_INQUIRY_CONTEXT_TOKENS", "-1")
+    monkeypatch.setenv("VELLUM_RESPONSE_CONTEXT_TOKENS", "-1")
+    monkeypatch.setenv("VELLUM_RESPONSE_RECALL_TOKENS", "-1")
+    monkeypatch.setenv("VELLUM_RESPONSE_FACT_TOKENS", "-1")
 
     assert config.response_tail_size() == 1
     assert config.inquiry_tail_size() == 0
     assert config.inquiry_evidence_limit() == 0
     assert config.inquiry_context_tokens() == 256
+    assert config.response_context_tokens() == 512
+    assert config.response_recall_tokens() == 0
+    assert config.response_fact_tokens() == 0

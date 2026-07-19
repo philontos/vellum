@@ -251,3 +251,63 @@ async def test_retrieved_user_turns_include_time_metadata(migrated_db, monkeypat
 
     assert '<message_time datetime="2026-07-14T09:15:00+08:00"' in snippets[0]["text"]
     assert "user: <message_time" in snippets[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_recall_excludes_the_current_anchor_and_tail_neighbours(
+    migrated_db, monkeypatch,
+):
+    async def fake_embed(text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
+    old = memory.append_message("user", "older relevant event")
+    recent = memory.append_message("assistant", "already present recent answer")
+    current = memory.append_message("user", "hello")
+    for message in (old, current):
+        VectorStore().add(
+            memory.add_vector_ref("message", message["id"]),
+            [1.0, 0.0, 0.0],
+        )
+
+    out = await retrieval.retrieve_explained(
+        "hello",
+        k=5,
+        min_sim=0.0,
+        w=2,
+        exclude_turns={recent["turn"], current["turn"]},
+    )
+
+    current_hit = next(
+        hit for hit in out["hits"] if hit["anchor_turn"] == current["turn"]
+    )
+    assert current_hit["kept"] is False
+    text = "\n".join(snippet["text"] for snippet in out["snippets"])
+    assert "older relevant event" in text
+    assert "already present recent answer" not in text
+    assert "hello" not in text
+
+
+@pytest.mark.asyncio
+async def test_digest_mode_uses_summary_text_without_expanding_raw_span(
+    migrated_db, monkeypatch,
+):
+    async def fake_embed(text):
+        return [1.0, 0.0, 0.0]
+
+    monkeypatch.setattr(retrieval, "embed", fake_embed)
+    memory.append_message("user", "raw private turn one")
+    memory.append_message("assistant", "raw private turn two")
+    summary_id = memory.add_summary(0, 1, "bounded summary of the decision")
+    VectorStore().add(
+        memory.add_vector_ref("summary", summary_id), [1.0, 0.0, 0.0],
+    )
+
+    snippets = await retrieval.retrieve(
+        "decision", k=5, min_sim=0.0, summary_mode="digest",
+    )
+
+    text = "\n".join(snippet["text"] for snippet in snippets)
+    assert "bounded summary of the decision" in text
+    assert "raw private turn one" not in text
+    assert "raw private turn two" not in text

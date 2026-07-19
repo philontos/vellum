@@ -56,11 +56,20 @@ def test_turn_run_tracks_the_pipeline_root_and_correlated_spans(migrated_db):
         inquiry_id=2, revision_before=None, revision_after=1,
         controller_model="glm", responder_model=None,
         decision={"route": "inquire"}, error=None,
+        context_meta_update={
+            "responder": {
+                "context_mode": "minimal",
+                "estimated_tokens": 240,
+                "max_input_tokens": 8000,
+            },
+        },
     )
 
     item = turn_runs.get("run-1")
     assert item["route"] == "inquire"
     assert item["context_meta"]["dropped_recent_messages"] == 2
+    assert item["context_meta"]["responder"]["context_mode"] == "minimal"
+    assert item["context_meta"]["responder"]["estimated_tokens"] == 240
     assert item["decision"] == {"route": "inquire"}
     assert "decision_json" not in item
     assert item["inquiry_id"] == 2

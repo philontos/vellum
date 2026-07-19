@@ -71,6 +71,50 @@ async def test_controller_repairs_invalid_json_once(migrated_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_controller_normalizes_null_patch_without_an_llm_repair(
+    migrated_db, monkeypatch,
+):
+    calls = []
+
+    async def fake_chat_json(**kwargs):
+        calls.append(kwargs)
+        return {
+            "route": "direct",
+            "operation": "none",
+            "expected_inquiry_id": None,
+            "expected_revision": None,
+            "patch": None,
+            "next_question": None,
+            "target_unknown_id": None,
+            "answer_brief": "Reply with a brief greeting.",
+            "context_mode": "minimal",
+            "recall_query": None,
+            "provisional": False,
+        }
+
+    monkeypatch.setattr(controller.llm, "chat_json", fake_chat_json)
+
+    decision = await controller.decide({
+        "current_user_turn": {"turn": 2, "content": "hello"},
+        "recent_messages": [],
+        "inquiry": None,
+    })
+
+    assert decision.patch.model_dump() == {
+        "goal_update": None,
+        "add_observations": [],
+        "add_interpretations": [],
+        "add_hypotheses": [],
+        "add_blocking_unknowns": [],
+        "resolve_unknown_ids": [],
+        "provisional_conclusion": None,
+    }
+    assert decision.normalized_fields == ("patch",)
+    assert [call["stage"] for call in calls] == ["inquiry.decide"]
+    assert "patch must always be a JSON object" in calls[0]["system_prompt"]
+
+
+@pytest.mark.asyncio
 async def test_controller_repairs_an_unparseable_first_response_once(
     migrated_db, monkeypatch,
 ):

@@ -89,6 +89,18 @@ def response_tail_size() -> int:
     return max(1, _int("VELLUM_RESPONSE_TAIL_SIZE", 8))
 
 
+def response_context_tokens() -> int:
+    return max(512, _int("VELLUM_RESPONSE_CONTEXT_TOKENS", 8000))
+
+
+def response_recall_tokens() -> int:
+    return max(0, _int("VELLUM_RESPONSE_RECALL_TOKENS", 1800))
+
+
+def response_fact_tokens() -> int:
+    return max(0, _int("VELLUM_RESPONSE_FACT_TOKENS", 1200))
+
+
 def inquiry_tail_size() -> int: return max(0, _int("VELLUM_INQUIRY_TAIL_SIZE", 6))
 def inquiry_evidence_limit() -> int:
     return max(0, _int("VELLUM_INQUIRY_EVIDENCE_LIMIT", 12))
