@@ -106,10 +106,12 @@ describe("TracesPanelView", () => {
         stream: "neutral", route: "synthesize", status: "degraded",
         inquiry_id: 4, revision_before: 2, revision_after: 3,
         controller_model: "controller", responder_model: "responder",
-        decision: { route: "synthesize" }, context_meta: {
+        decision: { route: "synthesize", synthesis_basis: "ready" }, context_meta: {
           estimated_tokens: 900, max_input_tokens: 1000,
           remaining_questions: 1, max_questions: 5,
           dropped_recent_messages: 2, dropped_cited_evidence: 1,
+          dropped_assistant_messages: 1, dropped_recent_episodes: 1,
+          dropped_state_snapshots: 1,
           current_user_turn_truncated: true,
           controller_normalized_fields: ["patch"],
           responder: {
@@ -128,9 +130,10 @@ describe("TracesPanelView", () => {
     expect(html).toContain("synthesize");
     expect(html).toContain("degraded");
     expect(html).toContain("rev 2→3");
+    expect(html).toContain("ready");
     expect(html).toContain("ctx 900/1000 tok");
     expect(html).toContain("1/5 questions left");
-    expect(html).toContain("3 context items dropped");
+    expect(html).toContain("6 context items dropped");
     expect(html).toContain("current turn truncated");
     expect(html).toContain("Chat recent · 640/8000 tok");
     expect(html).toContain("6 responder items dropped");
@@ -169,17 +172,30 @@ describe("TracesPanelView", () => {
         closed_turn: null, parent_inquiry_id: null,
         created_at: "2026-07-17 12:00:00", updated_at: "2026-07-17 12:01:00",
         ledger: {
+          frame: {
+            mode: "personal", answer_scope: "consequential_decision",
+            state_delta_required: true, related_episode_id: 2,
+          },
           goal: {
             text: "判断是否应该辞职",
             evidence: [{ turn: 40, quote: "我是不是应该辞职" }],
           },
           observations: [{
-            id: "o1", text: "上周收到负面反馈",
+            id: "o1", kind: "feedback", text: "上周收到负面反馈",
             evidence: [{ turn: 40, quote: "他在会上说我的方案不达标" }],
           }],
           interpretations: [{
             id: "i1", text: "领导可能在针对我",
             evidence: [{ turn: 40, quote: "我觉得他就是针对我" }],
+          }],
+          current_state: [{
+            dimension: "emotion", text: "对公司感到失望",
+            evidence: [{ turn: 42, quote: "我对公司很失望" }],
+          }],
+          state_deltas: [{
+            dimension: "belief", text: "对公司的信心比上次更低",
+            reference: "previous_episode",
+            evidence: [{ turn: 42, quote: "比上次更没信心" }],
           }],
           hypotheses: [{
             id: "h1", text: "正常但粗暴的绩效反馈",
@@ -187,7 +203,8 @@ describe("TracesPanelView", () => {
             disconfirming_evidence: [{ turn: 42, quote: "只有我的任务被撤掉" }],
           }],
           blocking_unknowns: [{
-            id: "u1", question: "最近具体发生了什么？",
+            id: "u1", kind: "concrete_experience",
+            question: "最近具体发生了什么？",
             why_material: "区分反馈与针对", status: "open",
             resolved_after_turn: null,
           }],
@@ -200,6 +217,11 @@ describe("TracesPanelView", () => {
     });
 
     expect(html).toContain("判断是否应该辞职");
+    expect(html).toContain("consequential decision");
+    expect(html).toContain("related episode #2");
+    expect(html).toContain("对公司感到失望");
+    expect(html).toContain("对公司的信心比上次更低");
+    expect(html).toContain("concrete experience");
     expect(html).toContain("上周收到负面反馈");
     expect(html).toContain("领导可能在针对我");
     expect(html).toContain("正常但粗暴的绩效反馈");

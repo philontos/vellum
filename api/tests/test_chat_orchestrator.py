@@ -6,7 +6,7 @@ from app.chat import orchestrator
 from app.inquiry import store
 from app.inquiry.contracts import InquiryDecision
 from app.llm import client as llm_client
-from app.store import memory, traces, turn_runs
+from app.store import memory, traces, turn_runs, user_states
 
 
 async def _no_embed(text):
@@ -42,12 +42,18 @@ async def test_inquire_path_returns_validated_question_without_responder(
             "route": "inquire", "operation": "open",
             "expected_revision": None,
             "patch": {
+                "frame_update": {
+                    "mode": "practical",
+                    "answer_scope": "bounded_guidance",
+                    "state_delta_required": False,
+                },
                 "goal_update": {
                     "text": "Decide whether to resign",
                     "evidence": [{"turn": turn, "quote": "Should I resign?"}],
                 },
                 "add_blocking_unknowns": [{
-                    "id": "u1", "question": "What happened most recently?",
+                    "id": "u1", "kind": "concrete_experience",
+                    "question": "What happened most recently?",
                     "why_material": "A concrete event changes the judgment.",
                 }],
             },
@@ -135,6 +141,58 @@ async def test_direct_path_injects_plan_and_streams_responder(
 
 
 @pytest.mark.asyncio
+async def test_direct_presence_turn_persists_grounded_current_state(
+    migrated_db, monkeypatch,
+):
+    monkeypatch.setattr(orchestrator.ingest, "embed", _no_embed)
+
+    async def decide(ctx):
+        turn = ctx["current_user_turn"]["turn"]
+        return InquiryDecision.model_validate({
+            "route": "direct", "operation": "none", "patch": {},
+            "user_state": {
+                "states": [{
+                    "dimension": "emotion",
+                    "text": "The user feels overwhelmed today.",
+                    "evidence": [{
+                        "turn": turn, "quote": "overwhelmed today",
+                    }],
+                }],
+                "deltas": [],
+            },
+            "answer_brief": "Stay present without analysis.",
+            "context_mode": "recent", "provisional": False,
+        })
+
+    async def messages(**kwargs):
+        return [{"role": "system", "content": "BASE"}]
+
+    async def response_stream(*args, **kwargs):
+        yield {"type": "delta", "text": "I am here."}
+        yield {
+            "type": "final", "content": "I am here.", "reasoning": None,
+            "tool_calls": None, "prompt_tokens": 2, "completion_tokens": 2,
+            "duration_ms": 2,
+        }
+
+    monkeypatch.setattr(orchestrator.controller, "decide", decide)
+    monkeypatch.setattr(orchestrator.assemble, "build_messages", messages)
+    monkeypatch.setattr(orchestrator.respond, "stream", response_stream)
+    monkeypatch.setattr(orchestrator, "schedule_background", lambda: None)
+
+    _ = [event async for event in orchestrator.turn_events(
+        "I feel overwhelmed today; please just stay with me.",
+        persona_name="neutral",
+    )]
+
+    states = user_states.recent()
+    assert states[0]["snapshot"]["states"][0]["dimension"] == "emotion"
+    assert states[0]["snapshot"]["states"][0]["evidence"][0]["quote"] == (
+        "overwhelmed today"
+    )
+
+
+@pytest.mark.asyncio
 async def test_low_information_direct_turn_forces_minimal_responder_context(
     migrated_db, monkeypatch,
 ):
@@ -147,7 +205,7 @@ async def test_low_information_direct_turn_forces_minimal_responder_context(
         "context_mode": "personal",
         "provisional": False,
     })
-    decision.note_normalized_fields(["patch"])
+    decision.note_normalized_fields(["patch", "user_state"])
     monkeypatch.setattr(
         orchestrator.controller, "decide", lambda ctx: _async(decision),
     )
@@ -194,13 +252,15 @@ async def test_low_information_direct_turn_forces_minimal_responder_context(
     assert response_seen["recall_enabled"] is False
     run = turn_runs.list_recent()[0]
     assert run["context_meta"]["responder"]["context_mode"] == "minimal"
-    assert run["context_meta"]["controller_normalized_fields"] == ["patch"]
+    assert run["context_meta"]["controller_normalized_fields"] == [
+        "patch", "user_state",
+    ]
     chat_span = next(
         row for row in traces.list_recent() if row["run_id"] == run["id"]
     )
     params = json.loads(chat_span["params"])
     assert params["context"]["context_mode"] == "minimal"
-    assert params["controller_normalized_fields"] == ["patch"]
+    assert params["controller_normalized_fields"] == ["patch", "user_state"]
 
 
 @pytest.mark.asyncio
@@ -313,12 +373,13 @@ async def test_failed_synthesis_keeps_a_close_pending_inquiry_retryable(
     )
 
     async def decide(_ctx):
-        return InquiryDecision.model_validate({
+                return InquiryDecision.model_validate({
             "route": "synthesize", "operation": "close",
             "expected_inquiry_id": opened["id"],
             "expected_revision": opened["revision"], "patch": {},
             "next_question": None, "target_unknown_id": None,
             "answer_brief": "Deliver the final answer.", "provisional": False,
+            "synthesis_basis": "ready",
         })
 
     async def messages(**kwargs):
@@ -378,6 +439,7 @@ async def test_revision_conflict_refreshes_ledger_and_retries_controller_once(
             "next_question": None, "target_unknown_id": None,
             "answer_brief": "Synthesize from the refreshed Ledger.",
             "provisional": False,
+            "synthesis_basis": "ready",
         })
 
     async def messages(**kwargs):
@@ -434,12 +496,18 @@ async def test_concurrent_open_refreshes_into_the_new_inquiry_instead_of_degradi
                 "route": "inquire", "operation": "open",
                 "expected_inquiry_id": None, "expected_revision": None,
                 "patch": {
+                    "frame_update": {
+                        "mode": "practical",
+                        "answer_scope": "bounded_guidance",
+                        "state_delta_required": False,
+                    },
                     "goal_update": {
                         "text": "Decide the concurrent topic",
                         "evidence": [{"turn": turn, "quote": "Help me decide"}],
                     },
                     "add_blocking_unknowns": [{
-                        "id": "u1", "question": "What matters most?",
+                        "id": "u1", "kind": "criteria",
+                        "question": "What matters most?",
                         "why_material": "It changes the decision.",
                     }],
                 },
@@ -454,6 +522,7 @@ async def test_concurrent_open_refreshes_into_the_new_inquiry_instead_of_degradi
             "next_question": None, "target_unknown_id": None,
             "answer_brief": "Answer using the refreshed Inquiry.",
             "provisional": False,
+            "synthesis_basis": "ready",
         })
 
     async def messages(**kwargs):

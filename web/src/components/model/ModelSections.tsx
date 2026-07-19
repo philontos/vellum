@@ -20,6 +20,7 @@ export function ModelSections({
   const { t } = useT();
   const facts = model.facts.filter((fact) => fact.status === "active");
   const claims = model.portrait_claims ?? [];
+  const states = model.current_states ?? [];
 
   return (
     <>
@@ -38,6 +39,40 @@ export function ModelSections({
         ) : (
           <p className="font-serif text-[17px] text-muted">{t("model.dossierEmpty")}</p>
         )}
+      </section>
+
+      <section
+        id="model-panel-state"
+        role="tabpanel"
+        aria-labelledby="model-tab-state"
+        hidden={active !== "state"}
+        className="max-w-4xl lg:mt-8"
+      >
+        <SectionHeader label={t("model.stateTitle")} />
+        <p className="mb-4 text-sm text-muted">{t("model.stateHint")}</p>
+        <div className="space-y-3">
+          {states.map((snapshot) => (
+            <article key={snapshot.id} className="rounded-xl border border-line bg-surface p-4">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
+                <span className="font-mono">turn {snapshot.user_turn}</span>
+                <span>{snapshot.stream}</span>
+                {snapshot.inquiry_id !== null && <span>Inquiry #{snapshot.inquiry_id}</span>}
+                <span className="ml-auto">{snapshot.created_at}</span>
+              </div>
+              <StateItems
+                label={t("model.stateCurrent")}
+                items={snapshot.snapshot.states ?? []}
+              />
+              <StateItems
+                label={t("model.stateChanges")}
+                items={snapshot.snapshot.deltas ?? []}
+              />
+            </article>
+          ))}
+          {states.length === 0 && (
+            <div className="text-sm text-muted">{t("model.stateEmpty")}</div>
+          )}
+        </div>
       </section>
 
       <section
@@ -97,5 +132,49 @@ export function ModelSections({
         </div>
       </section>
     </>
+  );
+}
+
+
+function StateItems({
+  label,
+  items,
+}: {
+  label: string;
+  items: ModelView["current_states"][number]["snapshot"]["states"];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-3">
+      <h3 className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted">
+        {label}
+      </h3>
+      <ul className="mt-1.5 space-y-2">
+        {items.map((item, index) => (
+          <li key={`${item.dimension}:${index}`} className="border-l-2 border-line pl-3">
+            <div className="text-sm text-ink-soft">
+              <span className="mr-2 rounded bg-well px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                {item.dimension.replace(/_/g, " ")}
+              </span>
+              {item.reference && (
+                <span className="mr-2 rounded bg-well px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                  {item.reference.replace(/_/g, " ")}
+                </span>
+              )}
+              {item.text}
+            </div>
+            {item.evidence.length > 0 && (
+              <div className="mt-1 text-xs text-muted">
+                {item.evidence.map((evidence, evidenceIndex) => (
+                  <span key={`${evidence.turn}:${evidenceIndex}`} className="mr-2">
+                    turn {evidence.turn} · “{evidence.quote}”
+                  </span>
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

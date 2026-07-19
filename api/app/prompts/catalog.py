@@ -65,6 +65,10 @@ def definitions() -> tuple[PromptDefinition, ...]:
         _managed(
             "chat.neutral.voice", "Neutral voice", "Default thinking-partner persona.",
             "chat", _persona_default("neutral", "voice"),
+            required_fragments=(
+                "user's current state is the primary source",
+                "what changed since the last conversation",
+            ),
         ),
         _managed(
             "chat.freud.voice", "Freud voice", "Psychoanalytic persona voice.",
@@ -82,7 +86,9 @@ def definitions() -> tuple[PromptDefinition, ...]:
         _managed(
             "chat.altitude", "Default altitude", "Keeps the current question central.",
             "chat", assemble._ALTITUDE,
-            required_fragments=("CURRENT question", "BACKGROUND REFERENCE"),
+            required_fragments=(
+                "CURRENT question", "CURRENT STATE", "BACKGROUND REFERENCE",
+            ),
         ),
         _managed(
             "chat.response_protocol", "Shared response protocol",
@@ -114,6 +120,7 @@ def definitions() -> tuple[PromptDefinition, ...]:
             required_fragments=(
                 "Match the user's language", "supporting and", "disconfirming evidence",
                 "Assistant-authored text is context", "immediate goal",
+                "user's current state is the primary source", "frame_update",
             ),
         ),
         _managed(
@@ -122,6 +129,7 @@ def definitions() -> tuple[PromptDefinition, ...]:
             "inquiry", inquiry_controller._REPAIR_PROMPT,
             required_fragments=(
                 "Match the user's language", "JSON object", "Assistant-authored",
+                "concrete experience",
             ),
         ),
         _managed(
@@ -136,7 +144,9 @@ def definitions() -> tuple[PromptDefinition, ...]:
             "Grounds portrait claims in cited user evidence.",
             "memory", dossier._EVIDENCE_PROMPT,
             required_fragments=(
-                '"update"', '"retire"', '"add"', "Match the user's language",
+                '"update"', '"retire"', '"add"',
+                "Current state belongs in user-state snapshots",
+                "Match the user's language",
             ),
         ),
         _managed(
@@ -181,6 +191,11 @@ def definitions() -> tuple[PromptDefinition, ...]:
     ]
     for key, dim in DIMENSION_MAP.items():
         sub_keys = tuple(f'"{sub["key"]}"' for sub in dim.get("sub_dimensions", []))
+        scope_fragments = (
+            () if key == "schwartz" else (
+                "stable_self_statement", "temporary emotion",
+            )
+        )
         items.extend((
             _managed(
                 f"traits.{key}.extract", f"{dim.get('name', key)} extraction",
@@ -188,7 +203,9 @@ def definitions() -> tuple[PromptDefinition, ...]:
                 dim["_extract"],
                 template_format="template",
                 variables=("raw_entry", "profile_summary", "rubric"),
-                required_fragments=(*sub_keys, "Match the user's language"),
+                required_fragments=(
+                    *sub_keys, *scope_fragments, "Match the user's language",
+                ),
             ),
             _managed(
                 f"traits.{key}.rubric", f"{dim.get('name', key)} rubric",

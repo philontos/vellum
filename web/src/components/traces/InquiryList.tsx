@@ -6,6 +6,7 @@ import {
   type InquiryEvent,
   type InquiryGroundedItem,
   type InquiryHypothesis,
+  type InquiryState,
 } from "../../api/client";
 import { useT } from "../../i18n";
 import { StatusChip, Tag } from "../ui/StatusChip";
@@ -92,6 +93,27 @@ function InquiryCard({
               </div>
             ) : <Empty />}
           </section>
+          <section>
+            <SectionTitle>{tr("traces.inquiryFrame")}</SectionTitle>
+            {ledger.frame ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Tag>{ledger.frame.mode}</Tag>
+                <Tag>{ledger.frame.answer_scope.replace(/_/g, " ")}</Tag>
+                {ledger.frame.state_delta_required && <Tag>state delta required</Tag>}
+                {ledger.frame.related_episode_id && (
+                  <Tag>related episode #{ledger.frame.related_episode_id}</Tag>
+                )}
+              </div>
+            ) : <Empty />}
+          </section>
+          <StateLedgerSection
+            title={tr("traces.inquiryState")}
+            items={ledger.current_state ?? []}
+          />
+          <StateLedgerSection
+            title={tr("traces.inquiryStateDeltas")}
+            items={ledger.state_deltas ?? []}
+          />
           <GroundedLedgerSection
             title={tr("traces.inquiryObservations")}
             items={ledger.observations}
@@ -109,6 +131,7 @@ function InquiryCard({
                   <div key={item.id} className="rounded-lg border border-line bg-surface px-3 py-2">
                     <div className="flex items-center gap-2">
                       <StatusChip status={item.status} />
+                      {item.kind && <Tag>{item.kind.replace(/_/g, " ")}</Tag>}
                       <span className="text-sm text-ink-soft">{item.question}</span>
                     </div>
                     <div className="mt-1 text-xs text-muted">{item.why_material}</div>
@@ -178,7 +201,53 @@ function GroundedLedgerSection({
         <ul className="mt-2 space-y-2 text-sm text-ink-soft">
           {items.map((item) => (
             <li key={item.id} className="border-l-2 border-line pl-3">
-              <div>{item.text}</div>
+              <div>
+                {item.kind && (
+                  <span className="mr-2 rounded bg-well px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                    {item.kind.replace(/_/g, " ")}
+                  </span>
+                )}
+                {item.text}
+              </div>
+              <EvidenceList
+                label={t("traces.inquiryEvidence")}
+                evidence={item.evidence}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : <Empty />}
+    </section>
+  );
+}
+
+
+function StateLedgerSection({
+  title,
+  items,
+}: {
+  title: string;
+  items: InquiryState[];
+}) {
+  const { t } = useT();
+  return (
+    <section>
+      <SectionTitle>{title}</SectionTitle>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-2 text-sm text-ink-soft">
+          {items.map((item, index) => (
+            <li key={`${item.dimension}:${index}`} className="border-l-2 border-line pl-3">
+              <div>
+                <span className="mr-2 rounded bg-well px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                  {item.dimension.replace(/_/g, " ")}
+                </span>
+                {item.reference && (
+                  <span className="mr-2 rounded bg-well px-1.5 py-0.5 font-mono text-[10px] text-muted">
+                    {item.reference.replace(/_/g, " ")}
+                  </span>
+                )}
+                {item.text}
+              </div>
               <EvidenceList
                 label={t("traces.inquiryEvidence")}
                 evidence={item.evidence}

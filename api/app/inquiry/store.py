@@ -85,6 +85,15 @@ def list_paused(stream: str, limit: int = 5) -> list[dict]:
     return [_inquiry(row) for row in rows]
 
 
+def list_closed(stream: str, limit: int = 3) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM inquiries WHERE stream = ? AND status = 'closed' "
+            "ORDER BY last_turn DESC, id DESC LIMIT ?", (stream, limit),
+        ).fetchall()
+    return [_inquiry(row) for row in rows]
+
+
 def latest_for_stream(stream: str) -> dict | None:
     with get_conn() as conn:
         row = conn.execute(

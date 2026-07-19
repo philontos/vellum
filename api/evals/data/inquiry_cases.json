@@ -45,6 +45,39 @@
     "allowed_operations": ["none"]
   },
   {
+    "id": "continue_internal_disappointment_until_concrete_change",
+    "messages": [
+      {"turn": 266, "role": "user", "content": "我是不是应该保持对外界机会的关注？感觉对公司越来越没信心"},
+      {"turn": 267, "role": "assistant", "content": "信心下降，是因为看到了外面的机会觉得可能更好，还是公司内部具体的事情让你越来越失望？"},
+      {"turn": 268, "role": "user", "content": "主要是对当前公司的失望"}
+    ],
+    "inquiry": {
+      "id": 6,
+      "status": "exploring",
+      "revision": 1,
+      "parent_inquiry_id": null,
+      "ledger": {
+        "frame": {"mode": "personal", "answer_scope": "bounded_guidance", "state_delta_required": true},
+        "goal": {"text": "判断是否应该保持对外界机会的关注", "evidence": [{"turn": 266, "quote": "我是不是应该保持对外界机会的关注？"}]},
+        "current_state": [{"dimension": "belief", "text": "用户对公司的信心正在下降", "evidence": [{"turn": 266, "quote": "对公司越来越没信心"}]}],
+        "state_deltas": [{"dimension": "belief", "text": "用户对公司的信心相较之前继续下降", "reference": "unspecified_past", "evidence": [{"turn": 266, "quote": "越来越没信心"}]}],
+        "observations": [],
+        "interpretations": [],
+        "hypotheses": [],
+        "blocking_unknowns": [
+          {"id": "u1", "kind": "orientation", "question": "失望主要来自外部比较还是公司内部？", "why_material": "先定位信心变化的方向", "status": "open", "resolved_after_turn": null}
+        ],
+        "asked_questions": [
+          {"unknown_id": "u1", "text": "信心下降，是因为看到了外面的机会觉得可能更好，还是公司内部具体的事情让你越来越失望？", "after_turn": 266}
+        ],
+        "provisional_conclusion": null
+      }
+    },
+    "expected_route": "inquire",
+    "allowed_operations": ["update"],
+    "expected_target_unknown_id": "u1"
+  },
+  {
     "id": "continue_unresolved_inquiry",
     "messages": [
       {"turn": 10, "role": "user", "content": "我是不是应该辞职？"},

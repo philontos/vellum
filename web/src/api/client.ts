@@ -177,8 +177,25 @@ export type PortraitClaim = {
   status: string;
   source_turn: number | null;
 };
+export type UserStateEvidence = { turn: number; quote: string };
+export type UserStateItem = {
+  dimension: "emotion" | "belief" | "intention" | "need" | "constraint" | "situation";
+  text: string;
+  evidence: UserStateEvidence[];
+  reference?: "earlier_in_episode" | "previous_episode" | "unspecified_past";
+};
+export type UserStateSnapshot = {
+  id: number;
+  stream: string;
+  user_turn: number;
+  inquiry_id: number | null;
+  snapshot: { states: UserStateItem[]; deltas: UserStateItem[] };
+  run_id: string | null;
+  created_at: string;
+};
 export type ModelView = {
   dossier: string;
+  current_states: UserStateSnapshot[];
   portrait_claims: PortraitClaim[];
   facts: Fact[];
   traits: TraitDim[];
@@ -262,7 +279,11 @@ export type TurnRun = {
 
 export type InquiryEvidence = { turn: number; quote: string };
 export type InquiryGroundedItem = {
-  id: string; text: string; evidence: InquiryEvidence[];
+  id: string; kind?: string; text: string; evidence: InquiryEvidence[];
+};
+export type InquiryState = {
+  dimension: string; text: string; evidence: InquiryEvidence[];
+  reference?: string;
 };
 export type InquiryHypothesis = {
   id: string; text: string;
@@ -270,11 +291,19 @@ export type InquiryHypothesis = {
   disconfirming_evidence: InquiryEvidence[];
 };
 export type InquiryUnknown = {
-  id: string; question: string; why_material: string;
+  id: string; kind?: string; question: string; why_material: string;
   status: "open" | "resolved"; resolved_after_turn: number | null;
 };
 export type InquiryLedger = {
+  frame?: {
+    mode: "personal" | "practical";
+    answer_scope: "bounded_guidance" | "causal_judgment" | "consequential_decision";
+    state_delta_required: boolean;
+    related_episode_id?: number | null;
+  } | null;
   goal: { text: string; evidence: InquiryEvidence[] } | null;
+  current_state?: InquiryState[];
+  state_deltas?: InquiryState[];
   observations: InquiryGroundedItem[];
   interpretations: InquiryGroundedItem[];
   hypotheses: InquiryHypothesis[];

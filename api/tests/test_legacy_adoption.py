@@ -1,7 +1,9 @@
+import pytest
+
 from app.auth import accounts
 from app.auth import legacy
 from app.data_scope import user_scope
-from app.store import db, memory, model, portrait_claims, traces
+from app.store import db, memory, model, portrait_claims, traces, user_states
 
 
 def test_legacy_data_is_copied_into_owner_scope_and_source_is_retained(tmp_path, monkeypatch):
@@ -77,3 +79,28 @@ def test_legacy_adoption_treats_portrait_claims_as_user_data(tmp_path, monkeypat
         pass
     else:
         raise AssertionError("expected adoption to preserve portrait claims")
+
+
+def test_legacy_adoption_treats_user_state_snapshots_as_user_data(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("VELLUM_AUTH_ENABLED", raising=False)
+    db.run_migrations()
+    user = accounts.create_user(
+        "owner", "Owner", "a sufficiently long password", role="owner",
+    )
+    with user_scope(user["id"]):
+        user_states.record(
+            user_turn=0, stream="neutral", inquiry_id=None, run_id="state",
+            snapshot={
+                "states": [{
+                    "dimension": "emotion", "text": "Feels uncertain.",
+                    "evidence": [{"turn": 0, "quote": "uncertain"}],
+                }],
+                "deltas": [],
+            },
+        )
+
+    with pytest.raises(legacy.LegacyAdoptionError):
+        legacy.adopt(user["id"])

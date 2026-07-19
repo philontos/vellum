@@ -9,6 +9,7 @@ async def test_direction_scoring_high(migrated_db, monkeypatch):
     # mock extraction: strong O-high signal, others null
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
         return {"O": {"score": 88, "confidence": 0.7,
+                      "basis": "stable_self_statement",
                       "evidence": "unfamiliar experiments"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr(et.traits_job, "chat_json", fake_chat_json)

@@ -18,7 +18,7 @@ from app.inquiry.contracts import InquiryDecision
 from app.llm.client import resolve_structured_llm_config
 from app.model_loop import runner
 from app.prompts import runtime
-from app.store import traces
+from app.store import traces, user_states
 
 
 _background_tasks: set[asyncio.Task] = set()
@@ -178,6 +178,14 @@ async def _execute_turn(
         applied = service.apply_decision(
             decision, stream=stream, user_turn=user_turn, run_id=None,
         )
+
+    user_states.record(
+        user_turn=user_turn,
+        stream=stream,
+        snapshot=applied.decision.user_state.model_dump(mode="json"),
+        inquiry_id=(applied.inquiry or {}).get("id"),
+        run_id=run_id,
+    )
 
     observer.note_decision(applied.decision)
 

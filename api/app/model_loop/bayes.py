@@ -58,5 +58,7 @@ def merge_subdims(dimension: str, old_content: dict, new_content: dict) -> dict:
                 "confidence": round(_confidence_display(m_tau), 3)}
         if "evidence" in new_val:
             item["evidence"] = new_val["evidence"]
+        if "basis" in new_val:
+            item["basis"] = new_val["basis"]
         merged[key] = item
     return merged

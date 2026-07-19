@@ -19,6 +19,7 @@ _WITHHELD_PRIOR = (
     "Historical aggregate deliberately withheld: score only the new evidence "
     "to avoid confirmation bias."
 )
+_DURABLE_BASES = {"stable_self_statement", "repeated_pattern"}
 
 
 def _profile_summary(content: dict) -> str:
@@ -92,6 +93,12 @@ def _validated_scores(
         except (KeyError, TypeError, ValueError):
             cleaned[subkey] = None
             continue
+        basis = value.get("basis")
+        if basis not in _DURABLE_BASES:
+            # Missing/temporary scope fails closed. This also keeps an older
+            # published prompt from silently promoting state into personality.
+            cleaned[subkey] = None
+            continue
         quote = value.get("evidence")
         quote = quote.strip() if isinstance(quote, str) else ""
         source = _source_for_quote(quote, sources)
@@ -102,6 +109,7 @@ def _validated_scores(
             "score": score,
             "confidence": confidence,
             "evidence": quote,
+            "basis": basis,
         }
         observations.append({
             "sub_dimension": subkey,

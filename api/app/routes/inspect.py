@@ -22,7 +22,7 @@ from app.inquiry import store as inquiry_store
 from app.llm import candidates as model_candidates
 from app.llm.client import resolve_structured_llm_config
 from app.store import (
-    model, observability as obs, portrait_claims, traces, turn_runs,
+    model, observability as obs, portrait_claims, traces, turn_runs, user_states,
 )
 from evals.config import eval_gen_config
 from evals.suites import SUITES
@@ -53,6 +53,7 @@ def inspect_model():
         "facts": model.active_facts(),
         "portrait_claims": portrait_claims.active(),
         "traits": traits,
+        "current_states": user_states.recent(limit=20),
     }
 
 

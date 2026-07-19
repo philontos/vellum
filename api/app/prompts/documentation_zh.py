@@ -46,8 +46,8 @@ GUIDES = {
         ),
     ),
     "chat.altitude": (
-        "确定默认回答的主次关系：用户当前问题是核心任务，档案、长期事实、人格特征和召回历史"
-        "都只是背景证据，只有真正有助于回答时才使用。",
+        "确定默认回答的主次关系：用户当前问题与当前状态是第一真源，档案、长期事实、人格特征"
+        "和召回历史都是带时间边界的背景证据。",
         "用于 neutral 模式，以及所有没有自定义 stance 的 Persona。Freud 模式已有专属 "
         "stance，因此整轮对话不会使用这个 Prompt。",
         (
@@ -112,7 +112,7 @@ GUIDES = {
         ),
     ),
     "memory.dossier.evidence": (
-        "为 dossier 提取专用证据，将价值观、反复模式、决策方式、影响决策的当前状态与自我认知"
+        "为 dossier 提取专用证据，将价值观、反复模式、决策方式与自我认知"
         "整理为带来源的 portrait claim 变更集。",
         "达到 dossier 周期后作为第一步运行，此时 eager facts 已先完成。它接收 active portrait "
         "claims 和新的跨 Persona 对话；assistant 内容只帮助理解上下文，每项有效变更都必须引用用户原话。",
@@ -120,6 +120,7 @@ GUIDES = {
             "必须保留严格 JSON 以及规范的 update、retire、add 三个列表。",
             "claim_type 与 basis 使用固定英文枚举；claim 文本和引用跟随用户语言。",
             "不能削弱 user turn 引用、推断至少需要两个用户轮次，以及“考虑”和“决定”的区分。",
+            "短期状态只能进入 user-state snapshots，不能写成 portrait claim。",
         ),
     ),
     "memory.dossier.render": (
@@ -131,7 +132,7 @@ GUIDES = {
             "必须保留严格 JSON、规范字段 \"dossier\"、语言跟随要求和紧凑篇幅限制。",
             "解释应以 portrait claims 为主，facts 只作长期锚点；不能从单个事实推成反复模式。",
             "必须保留对用户引用的语义复核；引用真实存在不等于 claim 的措辞一定被充分支持。",
-            "保留不确定性，并给 current state 加上情境边界，不能写成永久人格。",
+            "不能从长期画像反推出用户此刻仍然处于某种状态。",
         ),
     ),
     "memory.facts.integrate": (
@@ -143,6 +144,7 @@ GUIDES = {
             "必须保留 {date}、{board}、{span}、严格 JSON 和 update/retire/add 结构。",
             "助手内容不能作为证据；推断型观察需要多个不同用户轮次支持。",
             "已有事实能补充时优先 update；时间或情境前提必须保留在文本中。",
+            "当前情绪、信念、意图和暂定计划进入状态时间线，不进入 durable facts。",
         ),
     ),
     "memory.facts.compact": (
@@ -190,6 +192,7 @@ GUIDES = {
             "保留精确的用户 turn 引用，并同时维护支持与反证假设。",
             "用户明确只需要陪伴时直接回应，不诊断也不给高影响建议。",
             "next_question 必须简短并跟随用户语言。",
+            "综合回答必须有可审计的 synthesis basis，不能用 provisional 绕过继续了解用户。",
         ),
     ),
     "inquiry.repair": (
@@ -224,6 +227,7 @@ GUIDES = {
             "必须保持极性方向：0 对应 I/S/T/J，100 对应 E/N/F/P。",
             "没有信号时使用 null；50 表示平衡证据，不能表示不确定。",
             "evidence 必须逐字引用应用标注的 USER turn。",
+            "只接受 stable_self_statement 或 repeated_pattern；短期状态必须返回 null。",
         ),
     ),
     "traits.mbti.rubric": (
@@ -246,6 +250,7 @@ GUIDES = {
             "某个维度没有清晰信号时返回 null；短对话通常不会同时命中五项。",
             "evidence 使用用户语言，JSON 字段名保持规范英文。",
             "只有能在 USER turn 中逐字核验的 evidence 才会被写入画像。",
+            "只接受 stable_self_statement 或 repeated_pattern；短期状态必须返回 null。",
         ),
     ),
     "traits.ocean.rubric": (
@@ -269,6 +274,7 @@ GUIDES = {
             "两个焦点彼此独立，可以只出现一个、同时出现或都没有信号。",
             "没有证据时使用 null，不能用低置信度中间分代替。",
             "不得把 $profile_summary 改为历史汇总分数。",
+            "只接受 stable_self_statement 或 repeated_pattern；短期状态必须返回 null。",
         ),
     ),
     "traits.regulatory_focus.rubric": (

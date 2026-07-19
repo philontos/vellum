@@ -4,6 +4,30 @@ from app.model_loop import dossier
 from app.store import memory, model, portrait_claims
 
 
+def test_dossier_prompt_keeps_current_state_in_the_snapshot_layer():
+    assert "Current state belongs in user-state snapshots" in dossier._EVIDENCE_PROMPT
+    assert "do not add or update it as a portrait claim" in dossier._EVIDENCE_PROMPT
+
+
+def test_dossier_rejects_new_current_state_claims(migrated_db):
+    plan = {
+        "update": [],
+        "retire": [],
+        "add": [{
+            "claim_type": "current_state",
+            "text": "Feels disappointed today.",
+            "basis": "explicit",
+            "evidence": [{"turn": 0, "quote": "disappointed today"}],
+        }],
+    }
+
+    dossier._apply_changeset(
+        plan, active=[], user_evidence={0: "I am disappointed today"},
+    )
+
+    assert portrait_claims.active() == []
+
+
 @pytest.mark.asyncio
 async def test_dossier_extracts_grounded_claims_then_renders_without_raw_conversation(
     migrated_db, monkeypatch,
@@ -13,44 +37,42 @@ async def test_dossier_extracts_grounded_claims_then_renders_without_raw_convers
     async def fake_chat_json(system_prompt, user_prompt="", stage="", **kw):
         calls.append({"system": system_prompt, "user": user_prompt, "stage": stage})
         if stage == "dossier_evidence":
-            assert "I am considering whether to leave" in user_prompt
-            assert "You have already decided to leave" in user_prompt
+            assert "I compare the trade-offs before major decisions" in user_prompt
+            assert "You decide impulsively" in user_prompt
             return {
                 "update": [],
                 "retire": [],
                 "add": [{
-                    "claim_type": "current_state",
-                    "text": "Is considering leaving the current company but has not decided.",
+                    "claim_type": "decision_style",
+                    "text": "Compares trade-offs before major decisions.",
                     "basis": "explicit",
                     "evidence": [{
                         "turn": 0,
-                        "quote": "I am considering whether to leave",
+                        "quote": "I compare the trade-offs before major decisions",
                     }],
                 }],
             }
         assert stage == "dossier_render"
         assert "semantic support" in system_prompt
-        assert "Is considering leaving the current company but has not decided." in user_prompt
+        assert "Compares trade-offs before major decisions." in user_prompt
         assert "Leads a ten-person engineering team." in user_prompt
-        assert "You have already decided to leave" not in user_prompt
+        assert "You decide impulsively" not in user_prompt
         assert "LEGACY ASSISTANT VERDICT" not in user_prompt
-        return {"dossier": "Values fair analysis and is weighing a job change without rushing it."}
+        return {"dossier": "Compares trade-offs before making major decisions."}
 
     monkeypatch.setattr(dossier, "chat_json", fake_chat_json)
     model.set_dossier("LEGACY ASSISTANT VERDICT")
     model.add_fact("Leads a ten-person engineering team.", source_turn=0)
-    memory.append_message("user", "I am considering whether to leave")
-    memory.append_message("assistant", "You have already decided to leave")
+    memory.append_message("user", "I compare the trade-offs before major decisions")
+    memory.append_message("assistant", "You decide impulsively")
 
     await dossier.run(start_turn=0, end_turn=1)
 
     assert [call["stage"] for call in calls] == ["dossier_evidence", "dossier_render"]
-    assert model.get_dossier() == (
-        "Values fair analysis and is weighing a job change without rushing it."
-    )
+    assert model.get_dossier() == "Compares trade-offs before making major decisions."
     claims = portrait_claims.active()
     assert len(claims) == 1
-    assert claims[0]["claim_type"] == "current_state"
+    assert claims[0]["claim_type"] == "decision_style"
     assert claims[0]["source_turn"] == 0
 
 
@@ -100,7 +122,7 @@ async def test_dossier_updates_and_retires_claims_from_user_grounded_corrections
     migrated_db, monkeypatch,
 ):
     old = portrait_claims.add(
-        claim_type="current_state",
+        claim_type="decision_style",
         text="Thinks the product is low quality.",
         basis="inferred",
         evidence=[
@@ -125,7 +147,7 @@ async def test_dossier_updates_and_retires_claims_from_user_grounded_corrections
             return {
                 "update": [{
                     "id": old,
-                    "claim_type": "current_state",
+                    "claim_type": "decision_style",
                     "text": "Does not consider the product low; discounts its results for category lift.",
                     "basis": "explicit",
                     "evidence": [{

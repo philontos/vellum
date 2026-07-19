@@ -23,11 +23,26 @@ def render(
         lines.append(
             "The answer is provisional: name material unknowns and assumptions."
         )
+    if decision.route == "synthesize":
+        lines.append(
+            "Synthesis basis: " + str(decision.synthesis_basis)
+        )
     if decision.route == "synthesize" and applied.inquiry is not None:
+        frame = applied.inquiry["ledger"].get("frame") or {}
         lines.extend((
+            f"Answer scope: {frame.get('answer_scope') or 'legacy'}",
+            "Use user-authored evidence in the Ledger as the factual boundary. "
+            "Do not revive causal or psychological claims from earlier assistant "
+            "replies. The user's current state outranks all older modeling.",
             "Grounded Inquiry Ledger:",
             json.dumps(applied.inquiry["ledger"], ensure_ascii=False),
         ))
+        if frame.get("answer_scope") == "bounded_guidance":
+            lines.append(
+                "Keep the answer bounded to the low-cost guidance earned by the "
+                "evidence; normally use one to three short paragraphs and do not "
+                "expand into a diagnosis."
+            )
     if controller_error is not None:
         lines.append(
             "The controller was unavailable. Preserve availability but avoid "

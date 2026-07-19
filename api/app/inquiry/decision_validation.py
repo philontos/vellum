@@ -1,5 +1,6 @@
 """Controller-result checks that must pass before durable Inquiry state."""
 
+from app.inquiry import readiness
 from app.inquiry.contracts import InquiryDecision
 
 
@@ -39,6 +40,11 @@ def _evidence_refs(decision: InquiryDecision):
     for item in patch.add_hypotheses:
         yield from item.supporting_evidence
         yield from item.disconfirming_evidence
+    for item in decision.user_state.states:
+        yield from item.evidence
+    for item in decision.user_state.deltas:
+        yield from item.evidence
+    yield from decision.synthesis_basis_evidence
 
 
 def _validate_evidence(decision: InquiryDecision, context: dict) -> None:
@@ -53,12 +59,34 @@ def _validate_evidence(decision: InquiryDecision, context: dict) -> None:
             raise InquiryEvidenceError(
                 f"Evidence quote is not present in user turn {ref.turn}"
             )
+    if decision.synthesis_basis in {
+        "user_requested_provisional", "user_cannot_add_evidence",
+    }:
+        current_turn = (context.get("current_user_turn") or {}).get("turn")
+        if any(
+            ref.turn != current_turn
+            for ref in decision.synthesis_basis_evidence
+        ):
+            raise InquiryEvidenceError(
+                "a user-driven provisional synthesis basis must cite the current turn"
+            )
 
 
 def _validate_readiness(decision: InquiryDecision, context: dict) -> None:
+    try:
+        readiness.validate_open(decision)
+    except readiness.ReadinessGap as error:
+        raise InquiryReadinessError(str(error)) from error
+    inquiry = context.get("inquiry")
+    if isinstance(inquiry, dict) and decision.expected_inquiry_id == inquiry.get("id"):
+        try:
+            readiness.validate_frame_transition(
+                inquiry.get("ledger") or {}, decision,
+            )
+        except readiness.ReadinessGap as error:
+            raise InquiryReadinessError(str(error)) from error
     if decision.route != "synthesize":
         return
-    inquiry = context.get("inquiry")
     if not isinstance(inquiry, dict):
         return
     if decision.operation == "none" and inquiry.get("status") in {
@@ -77,16 +105,19 @@ def _validate_readiness(decision: InquiryDecision, context: dict) -> None:
     }
     open_ids.difference_update(decision.patch.resolve_unknown_ids)
     open_ids.update(item.id for item in decision.patch.add_blocking_unknowns)
-    if not open_ids:
-        return
-    if decision.operation == "close":
-        raise InquiryReadinessError(
-            "blocking unknowns remain open; update or pause instead of closing"
-        )
-    if not decision.provisional:
-        raise InquiryReadinessError(
-            "blocking unknowns remain open; synthesis must be provisional"
-        )
+    if open_ids:
+        if decision.operation == "close":
+            raise InquiryReadinessError(
+                "blocking unknowns remain open; update or pause instead of closing"
+            )
+        if not decision.provisional:
+            raise InquiryReadinessError(
+                "blocking unknowns remain open; synthesis must be provisional"
+            )
+    try:
+        readiness.validate(ledger, decision)
+    except readiness.ReadinessGap as error:
+        raise InquiryReadinessError(str(error)) from error
 
 
 def validate(decision: InquiryDecision, context: dict) -> None:

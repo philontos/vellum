@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass, replace
 
 from app import config
-from app.inquiry import budget, store
+from app.inquiry import budget, readiness, store
 from app.inquiry.contracts import EvidenceRef, InquiryDecision
 from app.store import memory
 
@@ -50,7 +50,10 @@ class AppliedDecision:
 
 def empty_ledger() -> dict:
     return {
+        "frame": None,
         "goal": None,
+        "current_state": [],
+        "state_deltas": [],
         "observations": [],
         "interpretations": [],
         "hypotheses": [],
@@ -87,7 +90,9 @@ def _validate_ref(ref: EvidenceRef, stream: str) -> None:
         )
 
 
-def _validate_evidence(decision: InquiryDecision, stream: str) -> None:
+def _validate_evidence(
+    decision: InquiryDecision, stream: str, user_turn: int,
+) -> None:
     patch = decision.patch
     groups = []
     if patch.goal_update is not None:
@@ -96,9 +101,20 @@ def _validate_evidence(decision: InquiryDecision, stream: str) -> None:
     groups.extend(item.evidence for item in patch.add_interpretations)
     for item in patch.add_hypotheses:
         groups.extend((item.supporting_evidence, item.disconfirming_evidence))
+    groups.extend(item.evidence for item in decision.user_state.states)
+    groups.extend(item.evidence for item in decision.user_state.deltas)
+    groups.append(decision.synthesis_basis_evidence)
     for refs in groups:
         for ref in refs:
             _validate_ref(ref, stream)
+    if decision.synthesis_basis in {
+        "user_requested_provisional", "user_cannot_add_evidence",
+    } and any(
+        ref.turn != user_turn for ref in decision.synthesis_basis_evidence
+    ):
+        raise EvidenceValidationError(
+            "A user-driven provisional synthesis basis must cite the current turn"
+        )
 
 
 def _has_grounded_resolution_evidence(decision: InquiryDecision) -> bool:
@@ -108,6 +124,8 @@ def _has_grounded_resolution_evidence(decision: InquiryDecision) -> bool:
     return any((
         patch.add_observations,
         patch.add_interpretations,
+        decision.user_state.states,
+        decision.user_state.deltas,
         any(
             item.supporting_evidence or item.disconfirming_evidence
             for item in patch.add_hypotheses
@@ -132,15 +150,41 @@ def _append_unique(target: list[dict], item: dict) -> None:
         target.append(item)
 
 
+def _replace_state_dimension(target: list[dict], item: dict) -> None:
+    """The Ledger is the latest state view; snapshots preserve its history."""
+    dimension = item.get("dimension")
+    target[:] = [
+        existing for existing in target
+        if existing.get("dimension") != dimension
+    ]
+    target.append(item)
+
+
 def _apply_patch(ledger: dict, decision: InquiryDecision, user_turn: int) -> dict:
     result = _copy(ledger)
+    for key, default in (
+        ("frame", None), ("goal", None), ("current_state", []),
+        ("state_deltas", []), ("observations", []),
+        ("interpretations", []), ("hypotheses", []),
+        ("blocking_unknowns", []), ("asked_questions", []),
+        ("provisional_conclusion", None),
+    ):
+        result.setdefault(key, default)
     patch = decision.patch
     if patch.goal_update is not None:
         result["goal"] = patch.goal_update.model_dump()
+    if patch.frame_update is not None:
+        result["frame"] = patch.frame_update.model_dump()
+
+    for draft in decision.user_state.states:
+        _replace_state_dimension(result["current_state"], draft.model_dump())
+    for draft in decision.user_state.deltas:
+        _append_unique(result["state_deltas"], draft.model_dump())
 
     for draft in patch.add_observations:
         _append_unique(result["observations"], {
             "id": _next_id(result["observations"], "o"),
+            "kind": draft.kind,
             "text": draft.text,
             "evidence": _refs(draft.evidence),
         })
@@ -274,7 +318,7 @@ def apply_decision(
         raise UngroundedResolutionError(
             "Resolving a blocking unknown requires a grounded Ledger claim"
         )
-    _validate_evidence(decision, stream)
+    _validate_evidence(decision, stream, user_turn)
     current = store.get_current(stream)
 
     if decision.operation == "none":
@@ -285,23 +329,47 @@ def apply_decision(
         return AppliedDecision(decision, current, None)
 
     if decision.operation == "open":
+        try:
+            readiness.validate_open(decision)
+        except readiness.ReadinessGap as error:
+            raise NotReadyError(str(error)) from error
         ledger = _apply_patch(empty_ledger(), decision, user_turn)
         _validate_ledger_capacity(ledger)
-        parent = store.latest_for_stream(stream)
+        related_episode_id = (
+            decision.patch.frame_update.related_episode_id
+            if decision.patch.frame_update is not None else None
+        )
+        parent = (
+            store.get(related_episode_id)
+            if related_episode_id is not None else None
+        )
+        if parent is not None and (
+            parent["stream"] != stream or parent["status"] != "closed"
+        ):
+            raise InvalidTransitionError(
+                "related_episode_id must identify a closed Inquiry in this stream"
+            )
+        if related_episode_id is not None and parent is None:
+            raise InvalidTransitionError(
+                "related_episode_id does not identify an Inquiry"
+            )
         inquiry = store.open_inquiry(
             stream=stream,
             opened_turn=user_turn,
             ledger=ledger,
             decision=decision.model_dump(),
             run_id=run_id,
-            parent_inquiry_id=(
-                parent["id"] if parent is not None and parent["status"] == "closed"
-                else None
-            ),
+            parent_inquiry_id=parent["id"] if parent is not None else None,
         )
         return AppliedDecision(decision, inquiry, decision.next_question)
 
     current = _revision_target(decision, stream)
+
+    try:
+        readiness.validate_frame_transition(current["ledger"], decision)
+        readiness.validate(current["ledger"], decision)
+    except readiness.ReadinessGap as error:
+        raise NotReadyError(str(error)) from error
 
     ledger = _apply_patch(current["ledger"], decision, user_turn)
     _validate_ledger_capacity(ledger)

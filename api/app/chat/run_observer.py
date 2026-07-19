@@ -14,14 +14,22 @@ def _context_meta(context: dict) -> dict:
         "estimated_tokens": budget.get("estimated_tokens"),
         "max_input_tokens": budget.get("max_input_tokens"),
         "dropped_recent_messages": budget.get("dropped_recent_messages", 0),
+        "dropped_assistant_messages": budget.get(
+            "dropped_assistant_messages", 0,
+        ),
         "dropped_cited_evidence": budget.get("dropped_cited_evidence", 0),
         "dropped_paused_inquiries": budget.get(
             "dropped_paused_inquiries", 0,
         ),
+        "dropped_recent_episodes": budget.get("dropped_recent_episodes", 0),
+        "dropped_state_snapshots": budget.get("dropped_state_snapshots", 0),
         "current_user_turn_truncated": budget.get(
             "current_user_turn_truncated", False,
         ),
         "recent_message_count": len(context.get("recent_messages") or []),
+        "assistant_context_count": len(context.get("assistant_context") or []),
+        "recent_episode_count": len(context.get("recent_episodes") or []),
+        "prior_state_count": len(context.get("prior_user_state") or []),
         "cited_evidence_count": len(context.get("cited_evidence") or []),
         "paused_inquiry_count": len(context.get("paused_inquiries") or []),
         "had_active_inquiry": context.get("inquiry") is not None,

@@ -60,9 +60,9 @@ GUIDES = {
         ),
     ),
     "chat.altitude": (
-        "Sets the default hierarchy for answering: the current question is the "
-        "main task, while dossier, facts, traits, and recalled history are "
-        "background evidence to use only when they materially help.",
+        "Sets the default hierarchy for answering: the current question and the "
+        "user's current state are primary, while dossier, facts, traits, and "
+        "recalled history are dated background evidence.",
         "Inserted into neutral-mode system messages and any persona without its own "
         "stance. It is not used in Freud mode because chat.freud.stance replaces it "
         "for the entire turn.",
@@ -143,7 +143,7 @@ GUIDES = {
     ),
     "memory.dossier.evidence": (
         "Extracts dossier-specific evidence about values, recurring patterns, "
-        "decision style, meaningful current states, and self-concept into a grounded "
+        "decision style, and self-concept into a grounded "
         "portrait-claim changeset.",
         "Runs as the first call at the dossier cadence, after eager facts integration. "
         "It sees the active portrait-claim board and the new cross-stream conversation; "
@@ -154,6 +154,7 @@ GUIDES = {
             "and quotes should match the user's language.",
             "Do not weaken user-turn citations, the two-turn threshold for inferences, or "
             "the distinction between considering and deciding.",
+            "Keep temporary state in user-state snapshots, never portrait claims.",
         ),
     ),
     "memory.dossier.render": (
@@ -170,8 +171,7 @@ GUIDES = {
             "do not derive a recurring pattern from one fact.",
             "Keep the semantic audit against cited user quotes; provenance validation "
             "alone does not prove that a claim's wording is fully supported.",
-            "Preserve uncertainty and contextualize current states rather than turning "
-            "them into timeless traits.",
+            "Never reconstruct a present state from the durable portrait.",
         ),
     ),
     "memory.facts.integrate": (
@@ -186,6 +186,8 @@ GUIDES = {
             "Never treat assistant statements as evidence; inferred observations "
             "need support from multiple distinct user turns.",
             "Prefer updating a fact over adding a duplicate, and retain time premises.",
+            "Keep current emotions, beliefs, intentions, and tentative plans on the "
+            "state timeline rather than the durable board.",
         ),
     ),
     "memory.facts.compact": (
@@ -231,8 +233,9 @@ GUIDES = {
     "inquiry.controller": (
         "Decides whether one natural-language turn is already answerable, needs one "
         "material clarification, or is ready for an evidence-grounded synthesis.",
-        "Runs once before the responder. It receives the current user turn, a short "
-        "recent tail, the current Inquiry Ledger, and raw user turns cited by that ledger.",
+        "Runs once before the responder. It receives the current user turn, a bounded "
+        "user-only tail, clipped assistant continuity, dated state/episode checkpoints, "
+        "the current Inquiry Ledger, and raw user turns cited by that ledger.",
         (
             "Keep direct requests out of inquiry; clarification must materially change the answer.",
             "Treat assistant-authored history as dialogue context, never as user evidence or readiness.",
@@ -240,6 +243,8 @@ GUIDES = {
             "Preserve exact user-turn citations and supporting/disconfirming hypotheses.",
             "If the user explicitly requests presence only, answer directly without diagnosis or advice.",
             "Keep next_question brief and in the user's language.",
+            "Require an auditable synthesis basis so provisional cannot become an "
+            "escape hatch for answering before Inquiry is ready.",
         ),
     ),
     "inquiry.repair": (
@@ -279,6 +284,8 @@ GUIDES = {
             "Preserve pole direction: 0 means I/S/T/J and 100 means E/N/F/P.",
             "Use null for no signal; 50 means balanced evidence, not uncertainty.",
             "Evidence must quote an application-labelled USER turn exactly.",
+            "Require a stable_self_statement or repeated_pattern basis; temporary "
+            "state must return null.",
         ),
     ),
     "traits.mbti.rubric": (
@@ -305,6 +312,8 @@ GUIDES = {
             "Return null when a dimension has no clear signal; most spans are sparse.",
             "Keep evidence in the user's language while JSON keys stay English.",
             "Evidence must be an exact quote from a labelled USER turn.",
+            "Require a stable_self_statement or repeated_pattern basis; temporary "
+            "state must return null.",
         ),
     ),
     "traits.ocean.rubric": (
@@ -332,6 +341,8 @@ GUIDES = {
             "The dimensions are independent: either, both, or neither may signal.",
             "Use null for absent evidence rather than a low-confidence midpoint.",
             "Never replace $profile_summary with historical aggregate scores.",
+            "Require a stable_self_statement or repeated_pattern basis; temporary "
+            "state must return null.",
         ),
     ),
     "traits.regulatory_focus.rubric": (

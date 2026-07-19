@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app import config
 from app.chat import context_plan
-from app.inquiry import controller
+from app.inquiry import controller, readiness
 
 
 _DATA = Path(__file__).parent / "data" / "inquiry_cases.json"
@@ -29,9 +29,16 @@ def _context(case: dict) -> dict:
         "current_user_turn": current,
         "inquiry": inquiry,
         "paused_inquiries": case.get("paused_inquiries", []),
+        "recent_episodes": case.get("recent_episodes", []),
+        "prior_user_state": case.get("prior_user_state", []),
         "recent_messages": [
             message for message in messages
+            if message["turn"] != current["turn"] and message["role"] == "user"
+        ],
+        "assistant_context": [
+            message for message in messages
             if message["turn"] != current["turn"]
+            and message["role"] == "assistant"
         ],
         "cited_evidence": case.get("cited_evidence", []),
         "policy": {
@@ -70,27 +77,69 @@ def _evidence_valid(decision: dict, case: dict) -> bool:
     }
     return all(
         ref["turn"] in user_turns and ref["quote"] in user_turns[ref["turn"]]
-        for ref in _refs(decision.get("patch") or {})
+        for ref in _refs({
+            "patch": decision.get("patch") or {},
+            "user_state": decision.get("user_state") or {},
+            "synthesis_basis_evidence": (
+                decision.get("synthesis_basis_evidence") or []
+            ),
+        })
     )
 
 
-def _readiness_valid(decision: dict, context: dict) -> bool:
-    if decision["route"] != "synthesize":
+def _state_capture_valid(decision: dict) -> bool:
+    frame = (decision.get("patch") or {}).get("frame_update") or {}
+    if decision.get("operation") != "open" or frame.get("mode") != "personal":
+        return True
+    return bool(((decision.get("user_state") or {}).get("states") or []))
+
+
+def _synthesis_basis_valid(decision: dict, context: dict) -> bool:
+    if decision.get("route") != "synthesize":
+        return True
+    basis = decision.get("synthesis_basis")
+    if not decision.get("provisional"):
+        return basis == "ready"
+    if basis in {"user_requested_provisional", "user_cannot_add_evidence"}:
+        return bool(decision.get("synthesis_basis_evidence"))
+    if basis == "question_budget_exhausted":
+        return (context.get("policy") or {}).get("remaining_questions") == 0
+    return False
+
+
+def _concrete_question(decision: dict) -> bool:
+    if decision.get("route") != "inquire":
+        return True
+    target = decision.get("target_unknown_id")
+    added = (decision.get("patch") or {}).get("add_blocking_unknowns") or []
+    item = next((value for value in added if value.get("id") == target), None)
+    if item is None:
+        return True  # Retargeting an existing blocker cannot be classified here.
+    return item.get("kind") in {
+        "current_state", "state_delta", "concrete_experience", "criteria",
+        "constraint", "counterevidence",
+    }
+
+
+def _readiness_valid(decision, context: dict) -> bool:
+    if decision.route != "synthesize":
         return True
     ledger = ((context.get("inquiry") or {}).get("ledger") or {})
     open_unknowns = [
         item for item in ledger.get("blocking_unknowns") or []
         if item.get("status") == "open"
-        and item.get("id") not in (decision.get("patch") or {}).get(
-            "resolve_unknown_ids", [],
-        )
+        and item.get("id") not in decision.patch.resolve_unknown_ids
     ]
-    open_unknowns.extend(
-        (decision.get("patch") or {}).get("add_blocking_unknowns") or []
-    )
-    if decision.get("operation") == "close" and open_unknowns:
+    open_unknowns.extend(decision.patch.add_blocking_unknowns)
+    if decision.operation == "close" and open_unknowns:
         return False
-    return not open_unknowns or bool(decision.get("provisional"))
+    if open_unknowns and not decision.provisional:
+        return False
+    try:
+        readiness.validate(ledger, decision)
+    except readiness.ReadinessGap:
+        return False
+    return True
 
 
 def _lock_valid(decision: dict, context: dict) -> bool:
@@ -133,6 +182,8 @@ def _target_valid(decision: dict, case: dict) -> bool:
         *(patch.get("add_observations") or []),
         *(patch.get("add_interpretations") or []),
         *(patch.get("add_hypotheses") or []),
+        *((decision.get("user_state") or {}).get("states") or []),
+        *((decision.get("user_state") or {}).get("deltas") or []),
     ]
     return bool(
         expected in (patch.get("resolve_unknown_ids") or [])
@@ -170,11 +221,15 @@ async def run_case(case: dict) -> dict:
         )
     )
     evidence_valid = _evidence_valid(decision, case)
-    readiness_valid = _readiness_valid(decision, context)
+    readiness_valid = _readiness_valid(decision_model, context)
+    state_capture_valid = _state_capture_valid(decision)
+    synthesis_basis_valid = _synthesis_basis_valid(decision, context)
+    concrete_question = _concrete_question(decision)
     lock_valid = _lock_valid(decision, context)
     passed = all((
         route_ok, operation_ok, target_ok, one_question,
-        evidence_valid, readiness_valid, lock_valid,
+        evidence_valid, readiness_valid, state_capture_valid,
+        synthesis_basis_valid, lock_valid,
         context_mode_ok is not False,
     ))
     return {
@@ -192,6 +247,9 @@ async def run_case(case: dict) -> dict:
         "one_question": one_question,
         "evidence_valid": evidence_valid,
         "readiness_valid": readiness_valid,
+        "state_capture_valid": state_capture_valid,
+        "synthesis_basis_valid": synthesis_basis_valid,
+        "concrete_question": concrete_question,
         "lock_valid": lock_valid,
         "premature_answer": expected == "inquire" and decision["route"] != "inquire",
         "unnecessary_inquiry": expected != "inquire" and decision["route"] == "inquire",

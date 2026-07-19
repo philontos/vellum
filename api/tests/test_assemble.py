@@ -174,6 +174,38 @@ async def test_minimal_context_omits_profile_recall_and_older_history(
 
 
 @pytest.mark.asyncio
+async def test_grounded_context_keeps_user_evidence_and_excludes_assistant_narrative(
+    migrated_db, monkeypatch,
+):
+    async def recall_must_not_run(*args, **kwargs):
+        raise AssertionError("grounded consultation context must not recall summaries")
+
+    monkeypatch.setattr(assemble.retrieval, "retrieve", recall_must_not_run)
+    model.set_dossier("assistant-shaped narrative must stay out")
+    model.add_fact("User has six months of savings")
+    memory.append_message("user", "I am losing confidence in the company.")
+    memory.append_message(
+        "assistant",
+        "The company has distorted your self-worth and the next job will be better.",
+    )
+    memory.append_message("user", "A reorganization removed my authority.")
+
+    built = await assemble.build_context(
+        query="A reorganization removed my authority.",
+        context_mode="grounded",
+        extra_system_sections=["## Validated turn plan\nRoute: synthesize"],
+    )
+
+    assert [message["role"] for message in built.messages[1:]] == ["user", "user"]
+    assert "distorted your self-worth" not in str(built.messages)
+    assert "assistant-shaped narrative" not in built.messages[0]["content"]
+    assert "User has six months of savings" in built.messages[0]["content"]
+    assert built.meta["context_mode"] == "grounded"
+    assert built.meta["history_roles"] == ["user"]
+    assert built.meta["recall_attempted"] is False
+
+
+@pytest.mark.asyncio
 async def test_personal_context_excludes_tail_turns_from_recall(
     migrated_db, monkeypatch,
 ):
@@ -230,12 +262,12 @@ async def test_response_context_has_a_hard_budget_and_reports_drops(
     assert estimate_tokens(built.messages) <= 2500
     assert built.messages[-1]["content"].endswith("\ncurrent question")
     assert "Validated turn plan" in built.messages[0]["content"]
-    assert "Possibly relevant past" in built.messages[0]["content"]
     assert built.meta["estimated_tokens"] <= built.meta["max_input_tokens"]
     assert built.meta["dropped_history_messages"] > 0
     assert (
         built.meta["dropped_recall_snippets"] > 0
         or built.meta["truncated_recall_snippets"] > 0
+        or "Possibly relevant past" in built.messages[0]["content"]
     )
 
 

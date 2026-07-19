@@ -20,6 +20,9 @@ describe("SuiteEvalPanelView", () => {
             total: 6, completed: 6,
             aggregate: {
               routing_accuracy: 1,
+              state_capture_rate: 1,
+              synthesis_basis_valid_rate: 1,
+              concrete_question_rate: 1,
               premature_answer_rate: 0,
               unnecessary_inquiry_rate: 0,
             },
@@ -40,6 +43,9 @@ describe("SuiteEvalPanelView", () => {
     expect(html).toContain("inquiry");
     expect(html).toContain("rule-based");
     expect(html).toContain("routing accuracy");
+    expect(html).toContain("state capture rate");
+    expect(html).toContain("synthesis basis valid rate");
+    expect(html).toContain("concrete question rate");
     expect(html).toContain("premature answer rate");
     expect(html).toContain("unnecessary inquiry rate");
   });
