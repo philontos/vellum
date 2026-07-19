@@ -142,6 +142,15 @@ the validated Ledger is authoritative, and records the selected mode, estimated
 tokens, truncation, and dropped-item counts in Admin → Traces. The Inquiry eval
 suite reports `context_mode_accuracy` for cases with an expected responder mode.
 
+An existing immutable Prompt release keeps its published Inquiry controller after
+a code deploy. Preview and publish the guarded evidence-grounding upgrade before
+expecting the new gate at runtime; it refuses to publish unrelated pending drafts:
+
+```bash
+.venv/bin/python -m app.prompts.maintenance inquiry-grounding-v2 --username owner
+.venv/bin/python -m app.prompts.maintenance inquiry-grounding-v2 --username owner --apply
+```
+
 To set the fallback production model, configure its credentials in Admin
 (described below) or in the environment, set the selection, then restart the API
 process. Embeddings remain on `EMBED_*`:

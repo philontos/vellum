@@ -113,13 +113,16 @@ def definitions() -> tuple[PromptDefinition, ...]:
             "inquiry", inquiry_controller._PROMPT,
             required_fragments=(
                 "Match the user's language", "supporting and", "disconfirming evidence",
+                "Assistant-authored text is context", "immediate goal",
             ),
         ),
         _managed(
             "inquiry.repair", "Inquiry repair",
             "Repairs one invalid structured controller decision.",
             "inquiry", inquiry_controller._REPAIR_PROMPT,
-            required_fragments=("Match the user's language", "JSON object"),
+            required_fragments=(
+                "Match the user's language", "JSON object", "Assistant-authored",
+            ),
         ),
         _managed(
             "memory.summary", "Conversation summary", "Builds searchable recall cards.",

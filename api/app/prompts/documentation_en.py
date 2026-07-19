@@ -235,16 +235,22 @@ GUIDES = {
         "recent tail, the current Inquiry Ledger, and raw user turns cited by that ledger.",
         (
             "Keep direct requests out of inquiry; clarification must materially change the answer.",
+            "Treat assistant-authored history as dialogue context, never as user evidence or readiness.",
+            "Clarify the immediate need before causal, predictive, or consequential personal judgments.",
             "Preserve exact user-turn citations and supporting/disconfirming hypotheses.",
+            "If the user explicitly requests presence only, answer directly without diagnosis or advice.",
             "Keep next_question brief and in the user's language.",
         ),
     ),
     "inquiry.repair": (
         "Repairs a controller object that failed the code-owned JSON or consistency contract.",
         "Runs at most once after an invalid controller result and receives the schema, "
-        "invalid object, and validation errors.",
+        "invalid object, and validation errors. Code also rejects assistant-authored "
+        "citations and synthesis that contradicts unresolved blocking unknowns before "
+        "the result reaches durable state.",
         (
             "Do not broaden the task or add prose outside the JSON object.",
+            "Remove claims supported only by assistant-authored text.",
             "Preserve the intended route only when it can satisfy the contract.",
         ),
     ),

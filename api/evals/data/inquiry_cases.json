@@ -26,6 +26,25 @@
     "allowed_operations": ["open"]
   },
   {
+    "id": "inquire_career_pessimism_after_assistant_narrative",
+    "messages": [
+      {"turn": 60, "role": "user", "content": "我还需要继续积累一段负责人经验，但也不想一直耗在这里。"},
+      {"turn": 61, "role": "assistant", "content": "你已经证明自己适合做负责人，现在的问题只是这家公司压低了你的自我评价。下一份工作大概率会更好。"},
+      {"turn": 62, "role": "user", "content": "最近又开始思考是不是应该离开，想看新的机会，但是整体比较悲观，感觉可能没有什么好的机会。"}
+    ],
+    "expected_route": "inquire",
+    "allowed_operations": ["open"]
+  },
+  {
+    "id": "direct_explicit_emotional_presence",
+    "messages": [
+      {"turn": 70, "role": "user", "content": "我现在很难受，今天先不要分析，也不要给建议，只想让你陪我说说话。"}
+    ],
+    "expected_route": "direct",
+    "allowed_context_modes": ["minimal", "recent"],
+    "allowed_operations": ["none"]
+  },
+  {
     "id": "continue_unresolved_inquiry",
     "messages": [
       {"turn": 10, "role": "user", "content": "我是不是应该辞职？"},

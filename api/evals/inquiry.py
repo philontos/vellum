@@ -120,6 +120,27 @@ def _lock_valid(decision: dict, context: dict) -> bool:
     )
 
 
+def _target_valid(decision: dict, case: dict) -> bool:
+    expected = case.get("expected_target_unknown_id")
+    if expected is None or decision.get("target_unknown_id") == expected:
+        return True
+    patch = decision.get("patch") or {}
+    target = decision.get("target_unknown_id")
+    added_ids = {
+        item.get("id") for item in patch.get("add_blocking_unknowns") or []
+    }
+    grounded_updates = [
+        *(patch.get("add_observations") or []),
+        *(patch.get("add_interpretations") or []),
+        *(patch.get("add_hypotheses") or []),
+    ]
+    return bool(
+        expected in (patch.get("resolve_unknown_ids") or [])
+        and target in added_ids
+        and _refs(grounded_updates)
+    )
+
+
 async def run_case(case: dict) -> dict:
     context = _context(case)
     decision_model = await controller.decide(context)
@@ -130,16 +151,16 @@ async def run_case(case: dict) -> dict:
         decision_model, context["current_user_turn"]["content"],
     )
     expected_context_mode = case.get("expected_context_mode")
-    context_mode_ok = (
-        None if expected_context_mode is None
-        else actual_context_mode == expected_context_mode
-    )
+    allowed_context_modes = case.get("allowed_context_modes")
+    if allowed_context_modes is not None:
+        context_mode_ok = actual_context_mode in allowed_context_modes
+    elif expected_context_mode is not None:
+        context_mode_ok = actual_context_mode == expected_context_mode
+    else:
+        context_mode_ok = None
     allowed = case.get("allowed_operations")
     operation_ok = allowed is None or decision["operation"] in allowed
-    target_ok = (
-        case.get("expected_target_unknown_id") is None
-        or decision.get("target_unknown_id") == case["expected_target_unknown_id"]
-    )
+    target_ok = _target_valid(decision, case)
     one_question = (
         decision["route"] != "inquire"
         or (
@@ -162,6 +183,7 @@ async def run_case(case: dict) -> dict:
         "actual_route": decision["route"],
         "actual_operation": decision["operation"],
         "expected_context_mode": expected_context_mode,
+        "allowed_context_modes": allowed_context_modes,
         "actual_context_mode": actual_context_mode,
         "context_mode_ok": context_mode_ok,
         "route_ok": route_ok,

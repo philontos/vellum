@@ -49,6 +49,29 @@ def test_simple_direct_cases_require_minimal_responder_context():
     assert cases["direct_writing"]["expected_context_mode"] == "minimal"
 
 
+def test_cases_cover_ambiguous_career_doubt_after_assistant_certainty():
+    case = {
+        item["id"]: item for item in inquiry.load_cases()
+    }["inquire_career_pessimism_after_assistant_narrative"]
+
+    assert case["expected_route"] == "inquire"
+    assert case["allowed_operations"] == ["open"]
+    assert any(
+        message["role"] == "assistant" and "下一份" in message["content"]
+        for message in case["messages"]
+    )
+    assert case["messages"][-1]["role"] == "user"
+
+
+def test_cases_preserve_direct_route_when_user_explicitly_requests_presence_only():
+    case = {
+        item["id"]: item for item in inquiry.load_cases()
+    }["direct_explicit_emotional_presence"]
+
+    assert case["expected_route"] == "direct"
+    assert set(case["allowed_context_modes"]) == {"minimal", "recent"}
+
+
 def test_inquiry_suite_reports_context_mode_accuracy():
     aggregate = suites.SUITES["inquiry"].aggregate([
         {"passed": True, "context_mode_ok": True},
@@ -106,6 +129,89 @@ async def test_inquiry_eval_scores_routing_and_exact_user_evidence(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_inquiry_eval_accepts_grounded_refinement_of_expected_unknown(
+    monkeypatch,
+):
+    case = {
+        "id": "refine-event",
+        "messages": [
+            {"turn": 10, "role": "user", "content": "Should I resign?"},
+            {"turn": 11, "role": "assistant", "content": "What happened?"},
+            {
+                "turn": 12,
+                "role": "user",
+                "content": "My manager dismisses me in meetings.",
+            },
+        ],
+        "inquiry": {
+            "id": 1,
+            "status": "exploring",
+            "revision": 1,
+            "ledger": {
+                "goal": {
+                    "text": "Decide whether to resign",
+                    "evidence": [{"turn": 10, "quote": "Should I resign?"}],
+                },
+                "observations": [],
+                "interpretations": [],
+                "hypotheses": [],
+                "blocking_unknowns": [{
+                    "id": "u1",
+                    "question": "What happened?",
+                    "why_material": "A concrete event changes the judgment.",
+                    "status": "open",
+                    "resolved_after_turn": None,
+                }],
+                "asked_questions": [{
+                    "unknown_id": "u1",
+                    "text": "What happened?",
+                    "after_turn": 10,
+                }],
+                "provisional_conclusion": None,
+            },
+        },
+        "expected_route": "inquire",
+        "allowed_operations": ["update"],
+        "expected_target_unknown_id": "u1",
+    }
+    refined = InquiryDecision.model_validate({
+        "route": "inquire",
+        "operation": "update",
+        "expected_inquiry_id": 1,
+        "expected_revision": 1,
+        "patch": {
+            "add_observations": [{
+                "text": "The manager dismisses the user in meetings.",
+                "evidence": [{
+                    "turn": 12,
+                    "quote": "My manager dismisses me in meetings.",
+                }],
+            }],
+            "resolve_unknown_ids": ["u1"],
+            "add_blocking_unknowns": [{
+                "id": "u2",
+                "question": "What was said in one recent meeting?",
+                "why_material": "A concrete exchange distinguishes explanations.",
+            }],
+        },
+        "next_question": "What was said in one recent meeting?",
+        "target_unknown_id": "u2",
+        "answer_brief": None,
+        "context_mode": "recent",
+        "recall_query": None,
+        "provisional": False,
+    })
+    monkeypatch.setattr(
+        inquiry.controller, "decide", lambda ctx: _async(refined),
+    )
+
+    result = await inquiry.run_case(case)
+
+    assert result["target_ok"] is True
+    assert result["passed"] is True
+
+
+@pytest.mark.asyncio
 async def test_inquiry_eval_flags_premature_answer(monkeypatch):
     case = {
         "id": "resign",
@@ -138,6 +244,30 @@ async def test_inquiry_eval_flags_unnecessarily_heavy_responder_context(monkeypa
     assert result["actual_context_mode"] == "personal"
     assert result["context_mode_ok"] is False
     assert result["passed"] is False
+
+
+@pytest.mark.asyncio
+async def test_inquiry_eval_accepts_any_explicitly_allowed_context_mode(monkeypatch):
+    case = {
+        "id": "presence",
+        "messages": [{
+            "turn": 10,
+            "role": "user",
+            "content": "Please just stay with me; no analysis today.",
+        }],
+        "expected_route": "direct",
+        "allowed_context_modes": ["minimal", "recent"],
+    }
+    decision = _decision("direct")
+    decision.context_mode = "minimal"
+    monkeypatch.setattr(
+        inquiry.controller, "decide", lambda ctx: _async(decision),
+    )
+
+    result = await inquiry.run_case(case)
+
+    assert result["context_mode_ok"] is True
+    assert result["passed"] is True
 
 
 @pytest.mark.asyncio
