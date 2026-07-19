@@ -24,7 +24,7 @@ def test_substantive_personal_question_keeps_controller_context_choice():
     ) == "personal"
 
 
-def test_synthesis_uses_recent_context_because_the_ledger_is_authoritative():
+def test_synthesis_uses_grounded_context_because_the_ledger_is_authoritative():
     decision = InquiryDecision.model_validate({
         "route": "synthesize",
         "operation": "update",
@@ -34,6 +34,7 @@ def test_synthesis_uses_recent_context_because_the_ledger_is_authoritative():
         "answer_brief": "Synthesize the grounded Ledger.",
         "context_mode": "personal",
         "provisional": False,
+        "synthesis_basis": "ready",
     })
 
-    assert effective_mode(decision, "I am ready for the answer") == "recent"
+    assert effective_mode(decision, "I am ready for the answer") == "grounded"

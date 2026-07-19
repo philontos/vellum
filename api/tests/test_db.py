@@ -11,7 +11,7 @@ def test_migrations_create_all_tables(migrated_db):
         "messages", "summaries", "vector_refs", "cursors",
         "dossier", "portrait_claims", "trait_current", "trait_history", "trait_evidence",
         "facts", "traces",
-        "schema_migrations",
+        "schema_migrations", "user_state_snapshots",
     }
     assert expected <= names
 

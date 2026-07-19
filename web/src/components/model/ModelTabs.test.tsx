@@ -5,7 +5,7 @@ import { I18nProvider } from "../../i18n";
 import { ModelTabs } from "./ModelTabs";
 
 describe("ModelTabs", () => {
-  it("renders four accessible model sections and marks the active one", () => {
+  it("renders five accessible model sections and marks the active one", () => {
     const html = renderToStaticMarkup(
       <I18nProvider>
         <ModelTabs active="evidence" onChange={() => undefined} />
@@ -13,8 +13,9 @@ describe("ModelTabs", () => {
     );
 
     expect(html).toContain('role="tablist"');
-    expect(html.match(/role="tab"/g)).toHaveLength(4);
+    expect(html.match(/role="tab"/g)).toHaveLength(5);
     expect(html).toContain('id="model-tab-dossier"');
+    expect(html).toContain('id="model-tab-state"');
     expect(html).toContain('aria-controls="model-panel-traits"');
     expect(html).toContain('id="model-tab-evidence" role="tab" aria-selected="true"');
     expect(html).toContain("Portrait");

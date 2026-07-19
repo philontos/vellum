@@ -34,6 +34,31 @@ def test_inspect_model_and_traces(migrated_db):
     assert row["pinned"] == 1 and row["note"] == "good"
 
 
+def test_inspect_model_exposes_recent_time_sensitive_user_state(migrated_db):
+    from app.main import app
+    from app.store import memory, user_states
+
+    user = memory.append_message("user", "I feel more hopeful today.")
+    user_states.record(
+        user_turn=user["turn"], stream="neutral",
+        snapshot={
+            "states": [{
+                "dimension": "emotion", "text": "The user feels hopeful.",
+                "evidence": [{"turn": user["turn"], "quote": "hopeful"}],
+            }],
+            "deltas": [],
+        },
+        inquiry_id=None, run_id="state-run",
+    )
+
+    payload = TestClient(app).get("/inspect/model").json()
+
+    assert payload["current_states"][0]["user_turn"] == user["turn"]
+    assert payload["current_states"][0]["snapshot"]["states"][0][
+        "dimension"
+    ] == "emotion"
+
+
 def test_inspect_model_attaches_trait_meta(migrated_db):
     from app.main import app
     from app.store import model

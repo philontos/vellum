@@ -2,7 +2,7 @@
 
 from app import config
 from app.inquiry import budget, store
-from app.store import memory
+from app.store import memory, user_states
 
 
 _TRUNCATION_MARKER = "\n[… omitted for controller budget …]\n"
@@ -69,6 +69,33 @@ def _paused_summary(inquiry: dict, max_questions: int) -> dict:
     }
 
 
+def _episode_summary(inquiry: dict) -> dict:
+    ledger = inquiry["ledger"]
+    return {
+        "id": inquiry["id"],
+        "last_turn": inquiry["last_turn"],
+        "goal": _clip((ledger.get("goal") or {}).get("text"), 240),
+        "frame": ledger.get("frame"),
+        "current_state": (ledger.get("current_state") or [])[-4:],
+        "state_deltas": (ledger.get("state_deltas") or [])[-4:],
+        "observations": (ledger.get("observations") or [])[-4:],
+        "provisional_conclusion": _clip(
+            ledger.get("provisional_conclusion"), 320,
+        ) or None,
+        "stale_until_reconfirmed": True,
+    }
+
+
+def _state_summary(snapshot: dict) -> dict:
+    return {
+        "user_turn": snapshot["user_turn"],
+        "stream": snapshot["stream"],
+        "states": (snapshot["snapshot"].get("states") or [])[-4:],
+        "deltas": (snapshot["snapshot"].get("deltas") or [])[-4:],
+        "stale_until_reconfirmed": True,
+    }
+
+
 def _fit_current_turn(base: dict, max_tokens: int) -> bool:
     if budget.estimate_tokens(base) <= max_tokens:
         return False
@@ -120,7 +147,10 @@ def build(*, stream: str, user_turn: int) -> dict:
         "current_user_turn": _public_message(current),
         "inquiry": inquiry_view,
         "paused_inquiries": [],
+        "recent_episodes": [],
+        "prior_user_state": [],
         "recent_messages": [],
+        "assistant_context": [],
         "cited_evidence": [],
         "policy": {
             "max_questions": max_questions,
@@ -134,12 +164,29 @@ def build(*, stream: str, user_turn: int) -> dict:
             "max_input_tokens": max_tokens,
             "estimated_tokens": max_tokens,
             "dropped_recent_messages": 99_999,
+            "dropped_assistant_messages": 99_999,
             "dropped_cited_evidence": 99_999,
             "dropped_paused_inquiries": 99_999,
+            "dropped_recent_episodes": 99_999,
+            "dropped_state_snapshots": 99_999,
             "current_user_turn_truncated": False,
         },
     }
     current_truncated = _fit_current_turn(base, max_tokens)
+
+    dropped_episodes = 0
+    for episode in store.list_closed(stream, limit=3):
+        base["recent_episodes"].append(_episode_summary(episode))
+        if budget.estimate_tokens(base) > max_tokens:
+            base["recent_episodes"].pop()
+            dropped_episodes += 1
+
+    dropped_states = 0
+    for snapshot in user_states.recent(limit=6, before_turn=user_turn):
+        base["prior_user_state"].append(_state_summary(snapshot))
+        if budget.estimate_tokens(base) > max_tokens:
+            base["prior_user_state"].pop()
+            dropped_states += 1
 
     dropped_paused = 0
     for paused in store.list_paused(stream, limit=5):
@@ -151,10 +198,16 @@ def build(*, stream: str, user_turn: int) -> dict:
             base["paused_inquiries"].pop()
             dropped_paused += 1
 
-    recent = memory.recent_tail_through(
-        config.inquiry_tail_size(), user_turn, stream=stream,
-    )
+    tail_size = config.inquiry_tail_size()
+    raw_limit = tail_size * 2 if tail_size else 0
+    recent = memory.recent_tail_through(raw_limit, user_turn, stream=stream)
     recent = [message for message in recent if message["turn"] != user_turn]
+    user_recent_all = [message for message in recent if message["role"] == "user"]
+    assistant_recent_all = [
+        message for message in recent if message["role"] == "assistant"
+    ]
+    user_recent = user_recent_all[-tail_size:] if tail_size else []
+    assistant_recent = assistant_recent_all[-2:]
     recent_turns = {message["turn"] for message in recent}
     cited = []
     if inquiry is not None:
@@ -175,9 +228,23 @@ def build(*, stream: str, user_turn: int) -> dict:
             base["cited_evidence"].pop()
             dropped_cited += 1
 
+    kept_assistant = []
+    dropped_assistant = max(0, len(assistant_recent_all) - len(assistant_recent))
+    for message in reversed(assistant_recent):
+        rendered = {
+            **_public_message(message),
+            "content": _clip(message["content"], 600),
+        }
+        kept_assistant.append(rendered)
+        base["assistant_context"] = list(reversed(kept_assistant))
+        if budget.estimate_tokens(base) > max_tokens:
+            kept_assistant.pop()
+            base["assistant_context"] = list(reversed(kept_assistant))
+            dropped_assistant += 1
+
     kept_recent = []
-    dropped_recent = 0
-    for message in reversed(recent):
+    dropped_recent = max(0, len(user_recent_all) - len(user_recent))
+    for message in reversed(user_recent):
         rendered = _public_message(message)
         kept_recent.append(rendered)
         base["recent_messages"] = list(reversed(kept_recent))
@@ -188,8 +255,11 @@ def build(*, stream: str, user_turn: int) -> dict:
 
     base["budget"].update({
         "dropped_recent_messages": dropped_recent,
+        "dropped_assistant_messages": dropped_assistant,
         "dropped_cited_evidence": dropped_cited,
         "dropped_paused_inquiries": dropped_paused,
+        "dropped_recent_episodes": dropped_episodes,
+        "dropped_state_snapshots": dropped_states,
         "current_user_turn_truncated": current_truncated,
     })
     for _ in range(4):

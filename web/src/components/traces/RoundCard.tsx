@@ -28,6 +28,9 @@ export function RoundCard({
     ...(round.chat ? [round.chat] : []),
     ...round.facts,
   ];
+  const synthesisBasis = typeof run?.decision?.synthesis_basis === "string"
+    ? run.decision.synthesis_basis.replace(/_/g, " ")
+    : null;
 
   return (
     <div className="border-b border-line/70">
@@ -49,6 +52,7 @@ export function RoundCard({
           {run && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
               {run.inquiry_id !== null && <Tag>Inquiry #{run.inquiry_id}</Tag>}
+              {synthesisBasis && <Tag>{synthesisBasis}</Tag>}
               {(run.revision_before !== null || run.revision_after !== null) && (
                 <Tag>rev {run.revision_before ?? "—"}→{run.revision_after ?? "—"}</Tag>
               )}
@@ -77,8 +81,11 @@ function RunContextMeta({ run }: { run: TurnRun }) {
   const remainingQuestions = number("remaining_questions");
   const maxQuestions = number("max_questions");
   const dropped = (number("dropped_recent_messages") ?? 0)
+    + (number("dropped_assistant_messages") ?? 0)
     + (number("dropped_cited_evidence") ?? 0)
-    + (number("dropped_paused_inquiries") ?? 0);
+    + (number("dropped_paused_inquiries") ?? 0)
+    + (number("dropped_recent_episodes") ?? 0)
+    + (number("dropped_state_snapshots") ?? 0);
   const responder = (
     run.context_meta.responder
     && typeof run.context_meta.responder === "object"

@@ -6,6 +6,8 @@ def test_loads_neutral_by_default(monkeypatch):
     p = persona.load()
     assert p.name == "neutral"
     assert "general assistant" in p.voice
+    assert "user's current state is the primary source" in p.voice
+    assert "what changed since the last conversation" in p.voice
 
 
 def test_unknown_persona_falls_back_to_neutral(monkeypatch):

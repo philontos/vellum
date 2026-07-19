@@ -2,7 +2,7 @@ from app import config
 from app.data_scope import user_scope
 import json
 
-from app.store import conversation_evals, db, memory
+from app.store import conversation_evals, db, memory, user_states
 from app.store import vectors
 from app.store.vectors import VectorStore
 
@@ -22,6 +22,30 @@ def test_each_user_gets_an_independent_sqlite_store(tmp_path, monkeypatch):
 
     with user_scope("user-a"):
         assert [m["content"] for m in memory.recent_tail(10)] == ["Alice secret"]
+
+
+def test_each_user_gets_an_independent_state_timeline(tmp_path, monkeypatch):
+    monkeypatch.setenv("VELLUM_DATA_DIR", str(tmp_path))
+    snapshot = {
+        "states": [{
+            "dimension": "emotion", "text": "Alice feels uncertain.",
+            "evidence": [{"turn": 0, "quote": "uncertain"}],
+        }],
+        "deltas": [],
+    }
+    with user_scope("user-a"):
+        db.run_migrations()
+        user_states.record(
+            user_turn=0, stream="neutral", snapshot=snapshot,
+            inquiry_id=None, run_id="alice-state",
+        )
+
+    with user_scope("user-b"):
+        db.run_migrations()
+        assert user_states.recent() == []
+
+    with user_scope("user-a"):
+        assert user_states.recent()[0]["snapshot"] == snapshot
 
 
 def test_each_user_keeps_an_independent_in_memory_vector_index(tmp_path, monkeypatch):

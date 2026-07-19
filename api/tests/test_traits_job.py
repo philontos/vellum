@@ -4,6 +4,30 @@ from app.model_loop import traits
 from app.store import memory, model
 
 
+def test_trait_prompts_reject_temporary_state_as_durable_personality():
+    for key in ("ocean", "mbti", "regulatory_focus"):
+        prompt = traits.DIMENSION_MAP[key]["_extract"]
+        assert "A temporary emotion, current state, or one situational reaction" in prompt
+        assert "return `null`" in prompt
+
+
+def test_trait_validator_fails_closed_when_durable_basis_is_missing():
+    cleaned, observations = traits._validated_scores(
+        {
+            "O": {
+                "score": 82, "confidence": 0.8,
+                "evidence": "I feel curious today",
+            },
+            "C": None, "E": None, "A": None, "N": None,
+        },
+        traits.DIMENSION_MAP["ocean"],
+        [{"turn": 3, "content": "I feel curious today"}],
+    )
+
+    assert cleaned["O"] is None
+    assert observations == []
+
+
 def test_schwartz_history_reference_exposes_episode_labels_not_old_priorities():
     summary = traits._profile_summary({
         "achievement": {
@@ -23,7 +47,8 @@ async def test_trait_job_updates_current_and_history(migrated_db, monkeypatch):
     contexts = []
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
         contexts.append(kw.get("context"))
-        return {"O": {"score": 85, "confidence": 0.7, "evidence": "brand-new"},
+        return {"O": {"score": 85, "confidence": 0.7,
+                      "basis": "stable_self_statement", "evidence": "brand-new"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr(traits, "chat_json", fake_chat_json)
     # limit to one dimension to keep the test focused
@@ -35,6 +60,7 @@ async def test_trait_job_updates_current_and_history(migrated_db, monkeypatch):
 
     cur = model.get_trait("ocean")
     assert cur["content_json"]["O"]["score"] > 50
+    assert cur["content_json"]["O"]["basis"] == "stable_self_statement"
     assert len(model.get_trait_history("ocean")) == 1     # snapshot appended
     assert contexts == [{"dimension": "ocean"}]
 
@@ -175,7 +201,8 @@ async def test_trait_rejects_hallucinated_evidence_before_profile_merge(
 ):
     async def hallucinated(system_prompt, user_prompt="", **kw):
         return {
-            "O": {"score": 90, "confidence": 0.9, "evidence": "not said"},
+            "O": {"score": 90, "confidence": 0.9,
+                  "basis": "stable_self_statement", "evidence": "not said"},
             "C": None, "E": None, "A": None, "N": None,
         }
 
@@ -202,6 +229,7 @@ async def test_trait_persists_grounded_observation_with_source_turn(
         return {
             "O": {
                 "score": 82, "confidence": 0.7,
+                "basis": "stable_self_statement",
                 "evidence": "brand-new experimental things",
             },
             "C": None, "E": None, "A": None, "N": None,

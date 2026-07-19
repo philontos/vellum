@@ -18,9 +18,51 @@ class GoalUpdate(_StrictModel):
     evidence: list[EvidenceRef] = Field(min_length=1, max_length=12)
 
 
+class InquiryFrameDraft(_StrictModel):
+    """The kind of answer this Inquiry is trying to earn."""
+
+    mode: Literal["personal", "practical"]
+    answer_scope: Literal[
+        "bounded_guidance", "causal_judgment", "consequential_decision",
+    ]
+    state_delta_required: bool = False
+    related_episode_id: int | None = Field(default=None, ge=1)
+
+
+class ObservationDraft(_StrictModel):
+    kind: Literal[
+        "event", "pattern", "feedback", "outcome", "comparison",
+        "constraint", "preference", "other",
+    ]
+    text: str = Field(min_length=1, max_length=4_000)
+    evidence: list[EvidenceRef] = Field(min_length=1, max_length=24)
+
+
 class GroundedDraft(_StrictModel):
     text: str = Field(min_length=1, max_length=4_000)
     evidence: list[EvidenceRef] = Field(min_length=1, max_length=24)
+
+
+class StateDraft(_StrictModel):
+    dimension: Literal[
+        "emotion", "belief", "intention", "need", "constraint", "situation",
+    ]
+    text: str = Field(min_length=1, max_length=2_000)
+    evidence: list[EvidenceRef] = Field(min_length=1, max_length=12)
+
+
+class StateDeltaDraft(StateDraft):
+    reference: Literal[
+        "earlier_in_episode", "previous_episode", "unspecified_past",
+    ]
+
+
+class UserStateSnapshot(_StrictModel):
+    states: list[StateDraft] = Field(default_factory=list, max_length=8)
+    deltas: list[StateDeltaDraft] = Field(default_factory=list, max_length=8)
+
+    def is_empty(self) -> bool:
+        return not self.states and not self.deltas
 
 
 class HypothesisDraft(_StrictModel):
@@ -31,13 +73,21 @@ class HypothesisDraft(_StrictModel):
 
 class BlockingUnknownDraft(_StrictModel):
     id: str = Field(pattern=r"^u[0-9A-Za-z_-]{1,31}$")
+    kind: Literal[
+        "goal", "orientation", "current_state", "state_delta",
+        "concrete_experience", "criteria", "constraint", "alternative",
+        "counterevidence", "other",
+    ]
     question: str = Field(min_length=1, max_length=1_000)
     why_material: str = Field(min_length=1, max_length=2_000)
 
 
 class LedgerPatch(_StrictModel):
     goal_update: GoalUpdate | None = None
-    add_observations: list[GroundedDraft] = Field(default_factory=list, max_length=24)
+    frame_update: InquiryFrameDraft | None = None
+    add_observations: list[ObservationDraft] = Field(
+        default_factory=list, max_length=24,
+    )
     add_interpretations: list[GroundedDraft] = Field(default_factory=list, max_length=24)
     add_hypotheses: list[HypothesisDraft] = Field(default_factory=list, max_length=16)
     add_blocking_unknowns: list[BlockingUnknownDraft] = Field(
@@ -49,6 +99,7 @@ class LedgerPatch(_StrictModel):
     def is_empty(self) -> bool:
         return not any((
             self.goal_update,
+            self.frame_update,
             self.add_observations,
             self.add_interpretations,
             self.add_hypotheses,
@@ -66,14 +117,22 @@ class InquiryDecision(_StrictModel):
     expected_inquiry_id: int | None = Field(default=None, ge=1)
     expected_revision: int | None = Field(default=None, ge=1)
     patch: LedgerPatch = Field(default_factory=LedgerPatch)
-    next_question: str | None = Field(default=None, max_length=600)
+    user_state: UserStateSnapshot = Field(default_factory=UserStateSnapshot)
+    next_question: str | None = Field(default=None, max_length=300)
     target_unknown_id: str | None = Field(
         default=None, pattern=r"^u[0-9A-Za-z_-]{1,31}$",
     )
     answer_brief: str | None = Field(default=None, max_length=4_000)
-    context_mode: Literal["minimal", "recent", "personal"] = "personal"
+    context_mode: Literal["minimal", "recent", "personal"] = "recent"
     recall_query: str | None = Field(default=None, max_length=600)
     provisional: bool = False
+    synthesis_basis: Literal[
+        "ready", "user_requested_provisional", "user_cannot_add_evidence",
+        "question_budget_exhausted",
+    ] | None = None
+    synthesis_basis_evidence: list[EvidenceRef] = Field(
+        default_factory=list, max_length=4,
+    )
 
     @property
     def normalized_fields(self) -> tuple[str, ...]:
@@ -106,6 +165,8 @@ class InquiryDecision(_StrictModel):
                 raise ValueError("inquire requires one targeted next_question")
             if self.answer_brief is not None:
                 raise ValueError("inquire returns the question without an answer brief")
+            if sum(self.next_question.count(mark) for mark in ("?", "？")) > 1:
+                raise ValueError("inquire may ask only one user-facing question")
         else:
             if self.next_question is not None or self.target_unknown_id is not None:
                 raise ValueError("non-inquire routes cannot carry a next question")
@@ -117,11 +178,43 @@ class InquiryDecision(_StrictModel):
                 raise ValueError(
                     "direct routing can only pause state without a ledger patch"
                 )
-        elif self.route == "synthesize" and self.operation not in {
-            "none", "update", "resume", "pause", "close",
-        }:
-            raise ValueError("synthesize has an incompatible inquiry operation")
+        elif self.route == "synthesize":
+            if self.operation not in {
+                "none", "update", "resume", "pause", "close",
+            }:
+                raise ValueError("synthesize has an incompatible inquiry operation")
+            if self.synthesis_basis is None:
+                raise ValueError("synthesize requires an auditable synthesis basis")
+            if self.provisional:
+                if self.synthesis_basis == "ready":
+                    raise ValueError(
+                        "a provisional synthesis cannot claim that Inquiry is ready"
+                    )
+                needs_user_evidence = self.synthesis_basis in {
+                    "user_requested_provisional", "user_cannot_add_evidence",
+                }
+                if needs_user_evidence and not self.synthesis_basis_evidence:
+                    raise ValueError(
+                        "the provisional synthesis basis requires user evidence"
+                    )
+            elif self.synthesis_basis != "ready":
+                raise ValueError(
+                    "a non-provisional synthesis must use basis=ready"
+                )
+            elif self.synthesis_basis_evidence:
+                raise ValueError(
+                    "a ready synthesis does not need escape-basis evidence"
+                )
+        if self.route != "synthesize" and (
+            self.synthesis_basis is not None or self.synthesis_basis_evidence
+        ):
+            raise ValueError(
+                "only synthesize may carry a synthesis basis"
+            )
 
-        if self.operation == "open" and self.patch.goal_update is None:
-            raise ValueError("opening an inquiry requires a grounded goal")
+        if self.operation == "open":
+            if self.patch.goal_update is None:
+                raise ValueError("opening an inquiry requires a grounded goal")
+            if self.patch.frame_update is None:
+                raise ValueError("opening an inquiry requires an answer-scope frame")
         return self

@@ -10,6 +10,11 @@ integration are a single board-aware step, which is what kills fragmentation
 import pytest
 
 from app.model_loop import facts
+
+
+def test_facts_prompt_keeps_temporary_state_out_of_the_durable_board():
+    assert "Current state belongs in state snapshots" in facts._FACT_DEF
+    assert "temporary emotions" in facts._FACT_DEF
 from app.store import memory, model
 
 

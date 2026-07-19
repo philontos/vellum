@@ -74,7 +74,8 @@ async def test_each_eval_case_uses_the_evaluation_model_route(
 async def test_stream_traits_happy(migrated_db, monkeypatch):
     async def fake_chat_json(system_prompt, user_prompt="", **kw):
         _record_ok(system_prompt)                       # mimic real client tracing
-        return {"O": {"score": 90, "confidence": 0.9, "evidence": "experimental"},
+        return {"O": {"score": 90, "confidence": 0.9,
+                      "basis": "stable_self_statement", "evidence": "experimental"},
                 "C": None, "E": None, "A": None, "N": None}
     monkeypatch.setattr("app.model_loop.traits.chat_json", fake_chat_json)
 

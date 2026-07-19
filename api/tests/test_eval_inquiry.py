@@ -19,18 +19,32 @@ def _decision(route: str) -> InquiryDecision:
         values.update({
             "operation": "open",
             "patch": {
+                "frame_update": {
+                    "mode": "personal",
+                    "answer_scope": "consequential_decision",
+                    "state_delta_required": False,
+                },
                 "goal_update": {
                     "text": "Decide whether to resign",
                     "evidence": [{"turn": 10, "quote": "Should I resign?"}],
                 },
                 "add_blocking_unknowns": [{
-                    "id": "u1", "question": "What happened?",
+                    "id": "u1", "kind": "concrete_experience",
+                    "question": "What happened?",
                     "why_material": "The event changes the judgment.",
                 }],
             },
             "next_question": "What happened?",
             "target_unknown_id": "u1",
             "answer_brief": None,
+            "user_state": {
+                "states": [{
+                    "dimension": "intention",
+                    "text": "The user is considering whether to resign.",
+                    "evidence": [{"turn": 10, "quote": "Should I resign?"}],
+                }],
+                "deltas": [],
+            },
         })
     return InquiryDecision.model_validate(values)
 
@@ -72,13 +86,35 @@ def test_cases_preserve_direct_route_when_user_explicitly_requests_presence_only
     assert set(case["allowed_context_modes"]) == {"minimal", "recent"}
 
 
+def test_cases_keep_internal_disappointment_open_until_a_concrete_change():
+    case = {
+        item["id"]: item for item in inquiry.load_cases()
+    }["continue_internal_disappointment_until_concrete_change"]
+
+    assert case["expected_route"] == "inquire"
+    assert case["allowed_operations"] == ["update"]
+    assert case["inquiry"]["ledger"]["frame"]["state_delta_required"] is True
+    assert case["inquiry"]["ledger"]["observations"] == []
+
+
 def test_inquiry_suite_reports_context_mode_accuracy():
     aggregate = suites.SUITES["inquiry"].aggregate([
-        {"passed": True, "context_mode_ok": True},
-        {"passed": False, "context_mode_ok": False},
+        {
+            "passed": True, "context_mode_ok": True,
+            "state_capture_valid": True, "synthesis_basis_valid": True,
+            "concrete_question": True,
+        },
+        {
+            "passed": False, "context_mode_ok": False,
+            "state_capture_valid": False, "synthesis_basis_valid": False,
+            "concrete_question": False,
+        },
     ])
 
     assert aggregate["context_mode_accuracy"] == 0.5
+    assert aggregate["state_capture_rate"] == 0.5
+    assert aggregate["synthesis_basis_valid_rate"] == 0.5
+    assert aggregate["concrete_question_rate"] == 0.5
 
 
 def test_eval_context_matches_production_question_policy_without_current_duplication():
@@ -100,7 +136,8 @@ def test_eval_context_matches_production_question_policy_without_current_duplica
     context = inquiry._context(case)
 
     assert context["current_user_turn"]["turn"] == 12
-    assert [message["turn"] for message in context["recent_messages"]] == [10, 11]
+    assert [message["turn"] for message in context["recent_messages"]] == [10]
+    assert [message["turn"] for message in context["assistant_context"]] == [11]
     assert context["policy"] == {
         "max_questions": 5,
         "questions_asked": 1,
@@ -181,6 +218,7 @@ async def test_inquiry_eval_accepts_grounded_refinement_of_expected_unknown(
         "expected_revision": 1,
         "patch": {
             "add_observations": [{
+                "kind": "pattern",
                 "text": "The manager dismisses the user in meetings.",
                 "evidence": [{
                     "turn": 12,
@@ -190,6 +228,7 @@ async def test_inquiry_eval_accepts_grounded_refinement_of_expected_unknown(
             "resolve_unknown_ids": ["u1"],
             "add_blocking_unknowns": [{
                 "id": "u2",
+                "kind": "concrete_experience",
                 "question": "What was said in one recent meeting?",
                 "why_material": "A concrete exchange distinguishes explanations.",
             }],
@@ -241,7 +280,7 @@ async def test_inquiry_eval_flags_unnecessarily_heavy_responder_context(monkeypa
 
     result = await inquiry.run_case(case)
 
-    assert result["actual_context_mode"] == "personal"
+    assert result["actual_context_mode"] == "recent"
     assert result["context_mode_ok"] is False
     assert result["passed"] is False
 
@@ -291,6 +330,7 @@ async def test_inquiry_eval_flags_a_wrong_optimistic_lock(monkeypatch):
         "expected_inquiry_id": 8, "expected_revision": 3,
         "patch": {}, "next_question": None, "target_unknown_id": None,
         "answer_brief": "Answer.", "provisional": False,
+        "synthesis_basis": "ready",
     })
     monkeypatch.setattr(
         inquiry.controller, "decide", lambda ctx: _async(wrong_lock),

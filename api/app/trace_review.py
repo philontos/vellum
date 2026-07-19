@@ -90,8 +90,11 @@ def _context_signals(context: dict) -> list[dict]:
         key: context.get(key, 0)
         for key in (
             "dropped_recent_messages",
+            "dropped_assistant_messages",
             "dropped_cited_evidence",
             "dropped_paused_inquiries",
+            "dropped_recent_episodes",
+            "dropped_state_snapshots",
         )
         if isinstance(context.get(key, 0), (int, float)) and context.get(key, 0) > 0
     }

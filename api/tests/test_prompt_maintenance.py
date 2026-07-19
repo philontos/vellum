@@ -95,3 +95,39 @@ def test_publish_inquiry_grounding_v2_updates_only_the_inquiry_prompts(
         for item in upgraded["prompts"]
         if item["key"] not in {"inquiry.controller", "inquiry.repair"}
     } == before
+
+
+def test_publish_consultation_v3_updates_only_the_consultation_prompt_set(
+    migrated_db,
+):
+    assert {
+        "memory.dossier.evidence", "memory.dossier.render",
+        "memory.facts.integrate", "memory.facts.compact",
+        "traits.ocean.extract", "traits.mbti.extract",
+        "traits.regulatory_focus.extract", "traits.schwartz.extract",
+    } <= set(maintenance.CONSULTATION_V3_PROMPT_KEYS)
+    workspace = service.get_workspace()
+    for key in maintenance.CONSULTATION_V3_PROMPT_KEYS:
+        current = _prompt(workspace, key)
+        workspace = service.save_draft(
+            key,
+            "LEGACY CONSULTATION MARKER\n" + current["draft_content"],
+            workspace["workspace_revision"],
+        )
+    old = service.publish(workspace["workspace_revision"], "legacy consultation")
+    before = {
+        item["key"]: item["published_content"]
+        for item in old["prompts"]
+        if item["key"] not in maintenance.CONSULTATION_V3_PROMPT_KEYS
+    }
+
+    result = maintenance.publish_consultation_v3(actor_user_id="owner-id")
+
+    assert result["changed"] is True
+    assert result["status"]["matches_code_v3"] is True
+    upgraded = service.get_workspace()
+    assert {
+        item["key"]: item["published_content"]
+        for item in upgraded["prompts"]
+        if item["key"] not in maintenance.CONSULTATION_V3_PROMPT_KEYS
+    } == before

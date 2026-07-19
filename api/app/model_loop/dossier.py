@@ -10,13 +10,15 @@ from app.store import memory, model, portrait_claims
 _MAX_CHARS = 4000
 _EVIDENCE_CHUNK_MESSAGES = 24
 _CLAIM_TYPES = {
-    "value", "pattern", "decision_style", "current_state", "self_concept",
+    "value", "pattern", "decision_style", "self_concept",
 }
 
 _EVIDENCE_PROMPT = (
     "You maintain a grounded board of PORTRAIT CLAIMS about a user: values, "
-    "recurring patterns, decision style, current states that materially shape "
-    "decisions, and self-concept. Integrate the NEW conversation into the board.\n\n"
+    "recurring patterns, decision style, and self-concept. Integrate the NEW "
+    "conversation into the board. Current state belongs in user-state snapshots; "
+    "do not add or update it as a portrait claim. A temporary feeling, belief, "
+    "intention, need, or situation is not a durable description of the user.\n\n"
     "## Evidence contract\n"
     "- Application-labelled USER turns are the only admissible evidence. Assistant "
     "turns are context only and may contain questions, suggestions, diagnoses, "
@@ -34,18 +36,18 @@ _EVIDENCE_PROMPT = (
     "update or retire rather than keeping a contradicted interpretation.\n"
     "- Every change must cite short verbatim USER quotes. Assistant turns must never "
     "appear in `evidence`.\n\n"
-    "Allowed `claim_type` values are: value, pattern, decision_style, current_state, "
-    "self_concept. Allowed `basis` values are: explicit, confirmed, inferred.\n\n"
+    "Allowed `claim_type` values are: value, pattern, decision_style, self_concept. "
+    "Allowed `basis` values are: explicit, confirmed, inferred.\n\n"
     "Return a changeset. `update` replaces an active claim, `retire` removes a claim "
     "that user evidence contradicts or supersedes, and `add` introduces a genuinely "
     "new claim. Leave unrelated claims untouched.\n\n"
     "Respond as strict JSON: {\"update\": [{\"id\": <id>, \"claim_type\": "
-    "\"value|pattern|decision_style|current_state|self_concept\", \"text\": \"...\", "
+    "\"value|pattern|decision_style|self_concept\", \"text\": \"...\", "
     "\"basis\": \"explicit|confirmed|inferred\", \"evidence\": [{\"turn\": "
     "<user turn>, \"quote\": \"...\"}]}], \"retire\": [{\"id\": <id>, "
     "\"basis\": \"explicit|confirmed\", \"evidence\": [{\"turn\": <user turn>, "
     "\"quote\": \"...\"}]}], \"add\": [{\"claim_type\": "
-    "\"value|pattern|decision_style|current_state|self_concept\", \"text\": \"...\", "
+    "\"value|pattern|decision_style|self_concept\", \"text\": \"...\", "
     "\"basis\": \"explicit|confirmed|inferred\", \"evidence\": [{\"turn\": "
     "<user turn>, \"quote\": \"...\"}]}]} (use [] for empty lists). "
     "Match the user's language."
@@ -63,8 +65,8 @@ _RENDER_PROMPT = (
     "qualify a claim that exceeds what those quotes support.\n"
     "- Portrait claims are the primary source for interpretation. Durable facts are "
     "anchors; one isolated fact does not establish a recurring pattern.\n"
-    "- Preserve uncertainty and attribution. Keep current_state claims contextual "
-    "instead of turning them into timeless traits.\n"
+    "- Current-state snapshots are deliberately absent. Never infer a present "
+    "feeling, belief, or intention from this portrait.\n"
     "- Prefer durable identity and high-order patterns. Omit temporary headcount, "
     "deadlines, and project detail unless needed to express an active claim.\n"
     "- Compact and merge; this is a coherent narrative, not a chronological log or a "
@@ -92,6 +94,13 @@ def _render_claim_board(active: list[dict]) -> str:
 
 def _render_facts(active: list[dict]) -> str:
     return "\n".join(f"- {fact['text']}" for fact in active) or "(empty)"
+
+
+def _retire_legacy_current_state_claims() -> None:
+    """Move V2 state-shaped portrait claims out of the active durable model."""
+    for claim in portrait_claims.active():
+        if claim.get("claim_type") == "current_state":
+            portrait_claims.supersede(claim["id"])
 
 
 def _require_changeset(plan: dict) -> None:
@@ -154,6 +163,7 @@ async def run(start_turn: int, end_turn: int) -> None:
     rows = memory.messages_in_turn_range(start_turn, end_turn)
     if not rows:
         return
+    _retire_legacy_current_state_claims()
     with runtime.ensure_snapshot():
         evidence_prompt = runtime.resolve(
             "memory.dossier.evidence", _EVIDENCE_PROMPT,

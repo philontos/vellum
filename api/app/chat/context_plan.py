@@ -18,7 +18,7 @@ def _normalized(text: str) -> str:
 def effective_mode(decision: InquiryDecision, user_text: str) -> str:
     """Keep greetings lean and make the grounded Ledger primary in synthesis."""
     if decision.route == "synthesize":
-        return "recent"
+        return "grounded"
     if decision.route == "direct" and _normalized(user_text) in _LOW_INFORMATION:
         return "minimal"
     return decision.context_mode
